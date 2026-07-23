@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: document
+  
+  datasource:
+    url: jdbc:mysql://${MYSQL_LOCAL_HOST:localhost}:${MYSQL_LOCAL_PORT:3306}/${MYSQL_DATABASE:omnidoc}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_LOCAL_USERNAME:root}
+    password: ${MYSQL_LOCAL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 0
+      idle-timeout: 30000
+      max-lifetime: 300000
+      connection-timeout: 10000
+  
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      discovery:
+        enabled: false  # 禁用服务注册
+
+  data:
+    redis:
+      host: ${REDIS_LOCAL_HOST:localhost}
+      port: 6379
+      password: ${REDIS_LOCAL_PASSWORD:}
+      database: 2
+      timeout: 10000
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1
+          max-idle: 8
+          min-idle: 0
+
+# MinIO配置
+minio:
+  endpoint: ${MINIO_LOCAL_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket-name: document
+  bucket-permissions: "document=admin,user"
+  bucket-permission-default-allow: false
+
+# 文件服务配置（直接调用本地地址）
+file:
+  service:
+    url: http://localhost:8082

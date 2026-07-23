@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  user:
+    image: swr.cn-north-4.myhuaweicloud.com/qxk/user:v1.0
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints: [node.hostname == ${OMNIDOC_NODE1_HOST}]
+      restart_policy:
+        condition: on-failure
+    environment:
+      OMNIDOC_JWT_SECRET: ${OMNIDOC_JWT_SECRET}
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER-ADDR: nacos:8848
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/omnidoc?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+    networks:
+      - omnidoc-network
+    ports:
+      - "8081:8081"
+
+  gateway:
+    image: swr.cn-north-4.myhuaweicloud.com/qxk/gateway:v1.0
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints: [node.hostname == ${OMNIDOC_MANAGER_HOST}]
+      restart_policy:
+        condition: on-failure
+    environment:
+      OMNIDOC_JWT_SECRET: ${OMNIDOC_JWT_SECRET}
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER-ADDR: nacos:8848
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks:
+      - omnidoc-network
+    ports:
+      - "8080:8080"
+
+networks:
+  omnidoc-network:
+    external: true
