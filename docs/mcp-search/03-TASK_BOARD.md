@@ -15,10 +15,19 @@
 | 编号 | 任务 | 建议分支 | 状态 | 依赖 |
 | --- | --- | --- | --- | --- |
 | T00 | 基线、契约与任务拆分 | `docs/bootstrap-project-context` | `HANDOFF_READY` | 无 |
-| T01 | MCP 连接与协议层 | `feature/mcp-search-transport` | `TODO` | T00 基线提交 |
-| T02 | 动态工具目录与 Schema | `feature/mcp-search-tool-catalog` | `TODO` | T00 基线提交 |
-| T03 | Agent 路由、调用与结果合成 | `feature/mcp-search-agent-routing` | `TODO` | T00 基线提交 |
-| T04 | 独立自动验收与人工验收文档 | `test/mcp-search-acceptance` | `TODO` | T00；最终验证依赖 T01-T03 集成 |
+| T01 | MCP 连接与协议层 | `feature/mcp-search-transport` | `IN_PROGRESS` | T00 基线提交 |
+| T02 | 动态工具目录与 Schema | `feature/mcp-search-tool-catalog` | `IN_PROGRESS` | T00 基线提交 |
+| T03 | Agent 路由、调用与结果合成 | `feature/mcp-search-agent-routing` | `IN_PROGRESS` | T00 基线提交 |
+| T04 | 独立自动验收与人工验收文档 | `test/mcp-search-acceptance` | `IN_PROGRESS` | T00；最终验证依赖 T01-T03 集成 |
+
+## Codex 任务与工作树
+
+| 编号 | Codex 任务 ID | 工作树 |
+| --- | --- | --- |
+| T01 | `019fe237-e23b-7c60-a394-658c32ea49d5` | `../.codex-worktrees/mcp-search-t01` |
+| T02 | `019fe238-0377-7b12-aeef-63bb25114509` | `../.codex-worktrees/mcp-search-t02` |
+| T03 | `019fe238-24bf-7f50-a220-fb0267461265` | `../.codex-worktrees/mcp-search-t03` |
+| T04 | `019fe238-3e05-7540-aa00-f66dc4cfcdaf` | `../.codex-worktrees/mcp-search-t04` |
 
 ## T01 文件所有权
 
