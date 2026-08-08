@@ -97,9 +97,14 @@
 
 ### T04：独立验证与交付
 
-- 状态：`TODO`
-- 分支：待创建
-- 验证：未运行
+- 状态：`HANDOFF_READY`（独立资产完成，最终自动验收仍依赖 T01-T03 集成）
+- 分支：`test/mcp-search-acceptance`
+- 基线：`61266dbbe268958c1e4d7ccbea9ccc5f15220ad8`
+- 已完成：独立 Streamable HTTP 模拟 MCP Server、9 个 fixture 自检、统一验收入口、集成门禁、静态密钥泄漏检查和人工验收入口
+- 验证：当前直接验收项 44/44 通过（fixture 9、MCP 契约 3、Agent/Controller 回归 32）；非真实占位配置下全量 65/65 通过但远程模型成功 0/4；静态检查 570 个 Git 可见文本文件无命中
+- 门禁：`-Integrated` 在 T01-T03 未集成时按设计退出 1 并报告 `PENDING_INTEGRATION`，未把缺失实现计作通过
+- 真实 Tavily：当前进程无 `TAVILY_API_KEY`，未连接、未调用、未验证
+- 下一步：主协调任务按 T02 → T01 → T03 → T04 顺序集成后运行集成模式，补齐客户端错误映射、路由、来源、Trace 和运行时泄漏证据，再决定是否标记 `AUTO_VERIFIED`
 
 ## 维护规则
 
