@@ -52,7 +52,7 @@ spring:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
       chat:
-        model: qwen3.6-plus
+        model: qwen3.7-max-2026-05-20
       embedding:
         model: text-embedding-v1
         api-key: ${DASHSCOPE_API_KEY}
@@ -63,7 +63,7 @@ spring:
         api-key: ${DASHSCOPE_API_KEY}
     openai:
       api-key: ${OPENAI_API_KEY}
-      base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
 
   rabbitmq:
     host: ${RABBITMQ_HOST:infra_rabbitmq}
@@ -108,21 +108,21 @@ ai:
   # 多模型配置
   models:
     openai:
-      qwen3.6-plus:
+      qwen3.7-max-2026-05-20:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       glm-5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       kimi-k2.5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       MiniMax-M2.5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
 
 # MinIO配置

@@ -142,7 +142,7 @@ onMounted(async () => {
     // 接口报错时的本地保底数据
     modelOptions.value = [
       { code: 'glm-5', name: '智谱GLM-5', available: true },
-      { code: 'qwen3.6-plus', name: '通义千问 Plus', available: true },
+      { code: 'qwen3.7-max-2026-05-20', name: '通义千问 3.7 Max', available: true },
     ]
     currentModel.value = 'glm-5'
   }

@@ -239,7 +239,7 @@ const pptForm = ref({
   title: 'OmniDoc 项目',
   theme: 'tokyo-night',
   outline: '项目背景与痛点\n核心微服务架构\nRAG 知识检索增强\n未来商业展望',
-  model: 'qwen3.6-plus'
+  model: 'qwen3.7-max-2026-05-20'
 })
 
 const isAdminUser = ref(isAdmin())

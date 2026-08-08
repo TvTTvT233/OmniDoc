@@ -86,13 +86,13 @@ public class AIController {
      * @return 摘要结果
      */
     @PostMapping("/summarize")
-    @Operation(summary = "文档摘要", description = "对文档进行智能摘要，支持选择不同模型：qwen3.6-plus, glm-5, kimi-k2.5, MiniMax-M2.5")
+    @Operation(summary = "文档摘要", description = "对文档进行智能摘要，支持选择不同模型：qwen3.7-max-2026-05-20, glm-5, kimi-k2.5, MiniMax-M2.5")
     public Result<TextSummarizeVO> summarize(
             @RequestBody TextSummarizeDTO dto,
-            @Parameter(description = "选择AI模型（可选，默认qwen3.6-plus）", 
+            @Parameter(description = "选择AI模型（可选，默认qwen3.7-max-2026-05-20）",
                       in = ParameterIn.QUERY,
-                      schema = @Schema(allowableValues = {"qwen3.6-plus", "glm-5", "kimi-k2.5", "MiniMax-M2.5"}, 
-                                        defaultValue = "qwen3.6-plus"))
+                      schema = @Schema(allowableValues = {"qwen3.7-max-2026-05-20", "glm-5", "kimi-k2.5", "MiniMax-M2.5"},
+                                        defaultValue = "qwen3.7-max-2026-05-20"))
             @RequestParam(required = false) String model) {
         TextSummarizeVO vo = aiService.summarize(dto, model);
         return Result.success(vo);
@@ -105,13 +105,13 @@ public class AIController {
      * @return 关键词结果
      */
     @PostMapping("/keywords")
-    @Operation(summary = "关键词提取", description = "从文档中提取关键词，支持选择不同模型：qwen3.6-plus, glm-5, kimi-k2.5, MiniMax-M2.5")
+    @Operation(summary = "关键词提取", description = "从文档中提取关键词，支持选择不同模型：qwen3.7-max-2026-05-20, glm-5, kimi-k2.5, MiniMax-M2.5")
     public Result<KeywordExtractVO> extractKeywords(
             @RequestBody KeywordExtractDTO dto,
-            @Parameter(description = "选择AI模型（可选，默认qwen3.6-plus）", 
+            @Parameter(description = "选择AI模型（可选，默认qwen3.7-max-2026-05-20）",
                       in = ParameterIn.QUERY,
-                      schema = @Schema(allowableValues = {"qwen3.6-plus", "glm-5", "kimi-k2.5", "MiniMax-M2.5"}, 
-                                        defaultValue = "qwen3.6-plus"))
+                      schema = @Schema(allowableValues = {"qwen3.7-max-2026-05-20", "glm-5", "kimi-k2.5", "MiniMax-M2.5"},
+                                        defaultValue = "qwen3.7-max-2026-05-20"))
             @RequestParam(required = false) String model) {
         KeywordExtractVO vo = aiService.extractKeywords(dto, model);
         return Result.success(vo);

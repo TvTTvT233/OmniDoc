@@ -37,35 +37,51 @@ OmniDoc 是一个面向团队的 AI 文档处理与协作平台。项目采用 S
 
 ## 快速开始
 
-### 1. 准备配置
+### Windows 本地一键启动
 
-复制环境变量模板，并按实际环境填写密码、节点地址和模型密钥：
+需要先安装 JDK 17、Node.js LTS 和 Docker Desktop。Docker Desktop 使用 WSL2
+后端，首次启用 WSL 或虚拟机平台后需要重启 Windows。
 
-```bash
-cp .env.example .env
-```
-
-不要提交 `.env`。生产环境务必设置独立且足够长的 `OMNIDOC_JWT_SECRET`，并使用安全的密钥管理方案。
-
-### 2. 构建后端
-
-Windows：
+复制环境变量模板：
 
 ```powershell
-.\mvnw.cmd clean package
+Copy-Item .env.example .env
 ```
 
-Linux / macOS：
+填写 `.env` 中的本地密码。需要使用阿里云百炼时，将同一把华北 2
+（北京）地域的通用按量付费 API Key 同时填入 `DASHSCOPE_API_KEY` 和
+`OPENAI_API_KEY`。不要使用 Coding Plan/Token Plan 专属 Key；它们不适合
+后端服务，也不会抵扣新人免费额度。
 
-```bash
-./mvnw clean package
+在项目根目录运行：
+
+```powershell
+.\scripts\start-local.cmd
 ```
 
-如只需快速验证编译，可追加 `-DskipTests`。
+该脚本会自动完成：
 
-### 3. 启动前端
+1. 启动 MySQL、Redis、RabbitMQ 和 MinIO；
+2. 初始化本地数据库表；
+3. 使用 JDK 17 构建并启动五个后端服务；
+4. 安装前端依赖并启动 Vite。
 
-```bash
+查看状态或停止：
+
+```powershell
+.\scripts\status-local.cmd
+.\scripts\stop-local.cmd
+```
+
+首次构建耗时较长。后续可跳过后端重新构建：
+
+```powershell
+.\scripts\start-local.cmd -SkipBuild
+```
+
+只运行前端：
+
+```powershell
 cd web
 npm ci
 npm run dev
@@ -73,16 +89,21 @@ npm run dev
 
 前端默认通过 `VITE_API_TARGET=http://localhost:8080` 访问网关。
 
-### 4. 启动基础设施
+### 手动构建
 
-Compose 文件使用外部网络，首次运行前先创建：
+Windows：
 
-```bash
-docker network create omnidoc-network
-docker compose --env-file .env -f docker-compose-infra.yml up -d
+```powershell
+.\mvnw.cmd -s .\.mvn\settings-local.xml -DskipTests package
 ```
 
-随后可通过 IDE 分别启动五个 Spring Boot 服务，或参考 [DEPLOY.md](DEPLOY.md) 使用 Docker Swarm 部署完整环境。
+Linux / macOS：
+
+```bash
+./mvnw -DskipTests package
+```
+
+生产或集群部署请参考 [DEPLOY.md](DEPLOY.md)。本地开发不需要 Nacos。
 
 ## 常用入口
 
@@ -90,10 +111,8 @@ docker compose --env-file .env -f docker-compose-infra.yml up -d
 | --- | --- |
 | Web 前端 | `http://localhost:5173` |
 | API 网关 | `http://localhost:8080` |
-| Nacos | `http://localhost:8848/nacos` |
 | RabbitMQ 管理台 | `http://localhost:15672` |
 | MinIO 控制台 | `http://localhost:9001` |
-| Grafana | `http://localhost:3000` |
 
 ## 配置与安全
 
@@ -108,4 +127,3 @@ docker compose --env-file .env -f docker-compose-infra.yml up -d
 - [部署指南](DEPLOY.md)
 - [AI 服务说明](ai-service/README.md)
 - [RabbitMQ 实现说明](RABBITMQ_IMPLEMENTATION.md)
-

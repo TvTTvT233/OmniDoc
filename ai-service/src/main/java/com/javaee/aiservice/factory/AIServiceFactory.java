@@ -103,7 +103,7 @@ public class AIServiceFactory {
     }
     
     public AIService getDefaultService() {
-        return getService(ModelType.QWEN36_PLUS);
+        return getService(ModelType.QWEN37_MAX_20260520);
     }
     
     public Map<ModelType, AIService> getAllServices() {
