@@ -96,6 +96,16 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- MCP Java SDK 2.x with the Jackson 2 JSON implementation -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json-jackson2</artifactId>
+        </dependency>
+
         <!-- 阿里云百炼 dashscope SDK -->
         <dependency>
             <groupId>com.alibaba</groupId>
