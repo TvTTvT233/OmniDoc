@@ -96,6 +96,7 @@ public class AgentReflectionService {
                 - 参数缺失或需要用户决定时，shouldAskUser=true，并优先使用ask-user工具。
                 - 不要重复已经成功执行且参数相同的工具。
                 - 只能使用工具列表中的toolName。
+                - 最新、当前、近期、网页或明确联网问题可使用mcp-search；上传材料、知识库和已有文档问题优先使用RAG；用户禁止联网时不得使用mcp.*工具。
                 - 如果已经达到最大轮次，continueExecution=false。
 
                 当前轮次: %s / %s
@@ -114,7 +115,7 @@ public class AgentReflectionService {
 
                 上下文:
                 %s
-                """.formatted(iteration, maxIterations, toolCatalog(), request.getTask(), safeJson(plan),
+                """.formatted(iteration, maxIterations, toolCatalog(request), request.getTask(), safeJson(plan),
                 safeJson(results), safeJson(context));
     }
 
@@ -292,15 +293,27 @@ public class AgentReflectionService {
         return step;
     }
 
-    private String toolCatalog() {
+    private String toolCatalog(AgentExecutionRequest request) {
         StringBuilder builder = new StringBuilder();
         for (AgentToolDefinition tool : toolRegistry.list()) {
+            if (hasNoInternetIntent(request.getTask()) && tool.getName() != null && tool.getName().startsWith("mcp.")) {
+                continue;
+            }
             builder.append("- ").append(tool.getName())
                     .append(": ").append(tool.getDescription())
                     .append(" 参数: ").append(safeJson(tool.getParameterSchema()))
                     .append("\n");
         }
         return builder.toString();
+    }
+
+    private boolean hasNoInternetIntent(String task) {
+        String normalized = task == null ? "" : task.toLowerCase(java.util.Locale.ROOT);
+        return normalized.contains("不要联网") || normalized.contains("禁止联网")
+                || normalized.contains("不允许联网") || normalized.contains("不联网")
+                || normalized.contains("仅用本地") || normalized.contains("只用本地")
+                || normalized.contains("offline") || normalized.contains("without internet")
+                || normalized.contains("do not browse");
     }
 
     private String stripObjectJson(String raw) {
