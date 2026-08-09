@@ -1,14 +1,16 @@
 # MCP 搜索接入：人工验收
 
-## 当前状态
+## 当前交付状态
 
-- T04 独立验收资产：`HANDOFF_READY`；
-- T01-T03：在 T04 共同基线中尚未集成；
-- 自动验收：`PENDING_INTEGRATION`，不是 `AUTO_VERIFIED`；
-- 真实 Tavily：当前进程无 `TAVILY_API_KEY`，未连接、未调用；
-- 人工结论：`MANUAL_PENDING`。
+- T01-T04 已合并；
+- 自动验收状态：`AUTO_VERIFIED`；
+- T04 集成模式：78/78 通过；
+- 完整 `ai-service` 回归：99/99 通过；
+- 静态泄漏检查：588 个 Git 可见文本文件无命中；
+- 真实 Tavily：`NOT_RUN`；
+- 最终状态：`MANUAL_PENDING`。
 
-在自动报告明确变为 `AUTO_VERIFIED` 前，不得勾选本文件的最终结论。
+自动验收使用 loopback 模拟 MCP Server，不等同于真实 Tavily 验收。以下清单仍需用户在安全提供环境变量后人工执行。
 
 ## 验收前提
 
@@ -20,6 +22,23 @@
 - 验收人已登录 OmniDoc；`/api/ai/agent/**` 虽可通过 Spring Security 路径过滤，但 Controller 仍要求已认证用户上下文；
 - 已准备一个可查询的内部知识库和一份仅用于验收的材料。
 
+## 安全启动准备
+
+在准备启动服务的同一个 PowerShell 进程中启用 MCP，并通过隐藏输入读取 Key：
+
+```powershell
+$env:AGENT_MCP_ENABLED = 'true'
+$tavilyKey = Read-Host 'Tavily API Key' -AsSecureString
+$env:TAVILY_API_KEY = [System.Net.NetworkCredential]::new('', $tavilyKey).Password
+```
+
+继续使用项目现有本地启动流程。不要把 Key 写入 `.env`、YAML、URL、命令参数、截图或验收记录。验收完成并停止服务后清理当前进程变量：
+
+```powershell
+Remove-Item Env:TAVILY_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:AGENT_MCP_ENABLED -ErrorAction SilentlyContinue
+```
+
 ## 验收入口
 
 先在仓库根目录运行集成门禁：
@@ -28,7 +47,7 @@
 .\scripts\mcp-search\run-t04-acceptance.cmd -Integrated
 ```
 
-必须满足：命令退出码为 0，Maven 无失败/错误/跳过的 MCP 验收用例，静态泄漏检查通过。当前共同基线运行该命令会按设计退出 1 并报告 `PENDING_INTEGRATION`。
+必须满足：命令退出码为 0，Maven 无失败、错误或跳过的 MCP 验收用例，静态泄漏检查通过。主协调分支已实际验证该命令退出码为 0，结果为 78/78 通过；人工验收前可再次复跑确认本地状态未变化。
 
 真实 Key 只在启动 `ai-service` 的本地进程环境中设置。不得把 Key 写在命令行参数、URL Query、YAML、验收记录或截图中；验收结束后清除该进程环境并关闭终端。
 

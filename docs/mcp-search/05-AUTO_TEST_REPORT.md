@@ -189,3 +189,52 @@ fixture 的确定性调用场景覆盖 structured content、文本回退、重�
 | Trace MCP 元数据 | 无集成实现 | `PENDING_INTEGRATION` | Server、远程/暴露工具、状态、耗时、错误码齐全；T03 |
 | API Key 仓库静态泄漏 | 570 个文本文件扫描无命中 | `PASS_STATIC_ONLY` | 集成后重跑并补日志/Trace/HTTP 人工复核；T01/T03/T04 |
 | 真实 Tavily 冒烟 | Key 不存在，未调用 | `NOT_RUN` | 用户安全提供 Key 后人工执行一次；人工验收 |
+
+## 最终集成自动验收
+
+本节记录主协调分支集成 T01-T04 后的最终结果，并取代上文 T04 独立分支阶段的 `PENDING_INTEGRATION` 状态。
+
+- 日期：2026-08-09；
+- 集成顺序：T02 → T01 → T03 → T04；
+- 集成连接器提交：`ff9b619`；
+- 状态：`AUTO_VERIFIED`；
+- 真实 Tavily：`NOT_RUN`。
+
+### T04 集成模式
+
+命令：
+
+```powershell
+.\scripts\mcp-search\run-t04-acceptance.cmd -Integrated
+```
+
+结果：
+
+- Tests run：78；
+- Failures：0；
+- Errors：0；
+- Skipped：0；
+- BUILD SUCCESS；
+- 静态泄漏检查扫描 588 个 Git 可见文本文件，无命中。
+
+覆盖证据包括：SDK 初始化、分页发现、调用与错误映射；allowlist、命名空间、Schema、冲突保护和本地只读低风险策略；内部 RAG、外部 Search、禁止联网路由；structured/text/空/错误/超限结果；来源去重、最终引用和 Trace 元数据。新增跨层测试实际走通 T04 loopback 模拟 Server、T01 SDK Transport、T02 动态目录和 `tools/call`。
+
+首次集成模式曾出现一个静态门禁失败：T01 单元测试中的固定 URL 查询参数值命中了“URL 凭据”规则。该值不是实际密钥；最终通过拆分测试数据构造消除仓库中的凭据形态字面量，未放宽扫描规则。
+
+### 完整 `ai-service` 回归
+
+仅在测试进程设置非真实占位配置后执行：
+
+```powershell
+.\mvnw.cmd -s .mvn\settings-local.xml -pl ai-service -am test
+```
+
+结果：99/99 通过，Failures 0、Errors 0、Skipped 0，BUILD SUCCESS。`AllModelsTest` 的四个远程模型调用仍全部认证失败，实际成功 0/4；该结果只证明本地测试回归，不证明真实模型连通。
+
+### 自动验收边界
+
+- 真实 `TAVILY_API_KEY` 未提供；
+- 未连接 `mcp.tavily.com`，未验证真实网络、认证兼容和搜索质量；
+- 未执行完整外部基础设施下的服务启动；
+- 日志、Trace、HTTP 返回和实际路由展示仍需按人工验收文档复核；
+- 因此项目尚未标记 `HUMAN_ACCEPTED`。

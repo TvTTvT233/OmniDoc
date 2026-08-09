@@ -104,7 +104,7 @@
 .\scripts\mcp-search\run-t04-acceptance.cmd -Integrated
 ```
 
-当前按设计退出 1：没有发现 T01-T03 非契约生产实现，状态为 `PENDING_INTEGRATION`。该结果证明门禁不会把缺失实现记作通过，不是产品失败。
+T04 独立分支阶段按设计退出 1：当时没有发现 T01-T03 非契约生产实现，状态为 `PENDING_INTEGRATION`。该结果证明门禁不会把缺失实现记作通过，不是产品失败；主协调分支集成后的最终结果见文末。
 
 ### 待集成矩阵
 
@@ -120,8 +120,20 @@
 
 ### 风险与交接要求
 
-- 当前不能标记 `AUTO_VERIFIED`，因为 T01-T03 尚未集成；
+- T04 独立分支交接时不能标记 `AUTO_VERIFIED`，因为当时 T01-T03 尚未集成；
 - 44/44 只覆盖 fixture、冻结契约和集成前回归，不能证明生产 MCP Client、工具映射、Agent 路由或真实 Tavily 可用；
 - 集成后必须运行 `-Integrated`，逐项更新 `05-AUTO_TEST_REPORT.md`，不得只沿用本阶段数字；
 - 若严格断言暴露缺陷，记录最小复现、预期/实际、脱敏证据和 T01/T02/T03 归属，不跨边界修改核心实现；
 - 人工入口为 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md`。
+
+## 主协调任务最终集成结果
+
+- 状态：`AUTO_VERIFIED`；
+- T04 分支提交：`74bcdd6`；
+- 合并提交：`4670d2c`；
+- 集成连接器提交：`ff9b619`；
+- T04 集成模式：78/78 通过，Failures 0、Errors 0、Skipped 0；
+- 完整 `ai-service` 回归：99/99 通过；
+- 静态泄漏检查：588 个 Git 可见文本文件无命中；
+- 真实 Tavily：`NOT_RUN`；
+- 下一步：用户按 `06-HUMAN_ACCEPTANCE.md` 执行人工验收，完成前不得标记 `HUMAN_ACCEPTED`。

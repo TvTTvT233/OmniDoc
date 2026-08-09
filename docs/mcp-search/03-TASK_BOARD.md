@@ -15,10 +15,10 @@
 | 编号 | 任务 | 建议分支 | 状态 | 依赖 |
 | --- | --- | --- | --- | --- |
 | T00 | 基线、契约与任务拆分 | `docs/bootstrap-project-context` | `HANDOFF_READY` | 无 |
-| T01 | MCP 连接与协议层 | `feature/mcp-search-transport` | `IN_PROGRESS` | T00 基线提交 |
-| T02 | 动态工具目录与 Schema | `feature/mcp-search-tool-catalog` | `IN_PROGRESS` | T00 基线提交 |
-| T03 | Agent 路由、调用与结果合成 | `feature/mcp-search-agent-routing` | `IN_PROGRESS` | T00 基线提交 |
-| T04 | 独立自动验收与人工验收文档 | `test/mcp-search-acceptance` | `IN_PROGRESS` | T00；最终验证依赖 T01-T03 集成 |
+| T01 | MCP 连接与协议层 | `feature/mcp-search-transport` | `MERGED` | T00 基线提交 |
+| T02 | 动态工具目录与 Schema | `feature/mcp-search-tool-catalog` | `MERGED` | T00 基线提交 |
+| T03 | Agent 路由、调用与结果合成 | `feature/mcp-search-agent-routing` | `MERGED` | T00 基线提交 |
+| T04 | 独立自动验收与人工验收文档 | `test/mcp-search-acceptance` | `AUTO_VERIFIED` | T01-T03 已集成；等待人工验收 |
 
 ## Codex 任务与工作树
 
