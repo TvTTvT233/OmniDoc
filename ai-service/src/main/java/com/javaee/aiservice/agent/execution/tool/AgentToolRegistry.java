@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -15,6 +16,7 @@ import java.util.Set;
 public class AgentToolRegistry {
 
     private final Map<String, AgentToolDefinition> tools = new LinkedHashMap<>();
+    private final Map<String, String> mcpToolOwners = new LinkedHashMap<>();
 
     public AgentToolRegistry() {
         register("direct-answer", "不调用外部工具，直接基于模型和上下文回答用户。",
@@ -89,16 +91,85 @@ public class AgentToolRegistry {
                 Set.of("content"), false, "file", false);
     }
 
-    public AgentToolDefinition get(String name) {
+    public synchronized AgentToolDefinition get(String name) {
         return tools.get(name);
     }
 
-    public List<AgentToolDefinition> list() {
+    public synchronized List<AgentToolDefinition> list() {
         return new ArrayList<>(tools.values());
     }
 
-    public boolean contains(String name) {
+    public synchronized boolean contains(String name) {
         return tools.containsKey(name);
+    }
+
+    /**
+     * Atomically replaces all MCP tools owned by one configured server.
+     *
+     * <p>The complete candidate set is validated before the live catalog is mutated. A conflict or invalid
+     * definition therefore leaves the previous server snapshot untouched.</p>
+     */
+    public synchronized void replaceMcpTools(String serverId, List<AgentToolDefinition> definitions) {
+        requireText(serverId, "serverId");
+        Objects.requireNonNull(definitions, "definitions must not be null");
+
+        Map<String, AgentToolDefinition> nextTools = new LinkedHashMap<>(tools);
+        Map<String, String> nextOwners = new LinkedHashMap<>(mcpToolOwners);
+        List<String> previousNames = nextOwners.entrySet().stream()
+                .filter(entry -> serverId.equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+        previousNames.forEach(name -> {
+            nextTools.remove(name);
+            nextOwners.remove(name);
+        });
+
+        Set<String> candidateNames = new java.util.HashSet<>();
+        for (AgentToolDefinition definition : definitions) {
+            validateMcpDefinition(serverId, definition);
+            String name = definition.getName();
+            if (!candidateNames.add(name)) {
+                throw new IllegalArgumentException("Duplicate MCP tool name in refresh: " + name);
+            }
+            if (nextTools.containsKey(name)) {
+                String owner = nextOwners.get(name);
+                String conflictSource = owner == null ? "native tool" : "MCP server " + owner;
+                throw new IllegalStateException("MCP tool name conflicts with " + conflictSource + ": " + name);
+            }
+            nextTools.put(name, definition);
+            nextOwners.put(name, serverId);
+        }
+
+        tools.clear();
+        tools.putAll(nextTools);
+        mcpToolOwners.clear();
+        mcpToolOwners.putAll(nextOwners);
+    }
+
+    /**
+     * Removes one server's dynamic tools without changing native tools or tools owned by other servers.
+     *
+     * @return number of removed tools
+     */
+    public synchronized int removeMcpTools(String serverId) {
+        requireText(serverId, "serverId");
+        List<String> names = mcpToolOwners.entrySet().stream()
+                .filter(entry -> serverId.equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+        names.forEach(name -> {
+            tools.remove(name);
+            mcpToolOwners.remove(name);
+        });
+        return names.size();
+    }
+
+    public synchronized List<AgentToolDefinition> listMcpTools(String serverId) {
+        requireText(serverId, "serverId");
+        return mcpToolOwners.entrySet().stream()
+                .filter(entry -> serverId.equals(entry.getValue()))
+                .map(entry -> tools.get(entry.getKey()))
+                .toList();
     }
 
     private void register(String name, String description, Map<String, String> parameters, Set<String> requiredParameters,
@@ -173,5 +244,28 @@ public class AgentToolRegistry {
             case "reindexAfterWrite" -> true;
             default -> null;
         };
+    }
+
+    private void validateMcpDefinition(String serverId, AgentToolDefinition definition) {
+        Objects.requireNonNull(definition, "MCP tool definition must not be null");
+        requireText(definition.getName(), "tool name");
+        Map<String, Object> metadata = definition.getSourceMetadata();
+        if (!"mcp".equals(metadata.get("source")) || !serverId.equals(metadata.get("serverId"))) {
+            throw new IllegalArgumentException("MCP tool source metadata does not match server " + serverId);
+        }
+        if (!"mcp-search".equals(definition.getCategory())
+                || definition.isDestructive()
+                || definition.isRequiresUserAction()
+                || !definition.isReadOnly()
+                || !"low".equals(definition.getRiskLevel())) {
+            throw new IllegalArgumentException("MCP search tools must use the local read-only low-risk policy");
+        }
+    }
+
+    private String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value;
     }
 }
