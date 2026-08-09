@@ -2,10 +2,10 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-09
-- **当前阶段**：Qdrant QV00 契约与基线已完成，MCP 搜索仍等待用户人工验收
+- **更新日期**：2026-08-10
+- **当前阶段**：Qdrant QV01-QV04 已从共同基线创建并行开发，MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：从 QV00 共同基线创建 QV01-QV04 独立任务；MCP 人工验收仍按 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md` 执行
+- **下一阶段**：等待 QV01-QV04 专项交接，按冻结顺序集成并执行统一门禁；MCP 人工验收仍按 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md` 执行
 
 ## 已确认
 
@@ -161,7 +161,7 @@
 
 ### 尚未验证
 
-- QV01-QV04 尚未创建；
+- QV01-QV04 已创建并进入并行开发，但尚未形成交接提交或集成；
 - 现有 `VectorStore` 尚未接入新契约；
 - Qdrant SDK、Docker、Collection、alias、payload index、Shadow 和迁移均未实现；
 - 未连接真实 Redis、Qdrant 或 Embedding 服务；
@@ -174,6 +174,16 @@
 - 完整回归使用非真实占位配置，远程模型实际成功仍为 0/4；
 - QV00 未创建 Qdrant Client，未连接真实 Redis、RabbitMQ、Embedding 或 Qdrant；
 - `git diff --cached --check` 通过，静态敏感信息检查扫描 621 个文本文件，无命中。
+
+## Qdrant QV01-QV04 并行开发
+
+- 共同基线：`3ec7a0fb629aac3d526ac03058b577b71f921a2b`；
+- QV01：分支 `feature/qdrant-local-baseline`，工作树 `../.codex-worktrees/qdrant-qv01`，Codex 任务 `019fe74e-9712-70a0-8f1f-9e4e20802ae3`，状态 `IN_PROGRESS`；
+- QV02：分支 `feature/qdrant-vector-backend`，工作树 `../.codex-worktrees/qdrant-qv02`，Codex 任务 `019fe74e-b7a1-76f2-b887-8eba2e000012`，状态 `IN_PROGRESS`；
+- QV03：分支 `feature/qdrant-shadow-migration`，工作树 `../.codex-worktrees/qdrant-qv03`，Codex 任务 `019fe74e-e464-7da2-9bfa-84856551ed14`，状态 `IN_PROGRESS`；
+- QV04：分支 `test/qdrant-vector-acceptance`，工作树 `../.codex-worktrees/qdrant-qv04`，Codex 任务 `019fe74f-032d-7591-a93c-380b6724cb9b`，状态 `IN_PROGRESS`；
+- 四个任务均已核验分支、共同基线和初始干净工作区；尚未验证任何专项实现或真实 Qdrant 能力；
+- 后续由主协调任务等待 handoff，按 QV01、QV02、QV03、QV04 顺序集成，并在集成分支运行统一自动门禁。
 
 ## 维护规则
 
@@ -196,6 +206,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-10 | Qdrant QV01-QV04 | 从共同基线 `3ec7a0f` 创建四个独立分支、工作树和 Codex 任务并开始并行开发；专项实现和真实 Qdrant 尚未验收 |
 | 2026-08-09 | Qdrant QV00 | 冻结双后端目标、Java 契约、配置、任务边界与验收规则；新增确定性契约和 HNSW 基线测试，并发现覆盖写入和删除残留旧 HNSW 命中缺陷，交由 QV01 修复 |
 | 2026-08-09 | MCP 搜索自动验收 | T01-T04 已按冻结顺序合并，补齐发现到工具目录的集成连接器；集成模式 78/78、完整回归 99/99、静态泄漏检查通过，真实 Tavily 与人工验收待执行 |
 | 2026-08-09 | MCP 搜索 T01-T04 | 从共同基线 `61266db` 创建 4 个独立分支、Git 工作树和 Codex 任务，分别开始连接层、工具目录、Agent 路由与独立验收开发 |

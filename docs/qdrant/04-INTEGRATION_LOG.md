@@ -2,16 +2,27 @@
 
 ## 当前状态
 
-`PENDING_TASK_CREATION`
+`PARALLEL_DEVELOPMENT`
 
-QV00 已冻结目标、架构、Java 契约、配置名称、任务边界和验收规则；QV01-QV04 尚未创建，Qdrant 尚未接入运行链路。
+QV00 已冻结目标、架构、Java 契约、配置名称、任务边界和验收规则；QV01-QV04 已从同一交付提交创建并进入并行开发，尚未集成，Qdrant 尚未接入主运行链路。
 
 ## 共同基线
 
 - QV00 起始分支：`docs/bootstrap-project-context`；
 - QV00 起始 HEAD：`99ed70c`；
 - QV00 起始工作区：干净；
-- QV01-QV04 共同基线：待 QV00 交付提交完成后记录。
+- QV01-QV04 共同基线：`3ec7a0fb629aac3d526ac03058b577b71f921a2b`。
+
+## 并行任务启动记录
+
+| 编号 | 分支 | 工作树 | Codex 任务 ID | 启动状态 |
+| --- | --- | --- | --- | --- |
+| QV01 | `feature/qdrant-local-baseline` | `../.codex-worktrees/qdrant-qv01` | `019fe74e-9712-70a0-8f1f-9e4e20802ae3` | `IN_PROGRESS` |
+| QV02 | `feature/qdrant-vector-backend` | `../.codex-worktrees/qdrant-qv02` | `019fe74e-b7a1-76f2-b887-8eba2e000012` | `IN_PROGRESS` |
+| QV03 | `feature/qdrant-shadow-migration` | `../.codex-worktrees/qdrant-qv03` | `019fe74e-e464-7da2-9bfa-84856551ed14` | `IN_PROGRESS` |
+| QV04 | `test/qdrant-vector-acceptance` | `../.codex-worktrees/qdrant-qv04` | `019fe74f-032d-7591-a93c-380b6724cb9b` | `IN_PROGRESS` |
+
+四个任务均已核验分支、共同基线和初始干净工作区。专项任务只更新自身 handoff；主协调任务负责后续状态回填、按 `QV01 -> QV02 -> QV03 -> QV04` 集成和统一门禁。
 
 ## 预定集成顺序
 

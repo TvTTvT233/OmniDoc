@@ -15,21 +15,21 @@
 | 编号 | 任务 | 建议分支 | 状态 | 依赖 |
 | --- | --- | --- | --- | --- |
 | QV00 | 契约、基线与任务拆分 | `docs/bootstrap-project-context` | `HANDOFF_READY` | 无 |
-| QV01 | 现有 Redis + JVM HNSW 后端适配 | `feature/qdrant-local-baseline` | `TODO` | QV00 交付提交 |
-| QV02 | Qdrant 后端与基础设施 | `feature/qdrant-vector-backend` | `TODO` | QV00 交付提交 |
-| QV03 | Shadow、迁移与切换 | `feature/qdrant-shadow-migration` | `TODO` | QV00 交付提交；集成时需要 QV01/QV02 |
-| QV04 | 独立自动验收与人工验收资产 | `test/qdrant-vector-acceptance` | `TODO` | QV00 交付提交；完整门禁需要 QV01-QV03 已集成 |
+| QV01 | 现有 Redis + JVM HNSW 后端适配 | `feature/qdrant-local-baseline` | `IN_PROGRESS` | QV00 交付提交 |
+| QV02 | Qdrant 后端与基础设施 | `feature/qdrant-vector-backend` | `IN_PROGRESS` | QV00 交付提交 |
+| QV03 | Shadow、迁移与切换 | `feature/qdrant-shadow-migration` | `IN_PROGRESS` | QV00 交付提交；集成时需要 QV01/QV02 |
+| QV04 | 独立自动验收与人工验收资产 | `test/qdrant-vector-acceptance` | `IN_PROGRESS` | QV00 交付提交；完整门禁需要 QV01-QV03 已集成 |
 
 ## Codex 任务与工作树
 
-QV01-QV04 尚未创建。创建后由主协调任务填写任务 ID、工作树和共同基线提交。
+QV01-QV04 已于 2026-08-10 从同一 QV00 提交创建并开始并行开发。
 
-| 编号 | Codex 任务 ID | 工作树 |
-| --- | --- | --- |
-| QV01 | `PENDING` | `../.codex-worktrees/qdrant-qv01` |
-| QV02 | `PENDING` | `../.codex-worktrees/qdrant-qv02` |
-| QV03 | `PENDING` | `../.codex-worktrees/qdrant-qv03` |
-| QV04 | `PENDING` | `../.codex-worktrees/qdrant-qv04` |
+| 编号 | Codex 任务 ID | 工作树 | 共同基线 |
+| --- | --- | --- | --- |
+| QV01 | `019fe74e-9712-70a0-8f1f-9e4e20802ae3` | `../.codex-worktrees/qdrant-qv01` | `3ec7a0fb629aac3d526ac03058b577b71f921a2b` |
+| QV02 | `019fe74e-b7a1-76f2-b887-8eba2e000012` | `../.codex-worktrees/qdrant-qv02` | `3ec7a0fb629aac3d526ac03058b577b71f921a2b` |
+| QV03 | `019fe74e-e464-7da2-9bfa-84856551ed14` | `../.codex-worktrees/qdrant-qv03` | `3ec7a0fb629aac3d526ac03058b577b71f921a2b` |
+| QV04 | `019fe74f-032d-7591-a93c-380b6724cb9b` | `../.codex-worktrees/qdrant-qv04` | `3ec7a0fb629aac3d526ac03058b577b71f921a2b` |
 
 ## 共同规则
 
