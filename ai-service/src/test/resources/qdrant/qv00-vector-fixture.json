@@ -1,0 +1,29 @@
+{
+  "embedding": {
+    "model": "fixture-embedding-v1",
+    "dimension": 3,
+    "schemaVersion": 1
+  },
+  "records": [
+    {"id":"ua-ka-1","documentId":"ua-doc-1","userId":"user-a","knowledgeBaseId":"kb-a","vector":[1.0,0.0,0.0],"metadata":{"segmentIndex":0}},
+    {"id":"ua-ka-2","documentId":"ua-doc-1","userId":"user-a","knowledgeBaseId":"kb-a","vector":[0.9,0.1,0.0],"metadata":{"segmentIndex":1}},
+    {"id":"ua-kb-1","documentId":"ua-doc-2","userId":"user-a","knowledgeBaseId":"kb-b","vector":[0.0,1.0,0.0],"metadata":{"segmentIndex":0}},
+    {"id":"ua-kb-2","documentId":"ua-doc-2","userId":"user-a","knowledgeBaseId":"kb-b","vector":[0.1,0.9,0.0],"metadata":{"segmentIndex":1}},
+    {"id":"ub-ka-1","documentId":"ub-doc-1","userId":"user-b","knowledgeBaseId":"kb-a","vector":[1.0,0.0,0.0],"metadata":{"segmentIndex":0}},
+    {"id":"ub-ka-2","documentId":"ub-doc-1","userId":"user-b","knowledgeBaseId":"kb-a","vector":[0.95,0.05,0.0],"metadata":{"segmentIndex":1}},
+    {"id":"ub-kb-1","documentId":"ub-doc-2","userId":"user-b","knowledgeBaseId":"kb-b","vector":[0.0,1.0,0.0],"metadata":{"segmentIndex":0}},
+    {"id":"ub-kb-2","documentId":"ub-doc-2","userId":"user-b","knowledgeBaseId":"kb-b","vector":[0.05,0.95,0.0],"metadata":{"segmentIndex":1}},
+    {"id":"uc-ka-1","documentId":"uc-doc-1","userId":"user-c","knowledgeBaseId":"kb-a","vector":[0.0,0.0,1.0],"metadata":{"segmentIndex":0}},
+    {"id":"uc-ka-2","documentId":"uc-doc-1","userId":"user-c","knowledgeBaseId":"kb-a","vector":[0.1,0.0,0.9],"metadata":{"segmentIndex":1}},
+    {"id":"uc-kb-1","documentId":"uc-doc-2","userId":"user-c","knowledgeBaseId":"kb-b","vector":[0.0,0.0,1.0],"metadata":{"segmentIndex":0}},
+    {"id":"uc-kb-2","documentId":"uc-doc-2","userId":"user-c","knowledgeBaseId":"kb-b","vector":[0.0,0.1,0.9],"metadata":{"segmentIndex":1}}
+  ],
+  "queries": [
+    {"id":"q-ua-ka","userId":"user-a","knowledgeBaseId":"kb-a","vector":[1.0,0.0,0.0],"topK":2,"expectedIds":["ua-ka-1","ua-ka-2"]},
+    {"id":"q-ua-kb","userId":"user-a","knowledgeBaseId":"kb-b","vector":[0.0,1.0,0.0],"topK":2,"expectedIds":["ua-kb-1","ua-kb-2"]},
+    {"id":"q-ub-ka","userId":"user-b","knowledgeBaseId":"kb-a","vector":[1.0,0.0,0.0],"topK":2,"expectedIds":["ub-ka-1","ub-ka-2"]},
+    {"id":"q-ub-kb","userId":"user-b","knowledgeBaseId":"kb-b","vector":[0.0,1.0,0.0],"topK":2,"expectedIds":["ub-kb-1","ub-kb-2"]},
+    {"id":"q-uc-ka","userId":"user-c","knowledgeBaseId":"kb-a","vector":[0.0,0.0,1.0],"topK":2,"expectedIds":["uc-ka-1","uc-ka-2"]},
+    {"id":"q-uc-kb","userId":"user-c","knowledgeBaseId":"kb-b","vector":[0.0,0.0,1.0],"topK":2,"expectedIds":["uc-kb-1","uc-kb-2"]}
+  ]
+}

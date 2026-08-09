@@ -87,12 +87,29 @@ ai:
     reflection:
       enabled: true
   vector:
+    mode: ${VECTOR_STORE_MODE:baseline}
     dimension: 1536
+    embedding:
+      model: ${VECTOR_EMBEDDING_MODEL:text-embedding-v1}
+      schema-version: ${VECTOR_SCHEMA_VERSION:1}
     hnsw:
       m: 16
       ef-construction: 200
       ef: 128
       max-items: 200000
+    qdrant:
+      host: ${QDRANT_HOST:qdrant}
+      grpc-port: ${QDRANT_GRPC_PORT:6334}
+      api-key: ${QDRANT_API_KEY:}
+      collection-alias: ${QDRANT_COLLECTION_ALIAS:omnidoc_chunks_active}
+      connect-timeout-ms: 3000
+      request-timeout-ms: 5000
+      batch-size: 100
+    shadow:
+      sample-rate: 1.0
+      timeout-ms: 3000
+    migration:
+      batch-size: 100
   aiops:
     metrics:
       retention-ms: 900000
