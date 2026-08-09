@@ -79,11 +79,15 @@
 
 ### T01：MCP 连接与协议层
 
-- 状态：`IN_PROGRESS`
+- 状态：`MERGED`
 - 分支：`feature/mcp-search-transport`
+- 提交：`04da0a4`
 - Codex 任务：`019fe237-e23b-7c60-a394-658c32ea49d5`
 - 工作树：`../.codex-worktrees/mcp-search-t01`
-- 验证：任务执行中，结果待交接
+- 实现：已接入 MCP Java SDK 2.0.0 的 `mcp-core` 与 `mcp-json-jackson2`，使用 Sync Client 和 JDK HttpClient Streamable HTTP；已实现 Bearer Header、初始化、显式分页 `tools/list`、allowlist、`tools/call`、连接/请求超时、fail-open、优雅关闭、标准错误映射、结果大小限制和密钥脱敏；默认关闭时不创建远程 Client
+- 验证：T01 专项测试 15/15 通过；加入 `AgentExecutionServiceTest`、`AgentControllerTest` 与 `McpContractTest` 后直接相关回归 50/50 通过；MCP 2.0.0 依赖与主代码编译通过
+- 未验证：无真实 Tavily Key，未执行真实 Tavily MCP、完整 `ai-service` 外部基础设施启动或 Agent 端到端搜索；这些内容留待集成与验收任务
+- 风险：Spring Boot 3.2 依赖管理最终解析 Jackson 2.15.3、Reactor 3.6.0，而 MCP 2.0.0 发布 POM 声明 Jackson 2.20.1、Reactor 3.7.0；当前专项协议测试通过，未升级现有 Spring AI/Boot 依赖栈，仍需在后续完整集成中关注版本兼容
 
 ### T02：动态工具目录与 Schema
 

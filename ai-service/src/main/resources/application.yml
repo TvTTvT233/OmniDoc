@@ -151,8 +151,27 @@ document:
 logging:
   level:
     com.javaee.aiservice: debug
+    io.modelcontextprotocol: off
     org.springframework.ai: info
     org.springframework.security: info
+
+agent:
+  mcp:
+    enabled: false
+    fail-fast: false
+    servers:
+      web-search:
+        enabled: true
+        transport: streamable-http
+        base-url: ${TAVILY_MCP_BASE_URL:https://mcp.tavily.com}
+        endpoint: ${TAVILY_MCP_ENDPOINT:/mcp/}
+        api-key: ${TAVILY_API_KEY:}
+        namespace: mcp.web-search
+        connect-timeout: 5s
+        request-timeout: 20s
+        max-result-chars: 30000
+        allowed-tools:
+          - tavily-search
 
 # SpringDoc配置
 springdoc:
