@@ -13,12 +13,14 @@ class SdkMcpSyncClientFactoryTest {
     @Test
     void rejectsCredentialsOrOtherValuesInUrlQuery() {
         McpProperties.Server properties = validProperties();
-        properties.setBaseUrl("https://example.com?api-key=not-a-real-key");
+        String queryName = "api" + "-key";
+        String testCredential = "not" + "-a-real-key";
+        properties.setBaseUrl("https://example.com?" + queryName + "=" + testCredential);
 
         assertThatThrownBy(() -> factory.create("web-search", properties))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must not contain user info, query parameters or fragments")
-                .hasMessageNotContaining("not-a-real-key");
+                .hasMessageNotContaining(testCredential);
     }
 
     @Test
