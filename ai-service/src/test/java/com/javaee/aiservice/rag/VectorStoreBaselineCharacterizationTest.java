@@ -1,7 +1,8 @@
 package com.javaee.aiservice.rag;
 
+import com.javaee.aiservice.rag.vector.local.BaselineVectorBackendRouter;
+import com.javaee.aiservice.rag.vector.local.LocalRedisHnswVectorBackend;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -46,13 +47,17 @@ class VectorStoreBaselineCharacterizationTest {
         when(hashOperations.entries(anyString())).thenAnswer(invocation ->
                 metadata.getOrDefault(invocation.getArgument(0), Map.of()));
 
-        vectorStore = new VectorStore();
-        ReflectionTestUtils.setField(vectorStore, "redisTemplate", redisTemplate);
-        ReflectionTestUtils.setField(vectorStore, "defaultDimension", 3);
-        ReflectionTestUtils.setField(vectorStore, "hnswM", 8);
-        ReflectionTestUtils.setField(vectorStore, "hnswEfConstruction", 32);
-        ReflectionTestUtils.setField(vectorStore, "hnswEf", 16);
-        ReflectionTestUtils.setField(vectorStore, "hnswMaxItems", 64);
+        LocalRedisHnswVectorBackend backend = new LocalRedisHnswVectorBackend(redisTemplate);
+        ReflectionTestUtils.setField(backend, "defaultEmbeddingModel", "fixture-embedding");
+        ReflectionTestUtils.setField(backend, "defaultSchemaVersion", 1);
+        ReflectionTestUtils.setField(backend, "hnswM", 8);
+        ReflectionTestUtils.setField(backend, "hnswEfConstruction", 32);
+        ReflectionTestUtils.setField(backend, "hnswEf", 16);
+        ReflectionTestUtils.setField(backend, "hnswMaxItems", 64);
+
+        vectorStore = new VectorStore(new BaselineVectorBackendRouter(backend));
+        ReflectionTestUtils.setField(vectorStore, "defaultEmbeddingModel", "fixture-embedding");
+        ReflectionTestUtils.setField(vectorStore, "defaultSchemaVersion", 1);
     }
 
     @Test
@@ -69,11 +74,13 @@ class VectorStoreBaselineCharacterizationTest {
         assertThat(results).allSatisfy(result -> {
             assertThat(result.get("userId")).isEqualTo("user-a");
             assertThat(result.get("knowledgeBaseId")).isEqualTo("kb-a");
+            assertThat(result.get("embeddingModel")).isEqualTo("fixture-embedding");
+            assertThat(result.get("embeddingDimension")).isEqualTo(3);
+            assertThat(result.get("schemaVersion")).isEqualTo(1);
         });
     }
 
     @Test
-    @Disabled("QV01 must replace stale HNSW versions on idempotent upsert and enable this regression test")
     void overwritingExistingItemMustReplaceItsVector() {
         vectorStore.store("segment-1", vector(1.0f, 0.0f, 0.0f), metadata("user-a", "kb-a", "doc-a"));
         vectorStore.store("segment-1", vector(0.0f, 1.0f, 0.0f), metadata("user-a", "kb-a", "doc-a"));
@@ -84,7 +91,6 @@ class VectorStoreBaselineCharacterizationTest {
     }
 
     @Test
-    @Disabled("QV01 must remove stale HNSW versions after overwrite and enable this regression test")
     void deletingOverwrittenItemMustNotLeaveAStaleIndexHit() {
         vectorStore.store("segment-1", vector(1.0f, 0.0f, 0.0f), metadata("user-a", "kb-a", "doc-a"));
         vectorStore.store("segment-1", vector(0.0f, 1.0f, 0.0f), metadata("user-a", "kb-a", "doc-a"));
