@@ -133,6 +133,13 @@
             <version>1.1.2</version>
         </dependency>
 
+        <!-- Official Qdrant gRPC client; keep aligned with the pinned local server image. -->
+        <dependency>
+            <groupId>io.qdrant</groupId>
+            <artifactId>client</artifactId>
+            <version>1.18.3</version>
+        </dependency>
+
         <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
