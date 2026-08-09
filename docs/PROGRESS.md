@@ -103,11 +103,15 @@
 
 ### T03：Agent 路由、调用与结果合成
 
-- 状态：`IN_PROGRESS`
+- 状态：`MERGED`
 - 分支：`feature/mcp-search-agent-routing`
+- 提交：`4e0f3aa`
 - Codex 任务：`019fe238-24bf-7f50-a220-fb0267461265`
 - 工作树：`../.codex-worktrees/mcp-search-t03`
-- 验证：任务执行中，结果待交接
+- 进展：已完成 MCP/RAG/禁网路由约束、`McpToolGateway` 分发、action-required 复用、structured/text 结果归一化、上下文大小限制、实际来源引用、MCP Trace 与失败语义；原生工具分发保持不变
+- 验证：T03 新增测试 10/10；`AgentExecutionServiceTest` + `AgentControllerTest` 原有基线 32/32；加冻结契约测试后直接相关组合回归 45/45
+- 未验证：T01/T02 合并联调、完整服务启动、真实模型、真实 Tavily MCP 与端到端远程搜索
+- 下一步：由主协调任务按 T02、T01、T03 顺序集成，并由 T04 执行独立验收
 
 ### T04：独立验证与交付
 
