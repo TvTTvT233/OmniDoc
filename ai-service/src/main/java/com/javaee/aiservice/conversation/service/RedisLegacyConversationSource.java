@@ -44,4 +44,21 @@ public class RedisLegacyConversationSource implements LegacyConversationSource {
             return Optional.empty();
         }
     }
+
+    @Override
+    public void deleteOwned(String conversationId, String userId) {
+        String key = CONVERSATION_PREFIX + conversationId;
+        try {
+            Object owner = redisTemplate.opsForHash().get(key, "userId");
+            if (owner == null || !userId.equals(String.valueOf(owner))) {
+                return;
+            }
+            redisTemplate.delete(key);
+        } catch (DataAccessException error) {
+            throw new ConversationMemoryException(
+                    ConversationErrorCode.CONVERSATION_CONFLICT,
+                    "Legacy conversation cleanup is unavailable",
+                    error);
+        }
+    }
 }

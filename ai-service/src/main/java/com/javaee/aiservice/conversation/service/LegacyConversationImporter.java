@@ -93,6 +93,13 @@ public class LegacyConversationImporter {
         return importedConversations.get();
     }
 
+    public void deleteOwnedSource(String conversationId, String userId) {
+        if (!properties.getLegacy().getImport().isEnabled()) {
+            return;
+        }
+        legacySource.deleteOwned(conversationId, userId);
+    }
+
     private static MessageAppendCommand parse(
             String raw,
             String turnId,

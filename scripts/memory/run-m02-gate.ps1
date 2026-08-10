@@ -46,6 +46,7 @@ $requiredTargets = @(
 $regressionGroups = @(
     'MemoryV1ExpectedContractTest:m02*',
     'M02 persistence/store/schema tests',
+    'Legacy import/delete and ConversationManager compatibility tests',
     'AgentExecutionServiceTest',
     'AgentControllerTest'
 )
@@ -142,7 +143,7 @@ if ($missing.Count -gt 0) {
     exit 2
 }
 
-$selection = 'MemoryV1ExpectedContractTest,*Conversation*Persistence*Test,*Conversation*Store*Test,*MemorySchemaInitializerTest,AgentExecutionServiceTest,AgentControllerTest'
+$selection = 'MemoryV1ExpectedContractTest,*Conversation*Persistence*Test,*Conversation*Store*Test,*MemorySchemaInitializerTest,LegacyConversationImporterTest,ConversationManagerCharacterizationTest,AgentConversationMemoryCharacterizationTest,AgentControllerConversationBaselineTest,AgentExecutionServiceTest,AgentControllerTest'
 try {
     $integratedRun = Invoke-MemoryMavenSelection `
         -RepositoryRoot $RepositoryRoot `

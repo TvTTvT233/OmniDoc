@@ -333,6 +333,15 @@
 - `AllModelsTest` 在 Memory 关闭、四个模型禁用和非真实占位凭据下 1/1 通过，未连接 MySQL；既有 Redis/RabbitMQ 后台连接失败日志不属于本任务新增回归；
 - 未连接真实 MySQL/Redis、真实模型、浏览器或完整服务；未修改 Agent 主链、Runtime State、Summary、Context Builder、Controller 或前端；详细交接见 `docs/memory/handoffs/M02.md`。
 
+### M02 协调集成与删除边界修正
+
+- M02 合入后首次 Integrated 阶段门禁通过：Report Schema 5 项与集成选择 55 项均无失败/错误；四个 M02 固定目标均执行且 skipped=0，另有 12 项跳过只属于尚未实现的 M03-M05；报告为 `STAGE_GATE / M02 / STAGE_VERIFIED`，不是最终验收；
+- 协调审查发现：已导入 MySQL 的旧 Redis 会话永久删除时若只删除数据库，同一 `conv:*` 可能再次触发按需导入，造成“删除后复活”；已在数据库删除前增加所有者校验后的旧源清理，旧源不可用时明确失败并保留数据库事实以便重试；
+- 已新增“删除旧源后不可重新导入”和“旧源清理失败不提交可复活的数据库删除”两项回归；Legacy/Store/目标测试组合 27 项发现，15 项通过、12 项仅 M03-M05 跳过、Failures 0、Errors 0；
+- M02 阶段门禁已扩展为同时运行旧 Redis 导入/删除、ConversationManager 兼容、既有 Conversation Agent/Controller 基线，防止该 P0 删除边界再次遗漏；
+- 扩展后的最终 M02 Integrated 门禁发现 71 项，59 项通过、12 项仅 M03-M05 跳过、Failures 0、Errors 0；另有 Report Schema 5/5 通过，阶段报告仍为 `STAGE_VERIFIED` 且四个 M02 目标 skipped=0；
+- 仍未验证真实 MySQL 8、真实 Redis 删除/导入和完整服务重启；这些边界不会被 `STAGE_VERIFIED` 冒充为已完成。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：

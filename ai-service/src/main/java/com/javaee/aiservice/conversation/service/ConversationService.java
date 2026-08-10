@@ -142,6 +142,9 @@ public class ConversationService {
 
     public void delete(String conversationId, String userId) {
         requireOwned(conversationId, userId);
+        // Clear a compatible legacy source before committing the durable delete. Otherwise a
+        // subsequent lookup could import the same conversation again and make deletion reversible.
+        legacyImporter.deleteOwnedSource(conversationId, userId);
         conversationStore.deleteOwned(conversationId, userId);
     }
 

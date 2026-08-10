@@ -3,7 +3,7 @@
 ## 1. 当前状态
 
 ```text
-CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_PENDING
+CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_STAGE_VERIFIED / M03_A_IN_PROGRESS
 ```
 
 Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace Memory 和 User Memory 不属于本看板的实现范围。
@@ -19,6 +19,7 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 - `HUMAN_ACCEPTED`：用户人工验收通过；
 - `FROZEN`：概念或契约已经冻结，但不代表实现完成。
 - `BASELINE_VERIFIED`：当前行为、已知缺口和验收资产已完成集成验证，但目标生产能力仍未实现。
+- `STAGE_VERIFIED`：该阶段的冻结目标与回归门禁已在本地确定性环境通过，但不代表真实外部服务、最终 M07 或人工验收完成。
 
 ## 3. 任务总览
 
@@ -26,12 +27,12 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 | --- | --- | --- | --- | --- |
 | M00 | 目标、作用域与契约冻结 | `FROZEN` | 无 | `00-MEMORY_V1_SPEC.md` |
 | M01 | 当前行为基线与验收夹具 | `BASELINE_VERIFIED` | M00 | 缺口测试、确定性会话 fixture、容量基线 |
-| M02 | 持久化 Conversation 与结构化 Message | `TODO` | M01 | 数据表、Repository、单调序列、长期保留 |
-| M03 | Runtime State 分离与生命周期 | `TODO` | M02 | 短期状态模型、TTL、级联删除、兼容读取 |
+| M02 | 持久化 Conversation 与结构化 Message | `STAGE_VERIFIED` | M01 | 数据表、Repository、单调序列、长期保留 |
+| M03 | Runtime State 分离与生命周期 | `IN_PROGRESS (M03-A)` | M02 | 短期状态模型、TTL、级联删除、兼容读取 |
 | M04 | 统一 MemoryContextBuilder 与 Agent 接入 | `TODO` | M02、M03 | token 预算、近期历史、全模型路径接入 |
 | M05 | Structured Rolling Summary | `TODO` | M04 | Summary Schema、更新器、版本控制、回退 |
-| M06 | 前端历史、新对话与删除体验 | `TODO` | M02、M03、M05 | 历史恢复、真正新会话、归档/删除入口 |
-| M07 | 独立自动验收与人工验收 | `TODO` | M01-M06 | 回归、质量门禁、测试报告、人工验收文档 |
+| M06 | 前端历史、新对话与删除体验 | `IN_PROGRESS (M06-A STAGE_VERIFIED)` | M02、M03、M05 | 历史恢复、真正新会话、归档/删除入口 |
+| M07 | 独立自动验收与人工验收 | `IN_PROGRESS` | M01-M06 | 回归、质量门禁、测试报告、人工验收文档 |
 
 ## 4. 实施顺序与边界
 
