@@ -366,6 +366,14 @@
 - 未修改生产代码、POM、Web 或 package；未连接真实 Redis/MySQL/模型/浏览器/Embedding/Qdrant，M03-B 和最终 M07 仍待实现；
 - 详细交接见 `docs/memory/handoffs/M07-B.md`。
 
+### M03-A / M07-B 协调集成验证
+
+- 合并 M02 与 M03-A 时发现两份 `ai.memory` YAML 节点会形成重复 key 并可能覆盖持久化或 Runtime 配置；已合并为单一 `ai.memory` 树，保留 M02 的 enabled/schema/legacy 与 M03-A 的 runtime-state；
+- 协调复核将 Conversation/Trace 标识硬上限与持久化契约统一为 64 字符，并将旧 `ctx:*` 兼容 TTL 的可配置硬上限固定为 10 分钟；配置不能把兼容窗口放大到 30 分钟，新增断言已通过；
+- 首次 M03-A Integrated 门禁因实现将模型合理拆为 `RuntimeStateSnapshot/Update/Scope`、而脚本只接受单一 `RuntimeState` 类产生误报；已修正门禁接受冻结语义下的拆分模型，同时保留 Service、Redis persistence、白名单、TTL、clear/consume 和专项测试检查；
+- 修正后阶段门禁实际发现 46 项：36 项通过、10 项仅 M03-B/M04/M05 预期跳过、Failures 0、Errors 0；两个 M03-A 固定目标 skipped=0，报告为 `STAGE_GATE / M03_A / STAGE_VERIFIED`、`finalAcceptance=false`；
+- `readinessMissing` 继续明确记录 `M03B_DELETION_CASCADE_PENDING` 与 `M03B_OWNER_APPROVAL_PENDING`；未连接真实 Redis，完整 M03 和最终 M07 尚未完成。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：

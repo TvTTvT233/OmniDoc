@@ -3,7 +3,7 @@
 ## 1. 当前状态
 
 ```text
-CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_STAGE_VERIFIED / M03_A_IN_PROGRESS
+CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_STAGE_VERIFIED / M03_A_STAGE_VERIFIED / M03_B_PENDING
 ```
 
 Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace Memory 和 User Memory 不属于本看板的实现范围。
@@ -28,7 +28,7 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 | M00 | 目标、作用域与契约冻结 | `FROZEN` | 无 | `00-MEMORY_V1_SPEC.md` |
 | M01 | 当前行为基线与验收夹具 | `BASELINE_VERIFIED` | M00 | 缺口测试、确定性会话 fixture、容量基线 |
 | M02 | 持久化 Conversation 与结构化 Message | `STAGE_VERIFIED` | M01 | 数据表、Repository、单调序列、长期保留 |
-| M03 | Runtime State 分离与生命周期 | `IN_PROGRESS (M03-A)` | M02 | 短期状态模型、TTL、级联删除、兼容读取 |
+| M03 | Runtime State 分离与生命周期 | `IN_PROGRESS (M03-A STAGE_VERIFIED; M03-B PENDING)` | M02 | 短期状态模型、TTL、级联删除、兼容读取 |
 | M04 | 统一 MemoryContextBuilder 与 Agent 接入 | `TODO` | M02、M03 | token 预算、近期历史、全模型路径接入 |
 | M05 | Structured Rolling Summary | `TODO` | M04 | Summary Schema、更新器、版本控制、回退 |
 | M06 | 前端历史、新对话与删除体验 | `IN_PROGRESS (M06-A STAGE_VERIFIED)` | M02、M03、M05 | 历史恢复、真正新会话、归档/删除入口 |

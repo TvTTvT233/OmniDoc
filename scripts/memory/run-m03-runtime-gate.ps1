@@ -114,7 +114,7 @@ if ($runtimeSources.Count -eq 0) {
         Get-Content -LiteralPath $_.FullName -Raw -Encoding utf8
     }) -join "`n"
 
-    if ($runtimeText -notmatch '(?m)\b(?:record|class)\s+RuntimeState\b') {
+    if ($runtimeText -notmatch '(?m)\b(?:record|class)\s+RuntimeState(?:Snapshot|Update|Scope)?\b') {
         $missing.Add('M03A_RUNTIME_STATE_MODEL')
     }
     if ($runtimeText -notmatch '(?m)\b(?:class|interface)\s+\w*RuntimeState\w*Service\b') {
