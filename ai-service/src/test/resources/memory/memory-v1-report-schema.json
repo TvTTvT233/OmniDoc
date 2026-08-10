@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/memory-v1-acceptance-report.json",
+  "title": "OmniDoc Memory V1 acceptance report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "manualStatus",
+    "generatedAtUtc",
+    "fixture",
+    "environment",
+    "boundaries",
+    "tests",
+    "gates",
+    "contentSafety",
+    "metrics",
+    "unverified"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED"]},
+    "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING", "HUMAN_ACCEPTED"]},
+    "generatedAtUtc": {"type": "string", "format": "date-time"},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "synthetic", "messageCount", "summarySchemaVersion"],
+      "properties": {
+        "id": {"type": "string"},
+        "synthetic": {"const": true},
+        "messageCount": {"type": "integer", "minimum": 0},
+        "summarySchemaVersion": {"const": "1.0"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "head", "os", "java", "node", "externalNetworkIncluded"],
+      "properties": {
+        "branch": {"type": "string"},
+        "head": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "os": {"type": "string"},
+        "java": {"type": "string"},
+        "node": {"type": "string"},
+        "externalNetworkIncluded": {"const": false}
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mysqlConnected",
+        "redisConnected",
+        "realModel",
+        "remoteEmbedding",
+        "embeddingCalls",
+        "memoryQdrantCollections"
+      ],
+      "properties": {
+        "mysqlConnected": {"type": "boolean"},
+        "redisConnected": {"type": "boolean"},
+        "realModel": {"type": "boolean"},
+        "remoteEmbedding": {"const": false},
+        "embeddingCalls": {"type": "integer", "minimum": 0},
+        "memoryQdrantCollections": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "failures", "errors", "skipped", "asset", "integrated"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "failures": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "asset": {"type": ["object", "null"]},
+        "integrated": {"type": ["object", "null"]}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "messageLoss",
+        "duplicateSequence",
+        "coverageGap",
+        "coverageDuplicate",
+        "staleSummaryOverwrite",
+        "unsupportedConfirmedItems",
+        "successfulCrossUserAccess",
+        "deleteResidue",
+        "tokenOverBudget",
+        "modelCallPathsCovered",
+        "requiredModelCallPaths"
+      ],
+      "properties": {
+        "messageLoss": {"type": ["integer", "null"], "minimum": 0},
+        "duplicateSequence": {"type": ["integer", "null"], "minimum": 0},
+        "coverageGap": {"type": ["integer", "null"], "minimum": 0},
+        "coverageDuplicate": {"type": ["integer", "null"], "minimum": 0},
+        "staleSummaryOverwrite": {"type": ["integer", "null"], "minimum": 0},
+        "unsupportedConfirmedItems": {"type": ["integer", "null"], "minimum": 0},
+        "successfulCrossUserAccess": {"type": ["integer", "null"], "minimum": 0},
+        "deleteResidue": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["conversations", "messages", "summaries", "redisKeys", "runtimeStateKeys"],
+          "properties": {
+            "conversations": {"type": "integer", "minimum": 0},
+            "messages": {"type": "integer", "minimum": 0},
+            "summaries": {"type": "integer", "minimum": 0},
+            "redisKeys": {"type": "integer", "minimum": 0},
+            "runtimeStateKeys": {"type": "integer", "minimum": 0}
+          }
+        },
+        "tokenOverBudget": {"type": ["integer", "null"], "minimum": 0},
+        "modelCallPathsCovered": {"type": ["integer", "null"], "minimum": 0},
+        "requiredModelCallPaths": {"const": 7}
+      }
+    },
+    "contentSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containsConversationContent",
+        "containsSummaryContent",
+        "containsDocumentContent",
+        "containsPromptContent",
+        "containsSelectedText",
+        "containsToolResultContent",
+        "containsCredential"
+      ],
+      "properties": {
+        "containsConversationContent": {"const": false},
+        "containsSummaryContent": {"const": false},
+        "containsDocumentContent": {"const": false},
+        "containsPromptContent": {"const": false},
+        "containsSelectedText": {"const": false},
+        "containsToolResultContent": {"const": false},
+        "containsCredential": {"const": false}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tokenBudget", "summaryCalls", "summaryFailures"],
+      "properties": {
+        "tokenBudget": {"type": ["object", "null"]},
+        "summaryCalls": {"type": ["integer", "null"], "minimum": 0},
+        "summaryFailures": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "unverified": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

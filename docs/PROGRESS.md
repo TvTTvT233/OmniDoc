@@ -276,6 +276,16 @@
 - 构建保留主 chunk 超过 500 kB 的警告；依赖安装审计报告 12 个问题（3 moderate、7 high、2 critical），未在本基线任务中执行破坏性依赖升级；
 - 交接：`docs/memory/handoffs/M01-FE.md`。这些测试证明当前缺口，M06 修复时应以目标契约测试替换或反转缺陷断言。
 
+### M01-AC 验收资产
+
+- 已新增 Memory V1 确定性合成 fixture、Structured Summary JSON Schema、机器报告 JSON Schema 及 13 项只验证资产与契约的测试；
+- 已新增 `scripts/memory/run-m07-acceptance.cmd` 统一入口、集成就绪检查和敏感数据/报告正文边界检查；
+- 默认入口 13/13 测试通过并生成 `ASSET_VERIFIED` 报告；该状态只证明 M01 验收资产可用，不证明生产 Memory V1 行为；
+- `-Integrated` 在当前生产实现与 M07 集成门禁缺失时明确生成 `PENDING_INTEGRATION` 报告并以非零状态结束；
+- 机器报告只含元数据、计数、真假值边界与未验证原因，不含会话、摘要、文档、Prompt、选中文本、工具结果或凭据正文；
+- 本任务未修改生产代码，未运行真实模型、MySQL、Redis、浏览器、远程 Embedding 或 Qdrant，不得声称 `AUTO_VERIFIED`；
+- 详细交接见 `docs/memory/handoffs/M01-AC.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
