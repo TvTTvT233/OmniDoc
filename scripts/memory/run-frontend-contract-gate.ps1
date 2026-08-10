@@ -89,7 +89,7 @@ $missing = [System.Collections.Generic.List[string]]::new()
 $apiAbsolute = Join-Path $RepositoryRoot $ConversationApiPath
 if (-not (Test-Path -LiteralPath $apiAbsolute -PathType Leaf)) {
     $missing.Add('M06A_CONVERSATION_API_MODULE')
-} elseif ((Get-Content -LiteralPath $apiAbsolute -Raw -Encoding utf8) -notmatch '/api/ai/conversations') {
+} elseif ((Get-Content -LiteralPath $apiAbsolute -Raw -Encoding utf8) -notmatch '/(?:api/)?ai/conversations') {
     $missing.Add('M06A_CONVERSATION_API_RESOURCE_PATH')
 }
 

@@ -315,6 +315,13 @@
 - 静态敏感数据与报告正文边界检查最终扫描 731 个 Git 可见文本文件，无命中；未运行真实 MySQL、Redis、浏览器、模型、远程 Embedding 或 Qdrant；
 - 详细交接见 `docs/memory/handoffs/M07-A.md`。
 
+### M06-A / M07-A 协调集成验证
+
+- 协调分支合入 M06-A 与 M07-A 后，首次运行 M06-A Integrated 门禁发现脚本只识别源码字面量 `/api/ai/conversations`，未识别项目现有 `baseURL=/api` 与模块路径 `/ai/conversations` 的等价组合；已将门禁修正为接受两种冻结资源写法；
+- 修正后 `run-frontend-contract-gate.cmd -Integrated` 实际通过：合计 51 项测试，Failures 0、Errors 0、Skipped 0，其中 Report Schema 5 项、前端契约 14 项、Agent/Controller 回归 32 项；
+- 阶段报告为 `STAGE_GATE / M06_A / STAGE_VERIFIED`，并保持 `finalAcceptance=false`、`manualStatus=NOT_READY`；完整 M06-B/C 和最终 M07 仍为 `PENDING_INTEGRATION`；
+- 敏感数据与报告正文边界检查在协调分支扫描 738 个 Git 可见文本文件，无命中；未运行真实浏览器、MySQL、Redis 或模型。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
