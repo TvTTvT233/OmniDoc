@@ -2,10 +2,10 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-10
-- **当前阶段**：Qdrant QV01-QV04 已集成并通过自动验收；Qdrant 与 MCP 搜索均等待用户人工验收
+- **更新日期**：2026-08-11
+- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 基线审计进入并行执行；生产实现尚未开始，Qdrant 与 MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：按 `docs/qdrant/06-HUMAN_ACCEPTANCE.md` 执行 Qdrant 人工验收；MCP 人工验收仍按 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md` 执行
+- **下一阶段**：集成 Memory M01 后端、前端与验收夹具基线，再按冻结波次进入 M02；Qdrant 和 MCP 人工验收仍分别按既有文档执行
 
 ## 已确认
 
@@ -20,6 +20,10 @@
 - MCP 搜索接入的 MVP 范围、架构、Java 契约、错误语义、任务边界和验收标准已经冻结。
 - Qdrant 接入采用保留 Redis + JVM HNSW 基线、增加 `baseline`/`shadow`/`qdrant` 三种模式的方案；公共 Java 契约、配置名称、任务边界和验收规则已经冻结。
 - QV01-QV04 已按冻结顺序集成；生产装配、双后端、Shadow、可恢复迁移、scope 过滤和回滚边界已经进入主分支，专用自动验收为 159/159。
+- Memory 长期保留 `CONVERSATION`、`WORKSPACE`、`USER` 三级作用域；Memory V1 只实现 Conversation Memory，另外两级只预留契约。
+- Memory V1 冻结使用结构化消息、Structured Summary、近期原始消息、token 预算和统一上下文组装器；Runtime State 明确不属于长期记忆。
+- Conversation 原始消息默认长期保留；Memory V1 不使用 Qdrant，未来语义记忆通过独立 `MemoryVectorIndex` 和逻辑语料空间接入。
+- Memory V1 使用 MySQL 作为 Conversation/Message/Summary 事实主库，Redis 仅用于缓存、Runtime State 和必要锁；并行开发波次、文件所有权、自动门禁和人工清单已经冻结。
 - `AgentExecutionServiceTest` 与 `AgentControllerTest` 在当前工作树上共 32 个测试通过，可作为 MCP Agent 集成的直接回归基线；加入 T00 契约测试后相关测试为 35/35 通过。
 
 ## 尚未验证
@@ -33,6 +37,8 @@
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
+- Memory V1 尚未修改业务代码，Conversation 持久化、Runtime State 分离、统一上下文组装、Structured Summary、前端历史恢复和级联删除均未实现或验证。
+- Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
 
 ## 后续运行基线验证
 
@@ -216,6 +222,41 @@
 - 本机单节点合成性能不是生产容量、TLS/鉴权、网络隔离、HA、备份、灾备或长期压力证据；
 - Qdrant 验收结束后已停止本次临时启动的 Qdrant 服务，Redis 保持任务开始前的既有运行状态。
 
+## Memory V1 概念冻结与任务设计
+
+### 已完成
+
+- 新增 `docs/memory/00-MEMORY_V1_SPEC.md`，冻结 Memory V1 目标、三级作用域长期架构、Conversation-only 交付范围、结构化摘要和行为不变量；
+- 明确作用域与记忆类型为两个正交维度，Runtime State 独立于记忆；
+- 冻结 Conversation Message、Structured Conversation Summary、SourceRef、状态枚举、上下文组装、摘要更新、长期保留和删除契约；
+- 明确 Workspace/User Memory 仅预留作用域，不参与 V1 写入、检索或模型上下文；
+- 明确 Memory V1 不依赖 Qdrant，未来语义记忆复用向量基础设施但使用独立 `MemoryVectorIndex` 与逻辑语料空间；
+- 新增 `docs/memory/01-TASK_BOARD.md`，拆分 M01-M07 实现与验收任务。
+- 新增 `docs/memory/02-PARALLEL_DELIVERY_PLAN.md`，冻结多 Codex 分波并行、文件所有权、共享热点和集成顺序；
+- 新增 `docs/memory/02-API_AND_STORAGE_CONTRACT.md`，冻结 MySQL/Spring JDBC、幂等消息、Redis 兼容、Runtime TTL、Summary digest、token 默认预算、结构化 API 和前端会话导航；
+- 新增 `docs/memory/03-AUTO_ACCEPTANCE.md` 与 `04-HUMAN_ACCEPTANCE.md`，冻结 P0/P1 自动门禁、机器报告和十项人工验收场景；
+- M01 已启动后端、前端和验收三个只读并行审计，尚未修改生产代码。
+
+### 验证状态
+
+- 本阶段仅修改设计文档与进展记录，未修改业务代码；
+- M01 后端只读审计已运行 `AgentExecutionServiceTest + AgentControllerTest`，结果 32/32 通过；
+- M01 前端只读审计已运行现有 `asyncJob.test.mjs`，结果 2/2 通过；
+- 持久化依赖树检查构建成功，但确认 `ai-service` 当前没有 JDBC、MyBatis、MySQL Driver、Flyway 或 Liquibase 依赖；
+- 未运行真实模型、Redis、MySQL、Qdrant、浏览器端到端或完整服务；
+- Memory V1 生产实现状态仍为 `IMPLEMENTATION_NOT_STARTED`；
+- M01 状态为 `IN_PROGRESS`，必须先建立当前缺口和回归基线，再进入生产实现。
+
+### M01 并行审计发现
+
+- 当前 `conv:*` 是 24 小时 TTL、最多 100 个字符串条目的 Redis Hash，消息追加为整列表读改写，存在并发覆盖和消息对截断风险；
+- 当前 `ctx:*` 接受任意字段且无 TTL，Conversation 删除不会清理它；
+- Agent 保存历史但不读取历史，Planner、Direct Answer、Reflection、完成度判断和 Final Synthesis 各自拼装不同输入；
+- 全局助理刷新后只保留一个未按用户隔离的 ID，不恢复消息，创建失败会伪造 `temp_*`；
+- 编辑器刷新会创建新 Conversation，“新话题”只清 UI 且继续复用旧 ID，创建失败回退 `default_conv`；
+- 当前前端没有通用组件测试框架，只有 Node 内置 API 测试；
+- 当前可执行范围仅为 M01 测试、fixture 与验收资产建设，持久化、摘要、统一上下文和人工验收均仍不可执行。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -237,6 +278,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory V1 概念冻结 | 保留三级记忆长期架构，首个交付只实现 Conversation Memory；冻结目标、作用域、摘要和上下文契约，并拆分 M01-M07 实现任务，业务代码尚未修改 |
 | 2026-08-10 | Qdrant 自动验收 | QV01-QV04 按顺序集成并由协调提交 `3457737` 补齐生产装配；专用入口 159/159、完整回归 178 个测试无失败/错误、四项硬门禁和资源清理通过，人工验收待执行 |
 | 2026-08-10 | Qdrant QV01-QV04 | 从共同基线 `3ec7a0f` 创建四个独立分支、工作树和 Codex 任务并开始并行开发；专项实现和真实 Qdrant 尚未验收 |
 | 2026-08-09 | Qdrant QV00 | 冻结双后端目标、Java 契约、配置、任务边界与验收规则；新增确定性契约和 HNSW 基线测试，并发现覆盖写入和删除残留旧 HNSW 命中缺陷，交由 QV01 修复 |
