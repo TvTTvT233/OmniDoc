@@ -15,15 +15,51 @@ class MemoryV1ReportSchemaTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Test
-    void reportSchemaDistinguishesAssetPendingAndFinalStatuses() throws Exception {
+    void reportSchemaDistinguishesAssetPendingStageAndFinalStatuses() throws Exception {
         JsonNode schema = loadSchema();
 
         assertThat(iterableText(schema.path("properties").path("status").path("enum")))
-                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED");
+                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED");
         assertThat(iterableText(schema.path("required"))).contains(
-                "status", "manualStatus", "fixture", "environment", "boundaries",
-                "tests", "gates", "contentSafety", "metrics", "unverified");
+                "reportType", "stage", "status", "finalAcceptance", "manualStatus", "fixture",
+                "environment", "boundaries", "tests", "gates", "contentSafety", "metrics",
+                "stageGate", "unverified");
         assertThat(schema.path("additionalProperties").asBoolean()).isFalse();
+    }
+
+    @Test
+    void stageReportContractCannotClaimFinalOrManualAcceptance() throws Exception {
+        JsonNode schema = loadSchema();
+        JsonNode stageThen = schema.path("allOf").path(0).path("then").path("properties");
+        JsonNode stageGate = schema.path("$defs").path("stageGate");
+
+        assertThat(iterableText(stageThen.path("status").path("enum")))
+                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED")
+                .doesNotContain("AUTO_VERIFIED");
+        assertThat(stageThen.path("finalAcceptance").path("const").asBoolean()).isFalse();
+        assertThat(stageThen.path("manualStatus").path("const").asText()).isEqualTo("NOT_READY");
+        assertThat(iterableText(stageThen.path("stage").path("enum"))).containsExactly("M02", "M06_A");
+        assertThat(iterableText(stageGate.path("required"))).containsExactlyInAnyOrder(
+                "ready", "requiredTargets", "readinessMissing", "targetTestsExpected",
+                "targetTestsSkipped", "regressionGroups");
+    }
+
+    @Test
+    void autoVerifiedIsReservedForTheFinalM07Report() throws Exception {
+        JsonNode schema = loadSchema();
+        JsonNode autoThen = schema.path("allOf").path(1).path("then").path("properties");
+        JsonNode finalThen = schema.path("allOf").path(2).path("then").path("properties");
+
+        assertThat(autoThen.path("reportType").path("const").asText()).isEqualTo("FINAL_ACCEPTANCE");
+        assertThat(autoThen.path("stage").path("const").asText()).isEqualTo("M07");
+        assertThat(autoThen.path("finalAcceptance").path("const").asBoolean()).isTrue();
+        assertThat(autoThen.path("manualStatus").path("const").asText()).isEqualTo("MANUAL_PENDING");
+        assertThat(autoThen.path("stageGate").path("type").asText()).isEqualTo("null");
+        assertThat(iterableText(finalThen.path("status").path("enum")))
+                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED")
+                .doesNotContain("STAGE_VERIFIED");
+        assertThat(finalThen.path("stage").path("const").asText()).isEqualTo("M07");
+        assertThat(finalThen.path("stageGate").path("type").asText()).isEqualTo("null");
     }
 
     @Test

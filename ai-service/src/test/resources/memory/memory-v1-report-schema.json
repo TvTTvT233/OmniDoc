@@ -6,7 +6,10 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion",
+    "reportType",
+    "stage",
     "status",
+    "finalAcceptance",
     "manualStatus",
     "generatedAtUtc",
     "fixture",
@@ -16,11 +19,15 @@
     "gates",
     "contentSafety",
     "metrics",
+    "stageGate",
     "unverified"
   ],
   "properties": {
     "schemaVersion": {"const": 1},
-    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED"]},
+    "reportType": {"enum": ["FINAL_ACCEPTANCE", "STAGE_GATE"]},
+    "stage": {"enum": ["M02", "M06_A", "M07"]},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED"]},
+    "finalAcceptance": {"type": "boolean"},
     "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING", "HUMAN_ACCEPTED"]},
     "generatedAtUtc": {"type": "string", "format": "date-time"},
     "fixture": {
@@ -153,9 +160,109 @@
         "summaryFailures": {"type": ["integer", "null"], "minimum": 0}
       }
     },
+    "stageGate": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/stageGate"}
+      ]
+    },
     "unverified": {
       "type": "array",
       "items": {"type": "string"}
     }
-  }
+  },
+  "$defs": {
+    "stageGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready",
+        "requiredTargets",
+        "readinessMissing",
+        "targetTestsExpected",
+        "targetTestsSkipped",
+        "regressionGroups"
+      ],
+      "properties": {
+        "ready": {"type": "boolean"},
+        "requiredTargets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "readinessMissing": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "targetTestsExpected": {"type": "integer", "minimum": 0},
+        "targetTestsSkipped": {"type": ["integer", "null"], "minimum": 0},
+        "regressionGroups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"reportType": {"const": "STAGE_GATE"}},
+        "required": ["reportType"]
+      },
+      "then": {
+        "properties": {
+          "stage": {"enum": ["M02", "M06_A"]},
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED"]},
+          "finalAcceptance": {"const": false},
+          "manualStatus": {"const": "NOT_READY"},
+          "stageGate": {"$ref": "#/$defs/stageGate"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "AUTO_VERIFIED"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "reportType": {"const": "FINAL_ACCEPTANCE"},
+          "stage": {"const": "M07"},
+          "finalAcceptance": {"const": true},
+          "manualStatus": {"const": "MANUAL_PENDING"},
+          "stageGate": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"reportType": {"const": "FINAL_ACCEPTANCE"}},
+        "required": ["reportType"]
+      },
+      "then": {
+        "properties": {
+          "stage": {"const": "M07"},
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED"]},
+          "stageGate": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED"]}
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "finalAcceptance": {"const": false}
+        }
+      }
+    }
+  ]
 }

@@ -305,6 +305,16 @@
 - 未连接真实结构化 Controller、MySQL、Redis、鉴权用户或浏览器端到端；新骨架尚未接管现有 UI，不能宣称历史恢复、新对话、归档或删除 UX 已实现；
 - `npm ci` 仍报告 12 个依赖审计问题，构建仍有主 chunk 超过 500 kB 的警告；详细交接见 `docs/memory/handoffs/M06-A.md`。
 
+### M07-A Wave 1 阶段验收骨架
+
+- 已新增 M02 持久化阶段门禁：实现缺失时生成脱敏 `PENDING_INTEGRATION` 报告并非零退出；实现存在时固定运行 M02 目标、持久化专项及 Agent/Controller 回归，并要求四个 M02 目标 skipped=0；
+- 已新增 M06-A 前端契约阶段门禁：独立检查 Conversation API/状态模块和 `test:memory-contract`，同时回归 Agent/Controller；该门禁不要求后端结构化 API，不代表 M06-B/C 完成；
+- Report Schema 已区分 `FINAL_ACCEPTANCE` 与 `STAGE_GATE`；阶段报告强制 `finalAcceptance=false`、`manualStatus=NOT_READY` 且不能输出 `AUTO_VERIFIED`；
+- 两个阶段门禁的资产自检均为 5/5 通过、实际退出码 0；当前基线的 Integrated 模式均准确 `PENDING_INTEGRATION` 并实际非零退出；
+- 原 M07 资产入口扩展后为 16/16 通过；完整 Integrated 入口仍因 M02-M07 和最终 gate 缺失而 `PENDING_INTEGRATION`，没有创建 `MemoryV1IntegratedGateTest`；
+- 静态敏感数据与报告正文边界检查最终扫描 731 个 Git 可见文本文件，无命中；未运行真实 MySQL、Redis、浏览器、模型、远程 Embedding 或 Qdrant；
+- 详细交接见 `docs/memory/handoffs/M07-A.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：

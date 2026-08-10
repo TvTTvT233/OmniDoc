@@ -48,8 +48,10 @@ function Get-ToolVersion {
     $previousPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        $line = ((& $Command @Arguments 2>&1 | Select-Object -First 1) -join '')
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($line)) {
+        $output = @(& $Command @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+        $line = (($output | Select-Object -First 1) -join '')
+        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($line)) {
             return 'NOT_AVAILABLE'
         }
         return $line.Trim()
@@ -115,7 +117,10 @@ function Save-MemoryReport {
 
     $report = [ordered]@{
         schemaVersion = 1
+        reportType = 'FINAL_ACCEPTANCE'
+        stage = 'M07'
         status = $Status
+        finalAcceptance = ($Status -eq 'AUTO_VERIFIED')
         manualStatus = 'NOT_READY'
         generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         fixture = [ordered]@{
@@ -128,8 +133,8 @@ function Save-MemoryReport {
             branch = $branch
             head = $head
             os = [System.Environment]::OSVersion.VersionString
-            java = Get-ToolVersion -Command 'java' -Arguments @('-version')
-            node = Get-ToolVersion -Command 'node' -Arguments @('--version')
+            java = (Get-ToolVersion -Command 'java' -Arguments @('-version'))
+            node = (Get-ToolVersion -Command 'node' -Arguments @('--version'))
             externalNetworkIncluded = $false
         }
         boundaries = [ordered]@{
@@ -175,6 +180,7 @@ function Save-MemoryReport {
             summaryCalls = $null
             summaryFailures = $null
         }
+        stageGate = $null
         unverified = @($Unverified)
     }
 

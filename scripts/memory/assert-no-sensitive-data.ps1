@@ -129,6 +129,14 @@ if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
                     $findings.Add([pscustomobject]@{ File = $ReportPath; Line = 0; Rule = "Report content-safety flag is not false: $($flag.Name)" })
                 }
             }
+            if ($report.reportType -eq 'STAGE_GATE') {
+                if ($report.status -eq 'AUTO_VERIFIED' -or $report.finalAcceptance -ne $false) {
+                    $findings.Add([pscustomobject]@{ File = $ReportPath; Line = 0; Rule = 'Stage report attempts to claim final acceptance' })
+                }
+                if ($report.manualStatus -ne 'NOT_READY' -or $null -eq $report.stageGate) {
+                    $findings.Add([pscustomobject]@{ File = $ReportPath; Line = 0; Rule = 'Stage report is missing its non-final gate boundary' })
+                }
+            }
         }
     }
 }
