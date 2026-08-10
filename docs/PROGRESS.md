@@ -257,6 +257,16 @@
 - 当前前端没有通用组件测试框架，只有 Node 内置 API 测试；
 - 当前可执行范围仅为 M01 测试、fixture 与验收资产建设，持久化、摘要、统一上下文和人工验收均仍不可执行。
 
+### M01-BE 后端行为基线
+
+- 状态：`HANDOFF_READY / PRODUCTION_CODE_UNCHANGED`；分支 `test/memory-m01-backend`，基线 `37f81f7`；
+- 新增 16 个通过型后端行为刻画测试，覆盖 Redis Conversation/Context 生命周期、条数截断、长消息、并发读改写风险、Agent 不读取历史、各阶段独立 Prompt、旧 Context 回流和兼容 Controller 入口；
+- 新增 16 个 `PENDING_IMPLEMENTATION` 目标契约，分别归属 M02/M03/M04/M05 各 4 个，当前均以逐项说明原因的 `@Disabled` 表示，未计作目标通过；
+- 新增专项结果：32 个测试被发现，16 个通过、16 个目标跳过、Failures 0、Errors 0，`BUILD SUCCESS`；
+- 新增专项加 `AgentExecutionServiceTest + AgentControllerTest`：64 个测试被发现，48 个通过、16 个目标跳过、Failures 0、Errors 0，`BUILD SUCCESS`；原有 Agent/Controller 仍为 32/32；
+- 未连接真实 Redis、MySQL、模型、MCP 或 Qdrant，未运行完整服务和端到端；确定性并发夹具证明读改写风险，不代表真实 Redis 压力或生产丢失率；
+- 精确命令、测试矩阵和后续启用规则见 `docs/memory/handoffs/M01-BE.md`。M01 总体仍需等待 M01-FE/M01-AC 集成，不能提前进入 `BASELINE_VERIFIED`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
