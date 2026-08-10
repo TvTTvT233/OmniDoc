@@ -322,6 +322,17 @@
 - 阶段报告为 `STAGE_GATE / M06_A / STAGE_VERIFIED`，并保持 `finalAcceptance=false`、`manualStatus=NOT_READY`；完整 M06-B/C 和最终 M07 仍为 `PENDING_INTEGRATION`；
 - 敏感数据与报告正文边界检查在协调分支扫描 738 个 Git 可见文本文件，无命中；未运行真实浏览器、MySQL、Redis 或模型。
 
+### M02 Conversation/Message 持久化（`feature/memory-m02-persistence`）
+
+- 状态：`HANDOFF_READY / H2_MYSQL_MODE_VERIFIED / REAL_MYSQL_PENDING`；基线 `ac1033b`；
+- 已新增 Spring JDBC/MySQL Driver、Conversation/Message 领域模型、JDBC Store、版本化幂等 Schema、启动校验、稳定分页、归档/恢复/物理删除、所有者隔离和旧 Redis owner-check 后按需导入；
+- sequence 分配和 Message 插入在同一事务内完成；16 个并发追加任务的 H2/MySQL-mode 用例验证 sequence 1..16 连续唯一；`clientRequestId + role + type + ordinal` 重试不重复写入；
+- `ConversationManager` 已迁移为 MySQL Conversation Service 的旧 API 兼容门面；不再读写 Redis 事实列表，无认证用户参数的旧方法被明确拒绝；
+- `MemoryV1ExpectedContractTest` 的四个固定名称 M02 占位已改为真实测试并全部通过；M03-M05 的 12 个占位仍按计划跳过；
+- M02 专项：30 个测试被发现，18 个通过、12 个 M03-M05 目标跳过、Failures 0、Errors 0；组合 Agent/Controller 回归：69 个测试被发现，57 个通过、12 个 M03-M05 目标跳过、Failures 0、Errors 0；
+- `AllModelsTest` 在 Memory 关闭、四个模型禁用和非真实占位凭据下 1/1 通过，未连接 MySQL；既有 Redis/RabbitMQ 后台连接失败日志不属于本任务新增回归；
+- 未连接真实 MySQL/Redis、真实模型、浏览器或完整服务；未修改 Agent 主链、Runtime State、Summary、Context Builder、Controller 或前端；详细交接见 `docs/memory/handoffs/M02.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -343,6 +354,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M02 持久化 | 在隔离分支实现 MySQL/Spring JDBC Conversation 与结构化 Message、事务 sequence、幂等、所有者隔离、生命周期和旧 Redis 按需导入；H2/MySQL-mode 专项与 Agent/Controller 回归通过，真实 MySQL 集成待协调复核 |
 | 2026-08-11 | Memory M01 基线验证 | 三路 Codex 在隔离工作树完成后端 16 项行为基线、前端 7 项行为基线和 14 项验收资产；协调集成复跑通过，16 个 M02-M05 目标契约仍明确挂起，生产实现未开始 |
 | 2026-08-11 | Memory V1 概念冻结 | 保留三级记忆长期架构，首个交付只实现 Conversation Memory；冻结目标、作用域、摘要和上下文契约，并拆分 M01-M07 实现任务，业务代码尚未修改 |
 | 2026-08-10 | Qdrant 自动验收 | QV01-QV04 按顺序集成并由协调提交 `3457737` 补齐生产装配；专用入口 159/159、完整回归 178 个测试无失败/错误、四项硬门禁和资源清理通过，人工验收待执行 |

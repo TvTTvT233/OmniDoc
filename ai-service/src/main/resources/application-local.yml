@@ -80,6 +80,14 @@ spring:
 
 # AI配置
 ai:
+  memory:
+    enabled: ${AI_MEMORY_ENABLED:true}
+    schema:
+      auto-migration:
+        enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}
+    legacy:
+      import:
+        enabled: ${AI_MEMORY_LEGACY_IMPORT_ENABLED:false}
   conversation:
     max-messages: 100
     expiry-hours: 24

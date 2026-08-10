@@ -1,8 +1,20 @@
 package com.javaee.aiservice.memory;
 
+import com.javaee.aiservice.conversation.ConversationPersistenceTestFixture;
+import com.javaee.aiservice.conversation.model.ConversationMessage;
+import com.javaee.aiservice.conversation.model.ConversationRole;
+import com.javaee.aiservice.conversation.service.ConversationErrorCode;
+import com.javaee.aiservice.conversation.service.ConversationMemoryException;
+import com.javaee.aiservice.conversation.service.ConversationService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
 /**
@@ -11,28 +23,74 @@ import static org.assertj.core.api.Assertions.fail;
  */
 class MemoryV1ExpectedContractTest {
 
-    @Disabled("M02: replace Redis strings with durable structured messages and monotonic sequence")
+    private ConversationPersistenceTestFixture fixture;
+    private ConversationService service;
+
+    @BeforeEach
+    void setUpM02Persistence() {
+        fixture = new ConversationPersistenceTestFixture();
+        service = fixture.newService();
+    }
+
     @Test
     void m02PersistsStructuredMessagesWithMonotonicSequence() {
-        pending("M02 structured message persistence");
+        String conversationId = service.createConversation("owner").conversationId();
+
+        List<ConversationMessage> messages = service.appendExchange(
+                conversationId, "owner", "request-1", "turn-1", "question", "answer");
+
+        assertThat(messages).extracting(ConversationMessage::sequence).containsExactly(1L, 2L);
+        assertThat(messages).extracting(ConversationMessage::role)
+                .containsExactly(ConversationRole.USER, ConversationRole.ASSISTANT);
+        assertThat(messages).allSatisfy(message -> {
+            assertThat(message.messageId()).isNotBlank();
+            assertThat(message.contentHash()).matches("[0-9a-f]{64}");
+        });
     }
 
-    @Disabled("M02: enforce clientRequestId idempotency for retries")
     @Test
     void m02RetriesDoNotDuplicateUserOrAssistantMessages() {
-        pending("M02 idempotent append");
+        String conversationId = service.createConversation("owner").conversationId();
+
+        List<ConversationMessage> first = service.appendExchange(
+                conversationId, "owner", "stable-request", "turn-1", "question", "answer");
+        List<ConversationMessage> retry = service.appendExchange(
+                conversationId, "owner", "stable-request", "turn-2", "question", "answer");
+
+        assertThat(retry).extracting(ConversationMessage::messageId)
+                .containsExactlyElementsOf(first.stream().map(ConversationMessage::messageId).toList());
+        assertThat(fixture.jdbcTemplate().queryForObject(
+                "SELECT COUNT(*) FROM ai_conversation_message WHERE conversation_id = ?",
+                Integer.class,
+                conversationId)).isEqualTo(2);
     }
 
-    @Disabled("M02: recover messages from MySQL after service recreation and Redis expiry")
     @Test
     void m02HistorySurvivesServiceRestartAndRedisExpiry() {
-        pending("M02 durable history");
+        String conversationId = service.createConversation("owner").conversationId();
+        service.appendExchange(conversationId, "owner", "request-1", "turn-1", "before", "restart");
+        AtomicInteger legacyReads = new AtomicInteger();
+
+        ConversationService recreated = fixture.newService((ignoredConversation, ignoredUser) -> {
+            legacyReads.incrementAndGet();
+            throw new AssertionError("durable history must not depend on Redis compatibility reads");
+        });
+
+        assertThat(recreated.legacyHistory(conversationId, "owner", 100))
+                .containsExactly("User: before", "Assistant: restart");
+        assertThat(legacyReads).hasValue(0);
     }
 
-    @Disabled("M02: reject cross-owner reads and writes without revealing conversation existence")
     @Test
     void m02ConversationAccessIsOwnerIsolated() {
-        pending("M02 owner isolation");
+        String conversationId = service.createConversation("owner").conversationId();
+
+        assertNotFound(() -> service.requireOwned(conversationId, "other"));
+        assertNotFound(() -> service.appendExchange(
+                conversationId, "other", "foreign-request", "turn-1", "x", "y"));
+        assertNotFound(() -> service.archive(conversationId, "other"));
+        assertNotFound(() -> service.delete(conversationId, "other"));
+        assertThat(service.requireOwned(conversationId, "owner").userId()).isEqualTo("owner");
     }
 
     @Disabled("M03: whitelist Runtime State fields and apply the frozen per-category TTL")
@@ -109,5 +167,12 @@ class MemoryV1ExpectedContractTest {
 
     private static void pending(String target) {
         fail("PENDING_IMPLEMENTATION: " + target);
+    }
+
+    private static void assertNotFound(Runnable action) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(ConversationMemoryException.class)
+                .satisfies(error -> assertThat(((ConversationMemoryException) error).getCode())
+                        .isEqualTo(ConversationErrorCode.CONVERSATION_NOT_FOUND));
     }
 }

@@ -1,158 +1,104 @@
 package com.javaee.aiservice.conversation;
 
+import com.javaee.aiservice.conversation.model.Conversation;
+import com.javaee.aiservice.conversation.model.ConversationPage;
+import com.javaee.aiservice.conversation.model.ConversationStatus;
+import com.javaee.aiservice.conversation.service.ConversationErrorCode;
+import com.javaee.aiservice.conversation.service.ConversationMemoryException;
+import com.javaee.aiservice.conversation.service.ConversationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ConversationManagerCharacterizationTest {
 
+    private ConversationService conversationService;
     private ConversationManager manager;
-    private RedisTemplate<String, Object> redisTemplate;
-    private HashOperations<String, Object, Object> hashOperations;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
-        manager = new ConversationManager();
-        redisTemplate = mock(RedisTemplate.class);
-        hashOperations = mock(HashOperations.class);
-        doReturn(hashOperations).when(redisTemplate).opsForHash();
-        ReflectionTestUtils.setField(manager, "redisTemplate", redisTemplate);
-        ReflectionTestUtils.setField(manager, "maxMessages", 100);
-        ReflectionTestUtils.setField(manager, "expiryHours", 24);
+        conversationService = mock(ConversationService.class);
+        manager = new ConversationManager(conversationService);
     }
 
     @Test
-    void createConversationStoresRedisHashAndAppliesSlidingTwentyFourHourExpiry() {
-        String conversationId = manager.createConversation("user-1");
+    void legacyCreateApiDelegatesToThePersistentConversationService() {
+        Conversation conversation = conversation("conv-1", "owner", ConversationStatus.ACTIVE);
+        when(conversationService.createConversation("owner")).thenReturn(conversation);
 
-        @SuppressWarnings("unchecked")
-        org.mockito.ArgumentCaptor<Map<String, Object>> fields =
-                org.mockito.ArgumentCaptor.forClass(Map.class);
-        verify(hashOperations).putAll(eq("conv:" + conversationId), fields.capture());
-        verify(redisTemplate).expire("conv:" + conversationId, Duration.ofHours(24));
-
-        assertThat(fields.getValue())
-                .containsEntry("userId", "user-1")
-                .containsKeys("createdAt", "updatedAt", "messages");
-        assertThat(fields.getValue().get("messages")).isEqualTo(List.of());
+        assertThat(manager.createConversation("owner")).isEqualTo("conv-1");
+        verify(conversationService).createConversation("owner");
     }
 
     @Test
-    void appendStoresFlatPrefixedStringsAndCountTruncationCanSplitATurn() {
-        ReflectionTestUtils.setField(manager, "maxMessages", 3);
-        when(hashOperations.get("conv:conv-1", "messages")).thenReturn(new ArrayList<>(List.of(
-                "User: old question",
-                "Assistant: old answer"
-        )));
+    void legacyAppendApiSuppliesServerIdentifiersAndAuthenticatedOwner() {
+        manager.addMessageForUser("conv-1", "owner", "question", "answer");
 
-        manager.addMessage("conv-1", "new question", "new answer");
-
-        org.mockito.ArgumentCaptor<Object> messages = org.mockito.ArgumentCaptor.forClass(Object.class);
-        verify(hashOperations).put(eq("conv:conv-1"), eq("messages"), messages.capture());
-        assertThat(asStringList(messages.getValue())).containsExactly(
-                "Assistant: old answer",
-                "User: new question",
-                "Assistant: new answer"
-        );
-        verify(redisTemplate).expire("conv:conv-1", Duration.ofHours(24));
+        ArgumentCaptor<String> requestId = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> turnId = ArgumentCaptor.forClass(String.class);
+        verify(conversationService).appendExchange(
+                org.mockito.ArgumentMatchers.eq("conv-1"),
+                org.mockito.ArgumentMatchers.eq("owner"),
+                requestId.capture(),
+                turnId.capture(),
+                org.mockito.ArgumentMatchers.eq("question"),
+                org.mockito.ArgumentMatchers.eq("answer"));
+        assertThat(requestId.getValue()).isNotBlank();
+        assertThat(turnId.getValue()).isNotBlank();
     }
 
     @Test
-    void longMessageIsKeptInFullBecauseTheLimitCountsEntriesRatherThanTokens() {
-        ReflectionTestUtils.setField(manager, "maxMessages", 2);
-        when(hashOperations.get("conv:conv-long", "messages")).thenReturn(new ArrayList<>());
-        String longMessage = "长".repeat(20_000);
+    void legacyHistoryAndDeleteApisKeepTheOwnerBoundary() {
+        when(conversationService.legacyHistory("conv-1", "owner", 100))
+                .thenReturn(List.of("User: question", "Assistant: answer"));
 
-        manager.addMessage("conv-long", longMessage, "ok");
+        assertThat(manager.getConversationHistoryForUser("conv-1", "owner"))
+                .containsExactly("User: question", "Assistant: answer");
+        manager.deleteConversationForUser("conv-1", "owner");
 
-        org.mockito.ArgumentCaptor<Object> messages = org.mockito.ArgumentCaptor.forClass(Object.class);
-        verify(hashOperations).put(eq("conv:conv-long"), eq("messages"), messages.capture());
-        assertThat(asStringList(messages.getValue()).get(0))
-                .startsWith("User: ")
-                .hasSize(longMessage.length() + "User: ".length());
+        verify(conversationService).legacyHistory("conv-1", "owner", 100);
+        verify(conversationService).delete("conv-1", "owner");
     }
 
     @Test
-    void concurrentAppendsReadTheSameSnapshotAndEachRewriteOmitsTheOtherTurn() throws Exception {
-        List<String> baseline = List.of("User: base", "Assistant: base");
-        CountDownLatch bothReadsStarted = new CountDownLatch(2);
-        List<List<String>> writes = Collections.synchronizedList(new ArrayList<>());
-        when(hashOperations.get("conv:conv-race", "messages")).thenAnswer(invocation -> {
-            bothReadsStarted.countDown();
-            if (!bothReadsStarted.await(2, TimeUnit.SECONDS)) {
-                throw new AssertionError("two append operations did not reach the same read snapshot");
-            }
-            return new ArrayList<>(baseline);
-        });
-        doAnswer(invocation -> {
-            writes.add(new ArrayList<>(asStringList(invocation.getArgument(2))));
-            return null;
-        }).when(hashOperations).put(eq("conv:conv-race"), eq("messages"), any());
-
-        ExecutorService executor = Executors.newFixedThreadPool(2);
-        try {
-            Future<?> first = executor.submit(() -> manager.addMessage("conv-race", "question-a", "answer-a"));
-            Future<?> second = executor.submit(() -> manager.addMessage("conv-race", "question-b", "answer-b"));
-            first.get(3, TimeUnit.SECONDS);
-            second.get(3, TimeUnit.SECONDS);
-        } finally {
-            executor.shutdownNow();
-        }
-
-        assertThat(writes).hasSize(2);
-        assertThat(writes.stream().anyMatch(write -> write.contains("User: question-a")
-                && !write.contains("User: question-b"))).isTrue();
-        assertThat(writes.stream().anyMatch(write -> write.contains("User: question-b")
-                && !write.contains("User: question-a"))).isTrue();
-        List<String> lastWrite = writes.get(writes.size() - 1);
-        assertThat(lastWrite.contains("User: question-a") ^ lastWrite.contains("User: question-b")).isTrue();
-        verify(redisTemplate, times(2)).expire("conv:conv-race", Duration.ofHours(24));
-    }
-
-    @Test
-    void ownerCheckRejectsForeignUserWhileDeleteOnlyTargetsConversationKey() {
-        when(hashOperations.get("conv:conv-1", "userId")).thenReturn("owner");
+    void ownerFailureIsPropagatedWithoutASecondRedisAuthorizationPath() {
+        ConversationMemoryException notFound = new ConversationMemoryException(
+                ConversationErrorCode.CONVERSATION_NOT_FOUND,
+                "Conversation was not found");
+        when(conversationService.requireOwned("conv-1", "other")).thenThrow(notFound);
 
         assertThatThrownBy(() -> manager.assertOwner("conv-1", "other"))
-                .isInstanceOf(SecurityException.class)
-                .hasMessageContaining("无权访问");
-
-        manager.deleteConversation("conv-1");
-
-        verify(redisTemplate).delete("conv:conv-1");
-        verify(redisTemplate, never()).delete("ctx:conv-1");
-        verify(redisTemplate, never()).expire(anyString(), eq(Duration.ZERO));
+                .isSameAs(notFound);
     }
 
-    @SuppressWarnings("unchecked")
-    private static List<String> asStringList(Object value) {
-        return (List<String>) value;
+    @Test
+    void listUsesActivePersistentConversationsAndOwnerlessLegacyMethodsAreRejected() {
+        when(conversationService.listConversations("owner", ConversationStatus.ACTIVE, null, 200))
+                .thenReturn(new ConversationPage(List.of(
+                        conversation("conv-2", "owner", ConversationStatus.ACTIVE),
+                        conversation("conv-1", "owner", ConversationStatus.ACTIVE)), null));
+
+        assertThat(manager.getUserConversations("owner")).containsExactly("conv-2", "conv-1");
+        assertThatThrownBy(() -> manager.getConversationHistory("conv-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Authenticated userId");
+        assertThatThrownBy(() -> manager.addMessage("conv-1", "question", "answer"))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> manager.deleteConversation("conv-1"))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    private static Conversation conversation(String id, String userId, ConversationStatus status) {
+        Instant now = Instant.parse("2026-08-11T00:00:00Z");
+        return new Conversation(id, userId, "title", status, 1, now, now, null, 0);
     }
 }

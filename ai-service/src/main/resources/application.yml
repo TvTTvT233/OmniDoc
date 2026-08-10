@@ -12,8 +12,8 @@ spring:
   
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:infra_mysql}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:omnidoc}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: ${MYSQL_USERNAME}
-    password: ${MYSQL_PASSWORD}
+    username: ${MYSQL_USERNAME:}
+    password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 4
@@ -80,6 +80,14 @@ spring:
 
 # AI配置
 ai:
+  memory:
+    enabled: ${AI_MEMORY_ENABLED:true}
+    schema:
+      auto-migration:
+        enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}
+    legacy:
+      import:
+        enabled: ${AI_MEMORY_LEGACY_IMPORT_ENABLED:false}
   conversation:
     max-messages: 100
     expiry-hours: 24
