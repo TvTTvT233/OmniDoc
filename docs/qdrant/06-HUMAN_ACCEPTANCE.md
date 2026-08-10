@@ -6,7 +6,9 @@
 MANUAL_PENDING
 ```
 
-QV04 资产已准备好，但 QV01-QV03 尚未在本分支集成，自动报告仍为 `PENDING_INTEGRATION`。用户不得在自动报告达到 `AUTO_VERIFIED` 前签署正式人工验收。
+QV01～QV04 已集成，自动报告已经达到 `AUTO_VERIFIED`，现在可以开始人工验收。自动通过不替代用户对模式切换、隔离、降级、迁移、重启和回滚体验的最终确认；在用户签署前状态保持 `MANUAL_PENDING`。
+
+当前自动证据：集成提交 `3457737`，QV04 专用入口 159/159、0 skipped，四项硬门禁全部通过。自动报告为本地构建产物 `ai-service/target/qv04-acceptance/qv04-run-report.json`。
 
 ## 前置条件
 
@@ -116,11 +118,11 @@ QV04 资产已准备好，但 QV01-QV03 尚未在本分支集成，自动报告�
 | 项目 | 记录 |
 | --- | --- |
 | 日期与执行人 | 待填写 |
-| 集成提交 | 待填写 |
-| 机器与 Java | 从自动报告复制 |
-| Qdrant/Client 版本 | 待填写 |
-| 测试 Collection | 必须以 `qv04_test_` 开头 |
-| 自动报告路径与状态 | 待填写 |
+| 集成提交 | `3457737b7b36c3eb5f5e15357e6ab44dc94d34f1` |
+| 机器与 Java | Windows 10.0.19045；OpenJDK 17.0.19；其余见自动报告 |
+| Qdrant/Client 版本 | Qdrant `v1.18.3-unprivileged`；Java Client 版本见 `ai-service/pom.xml` |
+| 测试 Collection | 自动生成 `qv04_test_20260810t005900578z`，验收后已清理 |
+| 自动报告路径与状态 | `ai-service/target/qv04-acceptance/qv04-run-report.json`；`AUTO_VERIFIED` |
 | Baseline | 通过 / 失败 / 未执行 |
 | 多租户隔离 | 通过 / 失败 / 未执行 |
 | Shadow | 通过 / 失败 / 未执行 |

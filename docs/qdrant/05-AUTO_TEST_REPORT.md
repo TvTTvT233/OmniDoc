@@ -1,41 +1,48 @@
 # Qdrant 向量后端接入：自动测试报告
 
-## 当前状态
+## 结论
 
-- QV04 验收资产：`HANDOFF_READY`；
-- 独立分支资产运行：`ASSET_VERIFIED`；
-- QV01-QV03 集成门禁：`PENDING_INTEGRATION`；
-- 正式自动验收：尚未达到 `AUTO_VERIFIED`；
-- 人工验收：`MANUAL_PENDING`。
-
-独立分支没有 QV01 本地后端、QV02 Qdrant 后端和 QV03 Shadow/迁移实现。本页不会把测试替身、代码存在或静态检查写成真实双后端通过。
-
-## 统一入口
-
-独立资产与当前分支回归：
-
-```powershell
-.\scripts\qdrant\run-qv04-acceptance.cmd
+```text
+AUTO_VERIFIED / MANUAL_PENDING
 ```
 
-QV01-QV03 合入后的完整门禁：
-
-```powershell
-$env:QV04_ACCEPTANCE_PROVIDER_CLASS = '集成任务提供的测试适配器完整类名'
-.\scripts\qdrant\run-qv04-acceptance.cmd -Integrated
-```
-
-缺少任一生产源组或集成适配器时，`-Integrated` 非零退出并打印 `PENDING_INTEGRATION`。机器可读报告写入：
+QV01～QV04 已接入主运行边界，QV04 专用入口已对真实 Redis + JVM HNSW 和本地 Qdrant 执行完整门禁。机器报告位于：
 
 ```text
 ai-service/target/qv04-acceptance/qv04-run-report.json
 ```
 
-真实集成运行还会写出 baseline、Qdrant、重启、Shadow、迁移分项 JSON。报告 Schema 位于 `ai-service/src/test/resources/qdrant/qv04-report-schema.json`。
+该报告属于构建产物，不提交 Git；重新执行验收会覆盖它。
+
+## 执行版本与入口
+
+- 分支：`docs/bootstrap-project-context`；
+- 被验收提交：`3457737b7b36c3eb5f5e15357e6ab44dc94d34f1`；
+- 日期：2026-08-10；
+- Qdrant：`qdrant/qdrant:v1.18.3-unprivileged`，本地单节点容器；
+- Redis：本地容器，验收数据隔离在 DB 15；
+- 远程网络、远程 Embedding、真实用户数据：未包含。
+
+完整门禁：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\qdrant\run-qv04-acceptance.ps1 `
+  -Integrated `
+  -ProviderClass com.javaee.aiservice.rag.vector.qdrant.Qv04ProductionAcceptanceProvider
+```
+
+## 测试结果
+
+| 测试组 | 运行 | 失败 | 错误 | 跳过 |
+| --- | ---: | ---: | ---: | ---: |
+| QV04 资产、Agent/RAG/MCP 回归 | 110 | 0 | 0 | 0 |
+| 真实双后端、重启、Shadow、迁移 | 49 | 0 | 0 | 0 |
+| 合计 | 159 | 0 | 0 | 0 |
+
+静态敏感信息检查扫描 695 个 Git 可见文本文件，无密钥形态命中。测试 Collection 与 alias 均使用本次生成的 `qv04_test_` 前缀。
 
 ## 确定性 fixture
-
-`qv04-vector-fixture.json` 是完全合成数据：
 
 | 项目 | 数值或边界 |
 | --- | --- |
@@ -46,98 +53,81 @@ ai-service/target/qv04-acceptance/qv04-run-report.json
 | 文档 | 每知识库 2 个，每文档 5 段 |
 | 向量维度 | 16 |
 | 生成算法 | 固定 seed + SHA-256 + 归一化 |
-| 远程 Embedding | 禁止，fixture 标记为 `false` |
+| 远程 Embedding | 禁止 |
 | 跨租户高相似 | 6 个 scope 共享语义键并产生完全相同向量 |
-| 其他场景 | 文档过滤、无答案、按 ID 删除、按文档删除 |
 
-无答案查询保留空相关集，用于报告返回候选数量；底层 ANN 没有统一阈值契约，因此该项不作为“必须返回空”的硬门禁。
+## 硬门禁
 
-## QV04 资产和门禁
+| 门禁 | 实际结果 | 结论 |
+| --- | ---: | --- |
+| `Qdrant Recall@5 >= baseline Recall@5` | `1.0 >= 1.0` | 通过 |
+| tenant leakage | `0` | 通过 |
+| delete residue | `0` | 通过 |
+| migration count difference | `0` | 通过 |
 
-### 已在独立分支运行
+两套后端 MRR 均为 1.0；无答案 fixture 各返回了 5 个 ANN 候选。无答案场景没有统一阈值契约，因此只记录候选数，不将“必须为空”作为底层门禁。
 
-- fixture 规模、合成边界、确定性向量和跨租户高相似自检；
-- 共用 `VectorBackendAcceptanceHarness` 的两种后端类型测试替身自检；
-- 幂等 upsert、scope 完整盘点、租户/知识库/文档隔离、按 ID 和按文档删除残留的门禁逻辑；
-- Recall@K、MRR、Overlap@K、P50/P95 和写入吞吐计算；
-- 两客户端可见性与重启持久化测试驱动自检；
-- 报告 Schema 与测试 Collection 前缀策略；
-- 当前分支 Agent、RAG、MCP 回归；
-- Git 可见文本的密钥形态扫描和 QV04 fixture PII/合成边界检查。
+## 性能快照
 
-测试替身结果只证明验收驱动能发现泄漏和删除残留，不证明 QV01/QV02 生产实现正确。
+| 指标 | Redis + JVM HNSW | Qdrant |
+| --- | ---: | ---: |
+| Recall@5 | 1.0 | 1.0 |
+| 查询 P50 | 31,014 μs | 5,234 μs |
+| 查询 P95 | 59,944 μs | 5,514 μs |
+| 幂等写入吞吐 | 134.58 records/s | 731.42 records/s |
+| JVM 内存增量 | 1,820,688 bytes | 12,055,456 bytes |
 
-### 集成后由同一入口执行
+这是 60 条、16 维、8 个查询的单次本机合成快照。它可作为本项目回归证据，不能推导生产容量、成本或 Qdrant 一定比基线更快。
 
-`Qv04IntegratedAcceptanceProvider` 是 QV04 与未来实现之间的测试边界。主协调任务需要提供测试适配器，接入：
+## 行为门禁
 
-- 真实 `LocalRedisHnswVectorBackend` 与 `QdrantVectorBackend`；
-- 两个独立 Qdrant Client 和真实 Qdrant 重启；
-- baseline 不创建 Qdrant Client、qdrant 不扫描 Redis 重建索引的模式观测；
-- Shadow 正常与 Qdrant 注入失败观测；
-- 迁移 dry-run、失败批次 checkpoint、恢复、数量核对和幂等重跑观测。
+- `baseline`：不创建 Qdrant Client；
+- `qdrant`：router 类型为 Qdrant，不扫描 Redis 构造本地 HNSW；
+- 双客户端：客户端一写入后客户端二可见；
+- 持久性：真实执行 `docker compose restart qdrant`，新 Client 可见重启前数据；
+- Shadow 正常路径：用户返回严格等于 baseline，Overlap@K 为 1.0；
+- Shadow 失败路径：注入 Qdrant 失败后 baseline 结果仍正常返回，错误被记录；
+- 删除：按逻辑 ID 和按文档删除均无残留；
+- scope：高相似跨租户数据没有越过 `userId + knowledgeBaseId`；
+- 清理：验收结束后 Qdrant `qv04_test_*` 资源残留为 0，Redis DB 15 中 `vector:qv04-*` 与 `metadata:qv04-*` 残留均为 0。
 
-只有该适配器运行全部通过，四项硬门禁才允许写入数值：
+## 迁移门禁
 
-```text
-Qdrant Recall@5 >= baseline Recall@5
-tenant leakage = 0
-delete residue = 0
-migration count difference = 0
-```
+| 项目 | 结果 |
+| --- | ---: |
+| dry-run 目标写入 | 0 |
+| 源记录 | 60 |
+| 成功 | 60 |
+| 失败 | 0 |
+| 目标记录 | 60 |
+| 幂等重跑后目标记录 | 60 |
+| 失败批次 checkpoint 前移 | 否 |
+| 恢复后 checkpoint 前移 | 是 |
+| assumed Embedding 已报告 | 是 |
+| Redis 源数据被删除 | 否 |
 
-## 性能与质量报告字段
+## 完整项目回归
 
-每个真实后端报告包含：
-
-- 数据量、维度和查询数；
-- Recall@5、MRR；
-- tenant leakage、delete residue；
-- 查询 P50/P95；
-- 幂等双次写入的 records/s；
-- JVM 内存增量；
-- 是否为真实实现和证据级别。
-
-生命周期报告包含两客户端可见性、重启持久化和重启耗时；Shadow 报告包含 Overlap@K、两侧耗时、错误码和样本数；迁移报告包含 dry-run、源/成功/失败/目标数量、checkpoint 和重跑数量。统一报告同时记录操作系统、处理器、物理内存、Java、Collection 名称和是否包含外部网络耗时。
-
-第一阶段不要求 Qdrant 比 JVM HNSW 更快。单节点本机结果不得解释为生产容量、分布式、高可用或故障恢复证明。
-
-## 独立分支实际结果
-
-执行命令：
-
-```powershell
-.\scripts\qdrant\run-qv04-acceptance.cmd
-```
-
-结果：
+在同一协调代码上执行 `ai-service` 完整测试：
 
 ```text
-Tests run: 110
-Passed: 110
+Tests run: 178
 Failures: 0
 Errors: 0
-Skipped: 0
+Skipped: 3
 BUILD SUCCESS
 ```
 
-其中 QV04 fixture/驱动/指标/报告/Collection 边界及冻结契约为 23/23；当前分支 Agent/RAG/MCP 回归为 87/87。静态检查扫描 639 个 Git 可见文本文件，无密钥形态命中；两个本次生成的 Collection/alias 名称均满足 `qv04_test_` 前缀。
+三个跳过项在普通回归中有意隔离真实基础设施：QV04 integrated gate、Qdrant backend integration 和 Qdrant persistence；它们已在上面的专用入口中全部执行通过，专用入口为 0 skipped。
 
-执行集成入口：
+完整回归使用非真实占位模型配置，四个远程模型请求均因无有效凭据返回认证失败，实际模型成功 0/4。这一结果只证明本次代码回归通过，不证明模型服务可用。
 
-```powershell
-.\scripts\qdrant\run-qv04-acceptance.cmd -Integrated
-```
+## 仍未验证
 
-实际非零退出并报告缺少：
+- 用户人工验收，状态保持 `MANUAL_PENDING`；
+- 真实远程 Embedding 与真实模型驱动的 RAG 端到端链路；
+- 真实用户数据和生产权限模型；
+- 生产 TLS、API Key、网络隔离、限流、容量、成本、HA、备份和灾备；
+- 多节点 Qdrant、长期稳定性和并发压力。
 
-```text
-QV01_LOCAL_BACKEND
-QV02_QDRANT_BACKEND
-QV03_ROUTING
-QV03_MIGRATION
-QV04_INTEGRATED_PROVIDER_CLASS
-PENDING_INTEGRATION
-```
-
-因此本次真实双后端测试数为 0，真实 Qdrant 连接/重启为 0，真实迁移和 Shadow 样本为 0，远程 Embedding 调用为 0。Recall@5、MRR、Overlap@K、P50/P95、吞吐、启动/重启和内存的真实后端值均保持未验证。
+下一步按 `06-HUMAN_ACCEPTANCE.md` 执行人工验收。只有用户签署后才能改为 `HUMAN_ACCEPTED`。

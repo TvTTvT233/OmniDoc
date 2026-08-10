@@ -14,11 +14,23 @@
 
 | 编号 | 任务 | 建议分支 | 状态 | 依赖 |
 | --- | --- | --- | --- | --- |
-| QV00 | 契约、基线与任务拆分 | `docs/bootstrap-project-context` | `HANDOFF_READY` | 无 |
-| QV01 | 现有 Redis + JVM HNSW 后端适配 | `feature/qdrant-local-baseline` | `IN_PROGRESS` | QV00 交付提交 |
-| QV02 | Qdrant 后端与基础设施 | `feature/qdrant-vector-backend` | `IN_PROGRESS` | QV00 交付提交 |
-| QV03 | Shadow、迁移与切换 | `feature/qdrant-shadow-migration` | `IN_PROGRESS` | QV00 交付提交；集成时需要 QV01/QV02 |
-| QV04 | 独立自动验收与人工验收资产 | `test/qdrant-vector-acceptance` | `IN_PROGRESS` | QV00 交付提交；完整门禁需要 QV01-QV03 已集成 |
+| QV00 | 契约、基线与任务拆分 | `docs/bootstrap-project-context` | `MERGED` | 无 |
+| QV01 | 现有 Redis + JVM HNSW 后端适配 | `feature/qdrant-local-baseline` | `AUTO_VERIFIED` | QV00 交付提交 |
+| QV02 | Qdrant 后端与基础设施 | `feature/qdrant-vector-backend` | `AUTO_VERIFIED` | QV00 交付提交 |
+| QV03 | Shadow、迁移与切换 | `feature/qdrant-shadow-migration` | `AUTO_VERIFIED` | QV00 交付提交；集成时需要 QV01/QV02 |
+| QV04 | 独立自动验收与人工验收资产 | `test/qdrant-vector-acceptance` | `AUTO_VERIFIED` | QV00 交付提交；完整门禁需要 QV01-QV03 已集成 |
+
+总体状态：`AUTO_VERIFIED / MANUAL_PENDING`。自动门禁已经通过，最终状态只有在用户完成 `06-HUMAN_ACCEPTANCE.md` 后才能改为 `HUMAN_ACCEPTED`。
+
+## 集成提交
+
+| 编号 | 来源提交 | 主分支提交 | 集成结果 |
+| --- | --- | --- | --- |
+| QV01 | `93fb4f8` | `f99d04a` | 无冲突，专项与统一门禁通过 |
+| QV02 | `6e62e0d` | `d9f2efb` | 无冲突，真实 Qdrant 门禁通过 |
+| QV03 | `3eb4efc` | `b2c73d0` | 无冲突，Shadow/迁移门禁通过 |
+| QV04 | `695ee73` | `6e71324` | 无冲突，验收资产已接入生产实现 |
+| 协调集成 | — | `3457737` | 完成 Spring 装配、迁移导出、RAG scope 修复和真实验收适配器 |
 
 ## Codex 任务与工作树
 

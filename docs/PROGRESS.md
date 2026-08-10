@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-10
-- **当前阶段**：Qdrant QV01-QV04 已从共同基线创建并行开发，MCP 搜索仍等待用户人工验收
+- **当前阶段**：Qdrant QV01-QV04 已集成并通过自动验收；Qdrant 与 MCP 搜索均等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：等待 QV01-QV04 专项交接，按冻结顺序集成并执行统一门禁；MCP 人工验收仍按 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md` 执行
+- **下一阶段**：按 `docs/qdrant/06-HUMAN_ACCEPTANCE.md` 执行 Qdrant 人工验收；MCP 人工验收仍按 `docs/mcp-search/06-HUMAN_ACCEPTANCE.md` 执行
 
 ## 已确认
 
@@ -19,6 +19,7 @@
 - 项目上下文、V1 需求和仓库协作约定已经形成文档基线。
 - MCP 搜索接入的 MVP 范围、架构、Java 契约、错误语义、任务边界和验收标准已经冻结。
 - Qdrant 接入采用保留 Redis + JVM HNSW 基线、增加 `baseline`/`shadow`/`qdrant` 三种模式的方案；公共 Java 契约、配置名称、任务边界和验收规则已经冻结。
+- QV01-QV04 已按冻结顺序集成；生产装配、双后端、Shadow、可恢复迁移、scope 过滤和回滚边界已经进入主分支，专用自动验收为 159/159。
 - `AgentExecutionServiceTest` 与 `AgentControllerTest` 在当前工作树上共 32 个测试通过，可作为 MCP Agent 集成的直接回归基线；加入 T00 契约测试后相关测试为 35/35 通过。
 
 ## 尚未验证
@@ -31,7 +32,7 @@
 - 从材料输入到审查结果、证据追溯和人工确认的端到端链路；
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
-- Qdrant Java Client、Collection、alias、payload 过滤、Shadow、迁移、回滚和真实 RAG 闭环的可用性。
+- Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
 
 ## 后续运行基线验证
 
@@ -143,7 +144,7 @@
 - 静态泄漏检查：588 个 Git 可见文本文件无命中；
 - 真实 Tavily、真实模型、完整服务外部基础设施启动和用户人工路由验收仍未执行。
 
-## Qdrant 向量后端 QV00
+## Qdrant 向量后端 QV00（历史基线）
 
 ### 已完成
 
@@ -175,15 +176,45 @@
 - QV00 未创建 Qdrant Client，未连接真实 Redis、RabbitMQ、Embedding 或 Qdrant；
 - `git diff --cached --check` 通过，静态敏感信息检查扫描 621 个文本文件，无命中。
 
-## Qdrant QV01-QV04 并行开发
+## Qdrant QV01-QV04 最终集成
+
+### 提交与状态
 
 - 共同基线：`3ec7a0fb629aac3d526ac03058b577b71f921a2b`；
-- QV01：分支 `feature/qdrant-local-baseline`，工作树 `../.codex-worktrees/qdrant-qv01`，Codex 任务 `019fe74e-9712-70a0-8f1f-9e4e20802ae3`，状态 `IN_PROGRESS`；
-- QV02：分支 `feature/qdrant-vector-backend`，工作树 `../.codex-worktrees/qdrant-qv02`，Codex 任务 `019fe74e-b7a1-76f2-b887-8eba2e000012`，状态 `IN_PROGRESS`；
-- QV03：分支 `feature/qdrant-shadow-migration`，工作树 `../.codex-worktrees/qdrant-qv03`，Codex 任务 `019fe74e-e464-7da2-9bfa-84856551ed14`，状态 `IN_PROGRESS`；
-- QV04：分支 `test/qdrant-vector-acceptance`，工作树 `../.codex-worktrees/qdrant-qv04`，Codex 任务 `019fe74f-032d-7591-a93c-380b6724cb9b`，状态 `IN_PROGRESS`；
-- 四个任务均已核验分支、共同基线和初始干净工作区；尚未验证任何专项实现或真实 Qdrant 能力；
-- 后续由主协调任务等待 handoff，按 QV01、QV02、QV03、QV04 顺序集成，并在集成分支运行统一自动门禁。
+- QV01 来源 `93fb4f8`，合入提交 `f99d04a`，状态 `AUTO_VERIFIED`；
+- QV02 来源 `6e62e0d`，合入提交 `d9f2efb`，状态 `AUTO_VERIFIED`；
+- QV03 来源 `3eb4efc`，合入提交 `b2c73d0`，状态 `AUTO_VERIFIED`；
+- QV04 来源 `695ee73`，合入提交 `6e71324`，状态 `AUTO_VERIFIED`；
+- 协调集成提交：`3457737`；
+- 总体状态：`AUTO_VERIFIED / MANUAL_PENDING`。
+
+### 已完成
+
+- 当前 Redis + JVM HNSW 被封装为 baseline 后端，并修复相同 ID 覆盖和删除后旧 HNSW 命中；
+- 接入官方 Qdrant Java Client、Collection/alias、payload index、服务端 scope 过滤、幂等写入和删除；
+- 实现 `baseline`、`shadow`、`qdrant` 三种生产装配：baseline 不创建 Qdrant Client，qdrant 不构造/扫描本地 HNSW；
+- 实现 Shadow 对比、失败隔离、指标，以及只在 shadow 模式提供的内部迁移服务；
+- 本地后端支持稳定游标分页导出，迁移支持 dry-run、失败 checkpoint、恢复、数量核对和幂等重跑，不自动删除 Redis 源数据；
+- RAG 检索在向量查询前传入 `userId + knowledgeBaseId`，文档删除改为一次带 scope 的后端删除；
+- QV04 真实 provider 使用隔离 Redis DB 15、两个独立 Qdrant Client 和真实 Qdrant 重启；测试资源严格限制为 `qv04_test_*` 并在结束后清理。
+
+### 验证结果
+
+- QV04 专用集成入口：资产/Agent/RAG/MCP 110/110，真实双后端 49/49，合计 159/159，Failures 0、Errors 0、Skipped 0；
+- 硬门禁：Qdrant Recall@5 1.0，baseline Recall@5 1.0，tenant leakage 0，delete residue 0，migration count difference 0；
+- 迁移：源 60、成功 60、失败 0、目标 60，dry-run 写入 0，重跑后仍为 60，Redis 源未删除；
+- 完整 `ai-service`：178 个测试，Failures 0、Errors 0、Skipped 3，`BUILD SUCCESS`；三个跳过项均为普通回归中隔离的真实基础设施测试，并已在专用入口执行通过；
+- 配置层级回归：5/5 通过，确认 `ai.vector.migration.*` 未误嵌套到 `shadow`；
+- 敏感信息检查：扫描 695 个 Git 可见文本文件，无命中；
+- 清理复核：Qdrant `qv04_test_*` 资源 0，Redis DB 15 的 `vector:qv04-*` 和 `metadata:qv04-*` 残留均为 0；
+- 完整回归使用非真实模型占位配置，四个远程模型实际成功仍为 0/4。
+
+### 剩余边界
+
+- 用户尚未执行 `docs/qdrant/06-HUMAN_ACCEPTANCE.md`，不得标记 `HUMAN_ACCEPTED`；
+- 未使用真实远程 Embedding、真实用户文档或真实模型验证完整 RAG；
+- 本机单节点合成性能不是生产容量、TLS/鉴权、网络隔离、HA、备份、灾备或长期压力证据；
+- Qdrant 验收结束后已停止本次临时启动的 Qdrant 服务，Redis 保持任务开始前的既有运行状态。
 
 ## 维护规则
 
@@ -206,6 +237,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-10 | Qdrant 自动验收 | QV01-QV04 按顺序集成并由协调提交 `3457737` 补齐生产装配；专用入口 159/159、完整回归 178 个测试无失败/错误、四项硬门禁和资源清理通过，人工验收待执行 |
 | 2026-08-10 | Qdrant QV01-QV04 | 从共同基线 `3ec7a0f` 创建四个独立分支、工作树和 Codex 任务并开始并行开发；专项实现和真实 Qdrant 尚未验收 |
 | 2026-08-09 | Qdrant QV00 | 冻结双后端目标、Java 契约、配置、任务边界与验收规则；新增确定性契约和 HNSW 基线测试，并发现覆盖写入和删除残留旧 HNSW 命中缺陷，交由 QV01 修复 |
 | 2026-08-09 | MCP 搜索自动验收 | T01-T04 已按冻结顺序合并，补齐发现到工具目录的集成连接器；集成模式 78/78、完整回归 99/99、静态泄漏检查通过，真实 Tavily 与人工验收待执行 |
