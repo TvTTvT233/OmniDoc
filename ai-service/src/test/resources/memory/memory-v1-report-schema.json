@@ -25,7 +25,7 @@
   "properties": {
     "schemaVersion": {"const": 1},
     "reportType": {"enum": ["FINAL_ACCEPTANCE", "STAGE_GATE"]},
-    "stage": {"enum": ["M02", "M06_A", "M07"]},
+    "stage": {"enum": ["M02", "M03_A", "M06_A", "M07"]},
     "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED"]},
     "finalAcceptance": {"type": "boolean"},
     "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING", "HUMAN_ACCEPTED"]},
@@ -215,7 +215,7 @@
       },
       "then": {
         "properties": {
-          "stage": {"enum": ["M02", "M06_A"]},
+          "stage": {"enum": ["M02", "M03_A", "M06_A"]},
           "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED"]},
           "finalAcceptance": {"const": false},
           "manualStatus": {"const": "NOT_READY"},

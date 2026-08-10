@@ -355,6 +355,17 @@
 - Agent/Controller 组合回归为 75 个测试被发现、61 个通过、14 个尚未交付目标契约按计划挂起、Failures 0、Errors 0；Agent/Controller 与既有 Conversation 行为测试 41/41 且 Skipped 0；
 - 未连接真实 Redis、MySQL、模型或完整服务；`clearConversation` 尚未被 M02 永久删除编排调用，Agent 续接、审批取消、trace-conversation-user owner 校验和真实级联删除均未联调；详细交接见 `docs/memory/handoffs/M03.md`。
 
+### M07-B M03-A Runtime Core 阶段门禁
+
+- 已新增 `run-m03-runtime-gate.cmd/.ps1`，默认资产模式验证脚本、Report Schema 与脱敏边界；Integrated 模式检查 RuntimeState model/service、Redis persistence、字段白名单、分层 TTL、clear/consume 接口和专项测试；
+- Readiness 接受独立 Store/Repository，或 Service 直接封装 `RedisTemplate` 的合理实现，不把额外分层误设为硬门槛；
+- 固定运行 `MemoryV1ExpectedContractTest + *RuntimeState*Test + *ContextManager*CompatibilityTest`；两个 M03-A 目标必须 skipped=0，两个 M03-B 删除级联/所有权目标允许继续 Disabled；
+- Report Schema 新增 `M03_A` 而非完整 `M03`；阶段报告即使通过也保持 `finalAcceptance=false`，并在 `readinessMissing/unverified` 明确 `M03B_DELETION_CASCADE_PENDING` 与 `M03B_OWNER_APPROVAL_PENDING`；
+- M03-A 默认资产模式实际退出 0、Schema 5/5；当前基线 Integrated 实际非零退出并准确 `PENDING_INTEGRATION`，尚未执行生产实现合入后的成功路径；
+- M06-A Integrated 回归 51/51、Skipped 0、`STAGE_VERIFIED`；M02 和完整 M07 在当前基线仍按设计非零 `PENDING_INTEGRATION`，M07 资产 16/16 通过；
+- 未修改生产代码、POM、Web 或 package；未连接真实 Redis/MySQL/模型/浏览器/Embedding/Qdrant，M03-B 和最终 M07 仍待实现；
+- 详细交接见 `docs/memory/handoffs/M07-B.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：

@@ -34,12 +34,13 @@ M02-M06 生产源组或 `MemoryV1IntegratedGateTest` 缺失时，入口输出 `P
 
 M01-AC 版本即使发现候选集成资产也没有权限输出 `AUTO_VERIFIED`。最终状态必须由 M07 在全部 P0/P1 门禁、回归和清理检查完成后实现并复核。
 
-## Wave 1 阶段门禁
+## 分阶段门禁
 
-M07-A 增加两个可独立运行的阶段门禁。默认模式只验证门禁脚本和报告契约：
+M07-A/M07-B 增加可独立运行的阶段门禁。默认模式只验证门禁脚本和报告契约：
 
 ```powershell
 .\scripts\memory\run-m02-gate.cmd
+.\scripts\memory\run-m03-runtime-gate.cmd
 .\scripts\memory\run-frontend-contract-gate.cmd
 ```
 
@@ -75,6 +76,40 @@ AgentControllerTest
 ai-service/target/memory-v1-acceptance/memory-m02-stage-report.json
 ```
 
+### M03-A Runtime Core 门禁
+
+M03-A 合入共同分支后执行：
+
+```powershell
+.\scripts\memory\run-m03-runtime-gate.cmd -Integrated
+```
+
+门禁检查受控 `RuntimeState` model/service、独立 Store/Repository 或 Service 直接封装 `RedisTemplate` 的 Redis 持久化、字段白名单、分层 TTL、按字段或会话清理接口和 RuntimeState 专项测试，然后运行固定选择：
+
+```text
+MemoryV1ExpectedContractTest
+RuntimeState 专项测试
+ContextManager compatibility tests（如存在）
+```
+
+以下两个 M03-A 目标 testcase 必须逐名存在且 skipped 为 0：
+
+- `m03RuntimeStateUsesWhitelistAndBoundedTtl`；
+- `m03RuntimeStateDoesNotLeakAcrossConversations`。
+
+以下两个目标属于 M03-B，在 M03-A 阶段必须继续保留测试清单，但允许保持 Disabled：
+
+- `m03ConversationDeletionCascadesRuntimeDerivatives`；
+- `m03ContinuationAndApprovalCancellationEnforceOwnershipInsideService`。
+
+即使 M03-A 阶段通过，报告的 `readinessMissing` 和 `unverified` 仍明确记录 `M03B_DELETION_CASCADE_PENDING` 与 `M03B_OWNER_APPROVAL_PENDING`。状态最多为 `STAGE_VERIFIED`，`finalAcceptance=false`，不得描述为完整 M03 或最终 M07 通过。
+
+报告：
+
+```text
+ai-service/target/memory-v1-acceptance/memory-m03a-runtime-stage-report.json
+```
+
 ### M06-A 前端契约门禁
 
 M06-A 合入共同分支后执行：
@@ -85,7 +120,7 @@ M06-A 合入共同分支后执行：
 
 默认要求：
 
-- `web/src/api/conversation.js` 使用 `/api/ai/conversations` 资源路径；
+- `web/src/api/conversation.js` 使用完整 `/api/ai/conversations`，或在项目 `baseURL=/api` 下使用等价的 `/ai/conversations` 资源路径；
 - `web/src/utils`、`web/src/composables` 或 `web/src/stores` 中存在文件名含 `conversation` 且实际维护 `conversationId` 的状态模块；
 - `web/package.json` 提供 `test:memory-contract`；
 - 前端目标测试至少 1 项且 skipped 为 0；

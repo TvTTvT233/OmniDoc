@@ -29,6 +29,7 @@ $scriptAssets = @(
     $common,
     $sensitiveCheck,
     (Join-Path $PSScriptRoot 'run-m02-gate.ps1'),
+    (Join-Path $PSScriptRoot 'run-m03-runtime-gate.ps1'),
     (Join-Path $PSScriptRoot 'run-frontend-contract-gate.ps1')
 )
 Assert-MemoryPowerShellSyntax -Paths $scriptAssets
