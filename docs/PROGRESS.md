@@ -267,6 +267,15 @@
 - 未连接真实 Redis、MySQL、模型、MCP 或 Qdrant，未运行完整服务和端到端；确定性并发夹具证明读改写风险，不代表真实 Redis 压力或生产丢失率；
 - 精确命令、测试矩阵和后续启用规则见 `docs/memory/handoffs/M01-BE.md`。M01 总体仍需等待 M01-FE/M01-AC 集成，不能提前进入 `BASELINE_VERIFIED`。
 
+### M01-FE 前端行为基线（`test/memory-m01-frontend`）
+
+- 状态：`HANDOFF_READY / CURRENT_BEHAVIOR_VERIFIED`；基线提交为 `37f81f7`；
+- 已增加 Vitest、Vue Test Utils、jsdom、独立 Memory 基线脚本和 7 个组件/composable 行为测试；未修改生产 Vue/JS 行为；
+- 已确定性复现：刷新只恢复 ID、不恢复消息；reset 仅清本地；全局入口不拉历史；创建失败使用 `temp_*`；编辑器新话题复用旧 ID；创建失败使用 `default_conv`；两个入口活跃会话状态分裂；
+- 验证：现有 Node 测试 2/2 通过，M01-FE Memory 基线 7/7 通过，Vite 生产构建通过；未运行真实浏览器、后端、模型、MySQL 或 Redis；
+- 构建保留主 chunk 超过 500 kB 的警告；依赖安装审计报告 12 个问题（3 moderate、7 high、2 critical），未在本基线任务中执行破坏性依赖升级；
+- 交接：`docs/memory/handoffs/M01-FE.md`。这些测试证明当前缺口，M06 修复时应以目标契约测试替换或反转缺陷断言。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
