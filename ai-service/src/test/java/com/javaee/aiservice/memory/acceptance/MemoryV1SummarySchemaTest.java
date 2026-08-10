@@ -71,6 +71,18 @@ class MemoryV1SummarySchemaTest {
                 .doesNotContain("confidence");
     }
 
+    @Test
+    void schemaAllowsNullGoalInsteadOfForcingAnInventedConversationGoal() throws Exception {
+        JsonNode goalAlternatives = load("/memory/memory-v1-summary-schema.json")
+                .path("properties").path("goal").path("oneOf");
+
+        assertThat(goalAlternatives.isArray()).isTrue();
+        assertThat(goalAlternatives).anySatisfy(option ->
+                assertThat(option.path("$ref").asText()).isEqualTo("#/$defs/goalItem"));
+        assertThat(goalAlternatives).anySatisfy(option ->
+                assertThat(option.path("type").asText()).isEqualTo("null"));
+    }
+
     private static void assertItems(JsonNode items, List<String> statuses, int toSeq) {
         items.forEach(item -> assertItem(item, statuses, toSeq));
     }

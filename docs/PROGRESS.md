@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 基线审计进入并行执行；生产实现尚未开始，Qdrant 与 MCP 搜索仍等待用户人工验收
+- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 后端/前端/验收基线已集成验证；M02 生产持久化待开始，Qdrant 与 MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：集成 Memory M01 后端、前端与验收夹具基线，再按冻结波次进入 M02；Qdrant 和 MCP 人工验收仍分别按既有文档执行
+- **下一阶段**：从 M01 集成提交创建 M02 持久化、M06 API 契约骨架和 M07 验收骨架并行工作树；Qdrant 和 MCP 人工验收仍分别按既有文档执行
 
 ## 已确认
 
@@ -245,7 +245,7 @@
 - 持久化依赖树检查构建成功，但确认 `ai-service` 当前没有 JDBC、MyBatis、MySQL Driver、Flyway 或 Liquibase 依赖；
 - 未运行真实模型、Redis、MySQL、Qdrant、浏览器端到端或完整服务；
 - Memory V1 生产实现状态仍为 `IMPLEMENTATION_NOT_STARTED`；
-- M01 状态为 `IN_PROGRESS`，必须先建立当前缺口和回归基线，再进入生产实现。
+- M01 状态为 `BASELINE_VERIFIED`；M02-M07 目标能力仍未实现，不能把 M01 资产通过描述为 Memory V1 自动验收通过。
 
 ### M01 并行审计发现
 
@@ -265,7 +265,7 @@
 - 新增专项结果：32 个测试被发现，16 个通过、16 个目标跳过、Failures 0、Errors 0，`BUILD SUCCESS`；
 - 新增专项加 `AgentExecutionServiceTest + AgentControllerTest`：64 个测试被发现，48 个通过、16 个目标跳过、Failures 0、Errors 0，`BUILD SUCCESS`；原有 Agent/Controller 仍为 32/32；
 - 未连接真实 Redis、MySQL、模型、MCP 或 Qdrant，未运行完整服务和端到端；确定性并发夹具证明读改写风险，不代表真实 Redis 压力或生产丢失率；
-- 精确命令、测试矩阵和后续启用规则见 `docs/memory/handoffs/M01-BE.md`。M01 总体仍需等待 M01-FE/M01-AC 集成，不能提前进入 `BASELINE_VERIFIED`。
+- 精确命令、测试矩阵和后续启用规则见 `docs/memory/handoffs/M01-BE.md`。M01-FE/M01-AC 已由协调任务集成并复跑，M01 总体进入 `BASELINE_VERIFIED`。
 
 ### M01-FE 前端行为基线（`test/memory-m01-frontend`）
 
@@ -278,13 +278,23 @@
 
 ### M01-AC 验收资产
 
-- 已新增 Memory V1 确定性合成 fixture、Structured Summary JSON Schema、机器报告 JSON Schema 及 13 项只验证资产与契约的测试；
+- 已新增 Memory V1 确定性合成 fixture、Structured Summary JSON Schema、机器报告 JSON Schema 及 14 项只验证资产与契约的测试；
 - 已新增 `scripts/memory/run-m07-acceptance.cmd` 统一入口、集成就绪检查和敏感数据/报告正文边界检查；
-- 默认入口 13/13 测试通过并生成 `ASSET_VERIFIED` 报告；该状态只证明 M01 验收资产可用，不证明生产 Memory V1 行为；
+- 默认入口 14/14 测试通过并生成 `ASSET_VERIFIED` 报告；该状态只证明 M01 验收资产可用，不证明生产 Memory V1 行为；
 - `-Integrated` 在当前生产实现与 M07 集成门禁缺失时明确生成 `PENDING_INTEGRATION` 报告并以非零状态结束；
 - 机器报告只含元数据、计数、真假值边界与未验证原因，不含会话、摘要、文档、Prompt、选中文本、工具结果或凭据正文；
 - 本任务未修改生产代码，未运行真实模型、MySQL、Redis、浏览器、远程 Embedding 或 Qdrant，不得声称 `AUTO_VERIFIED`；
 - 详细交接见 `docs/memory/handoffs/M01-AC.md`。
+
+### M01 最终集成验证
+
+- 集成顺序：M01-BE `e699339` -> M01-FE `af9df81` -> M01-AC `e20de13`；协调分支对应提交为 `672fc54`、`3539fb6`、`b67dcea`；
+- 后端组合：64 个测试被发现，48 个通过、16 个 M02-M05 目标契约按计划跳过、Failures 0、Errors 0；
+- 前端：现有 Node 测试 2/2、Memory Vitest 7/7、Vite 生产构建通过；主 chunk 超过 500 kB 的既有警告仍在；
+- 验收资产：协调修正“无稳定目标时 `goal=null`”契约后 14/14 通过，敏感内容检查扫描 725 个 Git 可见文本文件无命中；
+- 默认 M07 入口退出 0，报告为 `ASSET_VERIFIED / PENDING_INTEGRATION`；`-Integrated` 退出非零并准确列出 M02-M07 生产能力缺失，没有误报 `AUTO_VERIFIED`；
+- 主工作树安装前端测试依赖时首次 `npm ci` 因正在占用的 `esbuild.exe` 返回 EPERM；改用不改锁文件的 `npm install --ignore-scripts` 后测试和构建通过，残留仅为被占用二进制临时目录的清理警告；
+- 未连接真实 MySQL、Redis、模型、远程 Embedding、浏览器或完整服务；M01 只证明基线和验收资产，不证明 Memory V1 生产能力。
 
 ## 维护规则
 
@@ -307,6 +317,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M01 基线验证 | 三路 Codex 在隔离工作树完成后端 16 项行为基线、前端 7 项行为基线和 14 项验收资产；协调集成复跑通过，16 个 M02-M05 目标契约仍明确挂起，生产实现未开始 |
 | 2026-08-11 | Memory V1 概念冻结 | 保留三级记忆长期架构，首个交付只实现 Conversation Memory；冻结目标、作用域、摘要和上下文契约，并拆分 M01-M07 实现任务，业务代码尚未修改 |
 | 2026-08-10 | Qdrant 自动验收 | QV01-QV04 按顺序集成并由协调提交 `3457737` 补齐生产装配；专用入口 159/159、完整回归 178 个测试无失败/错误、四项硬门禁和资源清理通过，人工验收待执行 |
 | 2026-08-10 | Qdrant QV01-QV04 | 从共同基线 `3ec7a0f` 创建四个独立分支、工作树和 Codex 任务并开始并行开发；专项实现和真实 Qdrant 尚未验收 |

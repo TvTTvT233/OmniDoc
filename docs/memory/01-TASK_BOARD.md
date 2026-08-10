@@ -3,7 +3,7 @@
 ## 1. 当前状态
 
 ```text
-CONCEPT_FROZEN / M01_IN_PROGRESS
+CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_PENDING
 ```
 
 Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace Memory 和 User Memory 不属于本看板的实现范围。
@@ -18,13 +18,14 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 - `AUTO_VERIFIED`：自动验收通过；
 - `HUMAN_ACCEPTED`：用户人工验收通过；
 - `FROZEN`：概念或契约已经冻结，但不代表实现完成。
+- `BASELINE_VERIFIED`：当前行为、已知缺口和验收资产已完成集成验证，但目标生产能力仍未实现。
 
 ## 3. 任务总览
 
 | 编号 | 任务 | 状态 | 依赖 | 主要交付 |
 | --- | --- | --- | --- | --- |
 | M00 | 目标、作用域与契约冻结 | `FROZEN` | 无 | `00-MEMORY_V1_SPEC.md` |
-| M01 | 当前行为基线与验收夹具 | `IN_PROGRESS` | M00 | 缺口测试、确定性会话 fixture、容量基线 |
+| M01 | 当前行为基线与验收夹具 | `BASELINE_VERIFIED` | M00 | 缺口测试、确定性会话 fixture、容量基线 |
 | M02 | 持久化 Conversation 与结构化 Message | `TODO` | M01 | 数据表、Repository、单调序列、长期保留 |
 | M03 | Runtime State 分离与生命周期 | `TODO` | M02 | 短期状态模型、TTL、级联删除、兼容读取 |
 | M04 | 统一 MemoryContextBuilder 与 Agent 接入 | `TODO` | M02、M03 | token 预算、近期历史、全模型路径接入 |

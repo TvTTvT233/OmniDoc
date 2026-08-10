@@ -42,7 +42,7 @@
 .\mvnw.cmd -s .mvn\settings-local.xml -pl ai-service -am "-Dtest=MemoryV1FixtureTest,MemoryV1SummarySchemaTest,MemoryV1ReportSchemaTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
-结果：13/13 通过，0 failure，0 error，0 skipped，`BUILD SUCCESS`。
+结果：集成协调修正可空 goal 契约后为 14/14 通过，0 failure，0 error，0 skipped，`BUILD SUCCESS`。
 
 ### 默认统一入口
 
@@ -54,7 +54,7 @@
 
 结果：
 
-- 13/13 资产测试通过；
+- 14/14 资产测试通过；
 - 静态敏感信息与正文边界检查通过；
 - 机器报告写入 `ai-service/target/memory-v1-acceptance/memory-v1-report.json`；
 - 报告状态为 `ASSET_VERIFIED`，同时明确生产行为为 `PENDING_INTEGRATION`；
@@ -70,7 +70,7 @@
 
 结果：
 
-- 13/13 资产测试仍通过；
+- 14/14 资产测试仍通过；
 - 明确列出 M02-M07 缺失的生产与集成证据；
 - 机器报告状态为 `PENDING_INTEGRATION`，所有生产 P0 门禁保持 `null`；
 - 进程以非零状态结束，因此不可作为最终通过结果。

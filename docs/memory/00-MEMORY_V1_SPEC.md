@@ -145,7 +145,7 @@ ConversationMessage
     "toSeq": 55,
     "sourceDigest": "..."
   },
-  "goal": {},
+  "goal": null,
   "constraints": [],
   "facts": [],
   "decisions": [],

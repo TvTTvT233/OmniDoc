@@ -142,6 +142,7 @@ Summary 与 Conversation 一对一保存当前有效版本；如后续需要版�
 ## 7. Summary 可执行契约
 
 - Summary JSON 必须匹配 `00-MEMORY_V1_SPEC.md` 的字段、枚举和来源规则；M01 以 JSON Schema 形成机器契约；
+- 对话尚无可确认的稳定目标时 `goal=null`，不得为了满足 Schema 编造目标；其他 Summary 数组可以为空；
 - `contentHash = SHA-256(UTF-8 原始 content)`；
 - `sourceDigest` 使用以下规范串的 UTF-8 SHA-256：
 

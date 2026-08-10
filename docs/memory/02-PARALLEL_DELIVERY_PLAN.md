@@ -3,7 +3,7 @@
 ## 1. 状态
 
 ```text
-EXECUTION_CONTRACT_FROZEN / DEVELOPMENT_WAVE_M01
+EXECUTION_CONTRACT_FROZEN / M01_BASELINE_VERIFIED / M02_PENDING
 ```
 
 本计划约束多个 Codex 同时开发时的依赖、文件所有权、集成顺序和状态声明。公共 API、存储、幂等、Runtime、token 和兼容语义以 `02-API_AND_STORAGE_CONTRACT.md` 为准。并行任务通过不等于集成通过，自动验收通过也不等于用户人工验收通过。

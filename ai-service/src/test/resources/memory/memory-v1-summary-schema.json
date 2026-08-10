@@ -23,7 +23,12 @@
     "conversationId": {"type": "string", "minLength": 1, "maxLength": 64},
     "summaryVersion": {"type": "integer", "minimum": 1},
     "coverage": {"$ref": "#/$defs/coverage"},
-    "goal": {"$ref": "#/$defs/goalItem"},
+    "goal": {
+      "oneOf": [
+        {"$ref": "#/$defs/goalItem"},
+        {"type": "null"}
+      ]
+    },
     "constraints": {"type": "array", "items": {"$ref": "#/$defs/constraintItem"}},
     "facts": {"type": "array", "items": {"$ref": "#/$defs/factItem"}},
     "decisions": {"type": "array", "items": {"$ref": "#/$defs/decisionItem"}},
