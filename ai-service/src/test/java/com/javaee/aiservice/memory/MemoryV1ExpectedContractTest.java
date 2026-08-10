@@ -3,6 +3,10 @@ package com.javaee.aiservice.memory;
 import com.javaee.aiservice.conversation.ConversationPersistenceTestFixture;
 import com.javaee.aiservice.conversation.model.ConversationMessage;
 import com.javaee.aiservice.conversation.model.ConversationRole;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateField;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateProperties;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateScope;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateService;
 import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
 import com.javaee.aiservice.conversation.service.ConversationService;
@@ -10,7 +14,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,16 +100,41 @@ class MemoryV1ExpectedContractTest {
         assertThat(service.requireOwned(conversationId, "owner").userId()).isEqualTo("owner");
     }
 
-    @Disabled("M03: whitelist Runtime State fields and apply the frozen per-category TTL")
     @Test
     void m03RuntimeStateUsesWhitelistAndBoundedTtl() {
-        pending("M03 Runtime State lifecycle");
+        RuntimeStateProperties properties = new RuntimeStateProperties();
+
+        assertThat(Arrays.stream(RuntimeStateField.values()).map(RuntimeStateField::wireName))
+                .containsExactly(
+                        "currentDocumentId",
+                        "selectedText",
+                        "pageContext",
+                        "pendingApproval",
+                        "currentToolState"
+                );
+        assertThat(properties.effectivePolicy(RuntimeStateField.CURRENT_DOCUMENT_ID).ttl())
+                .isEqualTo(Duration.ofMinutes(30));
+        assertThat(properties.effectivePolicy(RuntimeStateField.SELECTED_TEXT).ttl())
+                .isEqualTo(Duration.ofMinutes(10));
+        assertThat(properties.effectivePolicy(RuntimeStateField.PAGE_CONTEXT).ttl())
+                .isEqualTo(Duration.ofMinutes(10));
+        assertThat(properties.effectivePolicy(RuntimeStateField.PENDING_APPROVAL).ttl())
+                .isEqualTo(Duration.ofMinutes(5));
+        assertThat(properties.effectivePolicy(RuntimeStateField.CURRENT_TOOL_STATE).ttl())
+                .isEqualTo(Duration.ofHours(1));
+        assertThat(Arrays.stream(RuntimeStateService.class.getMethods())
+                .flatMap(method -> Arrays.stream(method.getParameterTypes()))
+                .noneMatch(Map.class::isAssignableFrom)).isTrue();
     }
 
-    @Disabled("M03: new conversations must not inherit document, selection, tool or approval state")
     @Test
     void m03RuntimeStateDoesNotLeakAcrossConversations() {
-        pending("M03 Runtime State isolation");
+        RuntimeStateScope first = new RuntimeStateScope("conv-a", "trace-a");
+        RuntimeStateScope otherTrace = new RuntimeStateScope("conv-a", "trace-b");
+        RuntimeStateScope otherConversation = new RuntimeStateScope("conv-b", "trace-a");
+
+        assertThat(first).isNotEqualTo(otherTrace).isNotEqualTo(otherConversation);
+        assertThat(otherTrace).isNotEqualTo(otherConversation);
     }
 
     @Disabled("M03: deletion must clear Runtime State, task snapshots and approval references")

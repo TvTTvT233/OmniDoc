@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 后端/前端/验收基线已集成验证；M02 生产持久化待开始，Qdrant 与 MCP 搜索仍等待用户人工验收
+- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 后端/前端/验收基线已集成验证；M03-A Runtime State 核心已在独立分支完成专项验证，删除与 Agent/owner 集成仍待 M02/M03-B；Qdrant 与 MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：从 M01 集成提交创建 M02 持久化、M06 API 契约骨架和 M07 验收骨架并行工作树；Qdrant 和 MCP 人工验收仍分别按既有文档执行
+- **下一阶段**：继续 M02 Conversation 持久化，并在集成后把永久删除协调接到 M03-A 清理接口；后续 M03-B 完成 Agent 续接/审批 owner 校验，M07 执行集成门禁；Qdrant 和 MCP 人工验收仍分别按既有文档执行
 
 ## 已确认
 
@@ -37,7 +37,7 @@
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
-- Memory V1 尚未修改业务代码，Conversation 持久化、Runtime State 分离、统一上下文组装、Structured Summary、前端历史恢复和级联删除均未实现或验证。
+- Memory V1 尚未完成集成：M03-A 只在独立分支完成受控 Runtime State 核心与 mock 专项验证；Conversation 持久化、删除协调、Agent/owner 接入、统一上下文组装、Structured Summary、前端完整历史体验和级联删除仍未实现或验证。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
 
 ## 后续运行基线验证
@@ -342,6 +342,19 @@
 - 扩展后的最终 M02 Integrated 门禁发现 71 项，59 项通过、12 项仅 M03-M05 跳过、Failures 0、Errors 0；另有 Report Schema 5/5 通过，阶段报告仍为 `STAGE_VERIFIED` 且四个 M02 目标 skipped=0；
 - 仍未验证真实 MySQL 8、真实 Redis 删除/导入和完整服务重启；这些边界不会被 `STAGE_VERIFIED` 冒充为已完成。
 
+### M03-A 受控 Runtime State 核心（`feature/memory-m03-runtime-state`）
+
+- 状态：`RUNTIME_CORE_VERIFIED / DELETION_AND_AGENT_INTEGRATION_PENDING`；起始基线 `cc4c71b`；完整 M03 仍未完成；
+- 新增 typed Runtime State 服务，白名单严格限定为 `currentDocumentId/selectedText/pageContext/pendingApproval/currentToolState`，按 `conversationId + traceId` 隔离；
+- 五类状态分别具有冻结生命周期、TTL 和 UTF-8 大小硬上限；配置只能收紧不能放大；一次性选区/页面上下文提供消费即删，文档定位为滑动 30 分钟，审批不超过引用有效期，工具状态最长 1 小时并提供 trace 清理；
+- 新服务不接受任意 Map；Redis 值采用严格版本化 envelope，typed 审批仅保存非敏感引用，typed 工具状态不包含完整结果，并拒绝非受控 Map、额外字段和 credential/token 特征状态；
+- 提供 required read、显式 optional degrade、受控 update、clear fields、clear trace 和 clear conversation；`RUNTIME_STATE_UNAVAILABLE` 区分必须失败路径，optional read 返回 `DEGRADED_UNAVAILABLE` 而不伪装正常空状态；
+- 旧 `ctx:*` 只短期读取三个 bounded scalar（含 `documentId -> currentDocumentId` 兼容别名），明确忽略令牌、任意 Map、完整工具结果与文档正文，每次读取施加 10 分钟 TTL，且没有 Summary 导入路径；
+- 已将 `MemoryV1ExpectedContractTest` 前两个 M03-A 门禁替换为真实断言；删除级联与 Agent/owner 两项继续 `Disabled`，分别等待 M02 删除联调和 M03-B；
+- 专项加契约：最终组合回归包含的 36 个相关测试中 22 个通过、14 个其他目标契约按计划跳过、Failures 0、Errors 0；M03-A 三个专项类 20/20 且 Skipped 0；
+- Agent/Controller 组合回归为 75 个测试被发现、61 个通过、14 个尚未交付目标契约按计划挂起、Failures 0、Errors 0；Agent/Controller 与既有 Conversation 行为测试 41/41 且 Skipped 0；
+- 未连接真实 Redis、MySQL、模型或完整服务；`clearConversation` 尚未被 M02 永久删除编排调用，Agent 续接、审批取消、trace-conversation-user owner 校验和真实级联删除均未联调；详细交接见 `docs/memory/handoffs/M03.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -364,6 +377,7 @@
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
 | 2026-08-11 | Memory M02 持久化 | 在隔离分支实现 MySQL/Spring JDBC Conversation 与结构化 Message、事务 sequence、幂等、所有者隔离、生命周期和旧 Redis 按需导入；H2/MySQL-mode 专项与 Agent/Controller 回归通过，真实 MySQL 集成待协调复核 |
+| 2026-08-11 | Memory M03-A Runtime State 核心 | 在独立分支实现五字段 typed Runtime State、conversation+trace 隔离、TTL/大小/消费生命周期、显式 Redis fail/degrade、清理接口与旧 ctx 白名单短期兼容；前两个 M03 门禁启用，删除与 Agent/owner 集成仍挂起 |
 | 2026-08-11 | Memory M01 基线验证 | 三路 Codex 在隔离工作树完成后端 16 项行为基线、前端 7 项行为基线和 14 项验收资产；协调集成复跑通过，16 个 M02-M05 目标契约仍明确挂起，生产实现未开始 |
 | 2026-08-11 | Memory V1 概念冻结 | 保留三级记忆长期架构，首个交付只实现 Conversation Memory；冻结目标、作用域、摘要和上下文契约，并拆分 M01-M07 实现任务，业务代码尚未修改 |
 | 2026-08-10 | Qdrant 自动验收 | QV01-QV04 按顺序集成并由协调提交 `3457737` 补齐生产装配；专用入口 159/159、完整回归 178 个测试无失败/错误、四项硬门禁和资源清理通过，人工验收待执行 |

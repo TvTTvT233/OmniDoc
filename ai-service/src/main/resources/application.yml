@@ -88,6 +88,23 @@ ai:
     legacy:
       import:
         enabled: ${AI_MEMORY_LEGACY_IMPORT_ENABLED:false}
+    runtime-state:
+      current-document-id:
+        ttl: 30m
+        max-bytes: 512
+      selected-text:
+        ttl: 10m
+        max-bytes: 16384
+      page-context:
+        ttl: 10m
+        max-bytes: 4096
+      pending-approval:
+        ttl: 5m
+        max-bytes: 1024
+      current-tool-state:
+        ttl: 1h
+        max-bytes: 2048
+      legacy-compatibility-ttl: 10m
   conversation:
     max-messages: 100
     expiry-hours: 24

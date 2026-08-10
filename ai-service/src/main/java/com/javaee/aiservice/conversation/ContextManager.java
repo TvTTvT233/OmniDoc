@@ -1,28 +1,34 @@
 package com.javaee.aiservice.conversation;
 
+import com.javaee.aiservice.conversation.runtime.LegacyRuntimeStateReader;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateScope;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateService;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateUpdate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 上下文管理器
- * 管理对话上下文和状态
- * 支持上下文的保存、更新和清理
+ * Deprecated compatibility adapter around controlled Runtime State.
+ *
+ * <p>The legacy Map API is intentionally read-limited and write-filtered. New code must use
+ * {@link RuntimeStateService} with an explicit conversation + trace scope.</p>
  */
 @Component
 public class ContextManager {
 
     private static final Logger log = LoggerFactory.getLogger(ContextManager.class);
-    private static final String CONTEXT_PREFIX = "ctx:";
 
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private final RuntimeStateService runtimeStateService;
+    private final LegacyRuntimeStateReader legacyReader;
+
+    public ContextManager(RuntimeStateService runtimeStateService, LegacyRuntimeStateReader legacyReader) {
+        this.runtimeStateService = runtimeStateService;
+        this.legacyReader = legacyReader;
+    }
 
     /**
      * 获取对话上下文
@@ -30,15 +36,12 @@ public class ContextManager {
      * @return 上下文信息
      */
     public Map<String, Object> getContext(String conversationId) {
-        String key = CONTEXT_PREFIX + conversationId;
-        
-        Map<Object, Object> hash = redisTemplate.opsForHash().entries(key);
-        Map<String, Object> context = new HashMap<>();
-        for (Map.Entry<Object, Object> entry : hash.entrySet()) {
-            context.put(entry.getKey().toString(), entry.getValue());
+        LegacyRuntimeStateReader.LegacyReadResult result = legacyReader.readOptional(conversationId);
+        if (result.availability() == LegacyRuntimeStateReader.Availability.DEGRADED_UNAVAILABLE) {
+            log.warn("旧 Runtime State 兼容读取降级: conversationId={}", conversationId);
         }
-        
-        log.debug("获取上下文: conversationId={}, size={}", conversationId, context.size());
+        Map<String, Object> context = new LinkedHashMap<>(result.values());
+        log.debug("读取白名单旧上下文: conversationId={}, size={}", conversationId, context.size());
         return context;
     }
 
@@ -51,11 +54,22 @@ public class ContextManager {
         if (updates == null || updates.isEmpty()) {
             return;
         }
-
-        String key = CONTEXT_PREFIX + conversationId;
-        redisTemplate.opsForHash().putAll(key, updates);
-        
-        log.debug("更新上下文: conversationId={}, updates={}", conversationId, updates.size());
+        Object traceId = updates.get("traceId");
+        if (!(traceId instanceof String trace) || trace.isBlank()) {
+            log.debug("忽略无 traceId 的旧 Map 上下文写入: conversationId={}", conversationId);
+            return;
+        }
+        RuntimeStateUpdate.Builder controlled = RuntimeStateUpdate.builder();
+        String currentDocumentId = scalar(updates.get("currentDocumentId"));
+        if (currentDocumentId == null) {
+            currentDocumentId = scalar(updates.get("documentId"));
+        }
+        controlled.currentDocumentId(currentDocumentId)
+                .selectedText(scalar(updates.get("selectedText")))
+                .pageContext(scalar(updates.get("pageContext")));
+        RuntimeStateUpdate update = controlled.build();
+        runtimeStateService.update(new RuntimeStateScope(conversationId, trace), update);
+        log.debug("旧 Map 上下文仅转写白名单标量: conversationId={}, traceId={}", conversationId, trace);
     }
 
     /**
@@ -65,10 +79,9 @@ public class ContextManager {
      * @param value 字段值
      */
     public void setContextValue(String conversationId, String key, Object value) {
-        String contextKey = CONTEXT_PREFIX + conversationId;
-        redisTemplate.opsForHash().put(contextKey, key, value);
-        
-        log.debug("设置上下文字段: conversationId={}, key={}", conversationId, key);
+        throw new UnsupportedOperationException(
+                "Trace-less Runtime State writes are disabled; use RuntimeStateService"
+        );
     }
 
     /**
@@ -78,8 +91,7 @@ public class ContextManager {
      * @return 字段值
      */
     public Object getContextValue(String conversationId, String key) {
-        String contextKey = CONTEXT_PREFIX + conversationId;
-        return redisTemplate.opsForHash().get(contextKey, key);
+        return getContext(conversationId).get(key);
     }
 
     /**
@@ -87,10 +99,8 @@ public class ContextManager {
      * @param conversationId 对话ID
      */
     public void clearContext(String conversationId) {
-        String key = CONTEXT_PREFIX + conversationId;
-        redisTemplate.delete(key);
-        
-        log.debug("清理上下文: conversationId={}", conversationId);
+        runtimeStateService.clearConversation(conversationId);
+        log.debug("清理 Runtime State: conversationId={}", conversationId);
     }
 
     /**
@@ -99,17 +109,10 @@ public class ContextManager {
      * @param newContext 新上下文
      */
     public void mergeContext(String conversationId, Map<String, Object> newContext) {
-        if (newContext == null || newContext.isEmpty()) {
-            return;
-        }
+        updateContext(conversationId, newContext);
+    }
 
-        Map<String, Object> currentContext = getContext(conversationId);
-        currentContext.putAll(newContext);
-        
-        String key = CONTEXT_PREFIX + conversationId;
-        redisTemplate.delete(key);
-        redisTemplate.opsForHash().putAll(key, currentContext);
-        
-        log.debug("合并上下文: conversationId={}, size={}", conversationId, currentContext.size());
+    private static String scalar(Object value) {
+        return value instanceof String text && !text.isBlank() ? text : null;
     }
 }
