@@ -296,6 +296,15 @@
 - 主工作树安装前端测试依赖时首次 `npm ci` 因正在占用的 `esbuild.exe` 返回 EPERM；改用不改锁文件的 `npm install --ignore-scripts` 后测试和构建通过，残留仅为被占用二进制临时目录的清理警告；
 - 未连接真实 MySQL、Redis、模型、远程 Embedding、浏览器或完整服务；M01 只证明基线和验收资产，不证明 Memory V1 生产能力。
 
+### M06-A 前端结构化 API 与状态骨架（`feature/memory-m06a-frontend-contract`）
+
+- 状态：`HANDOFF_READY / FRONTEND_CONTRACT_VERIFIED / INTEGRATION_PENDING`；起始基线 `ac1033b`；完整 M06 仍为 `PENDING`；
+- 已新增 `/ai/conversations` 七个端点的统一前端 API、Conversation/Public Message/Page/Delete DTO、稳定错误规范化和公开工具事件 metadata 白名单；客户端不发送所有者 `userId`；
+- 已新增 `useConversationSession`：活跃指针与草稿按认证 `userId + global-assistant/editor` 隔离，创建成功后才切换，失败保留旧指针和草稿，UUID `clientRequestId` 在重试与标签页刷新中复用；明确拒绝 `temp_*` 和 `default_conv`；
+- 专项契约 14/14、M01 前端基线 7/7、现有 Node API 测试 2/2、Vite 生产构建均通过；禁止的旧 UI、`useGlobalAi.js` 和后端文件差异为 0；
+- 未连接真实结构化 Controller、MySQL、Redis、鉴权用户或浏览器端到端；新骨架尚未接管现有 UI，不能宣称历史恢复、新对话、归档或删除 UX 已实现；
+- `npm ci` 仍报告 12 个依赖审计问题，构建仍有主 chunk 超过 500 kB 的警告；详细交接见 `docs/memory/handoffs/M06-A.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
