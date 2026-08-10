@@ -9,6 +9,8 @@ import com.javaee.aiservice.rag.vector.contract.VectorMatch;
 import com.javaee.aiservice.rag.vector.contract.VectorQuery;
 import com.javaee.aiservice.rag.vector.contract.VectorRecord;
 import com.javaee.aiservice.rag.vector.contract.VectorScope;
+import com.javaee.aiservice.rag.vector.contract.EmbeddingSpec;
+import com.javaee.aiservice.rag.vector.migration.MigrationTargetCounter;
 import io.qdrant.client.PointIdFactory;
 import io.qdrant.client.QueryFactory;
 import io.qdrant.client.VectorsFactory;
@@ -31,7 +33,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /** Qdrant implementation of the frozen provider-neutral vector backend contract. */
-public final class QdrantVectorBackend implements VectorBackend {
+public final class QdrantVectorBackend implements VectorBackend, MigrationTargetCounter {
 
     private static final Logger log = LoggerFactory.getLogger(QdrantVectorBackend.class);
 
@@ -221,6 +223,22 @@ public final class QdrantVectorBackend implements VectorBackend {
                             "alias", collectionManager.alias(),
                             "collection", collectionManager.collection(),
                             "retryable", mapped.isRetryable()));
+        }
+    }
+
+    @Override
+    public long count(EmbeddingSpec embedding) {
+        try {
+            collectionManager.validateEmbedding(embedding);
+            return operations.count(
+                    collectionManager.alias(),
+                    Filter.getDefaultInstance(),
+                    requestTimeout);
+        } catch (RuntimeException failure) {
+            throw QdrantExceptionMapper.map(
+                    failure,
+                    VectorErrorCode.VECTOR_MIGRATION_FAILED,
+                    "migration count");
         }
     }
 

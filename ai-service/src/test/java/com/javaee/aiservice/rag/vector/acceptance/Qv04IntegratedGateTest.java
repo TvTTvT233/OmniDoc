@@ -7,6 +7,7 @@ import com.javaee.aiservice.rag.vector.acceptance.VectorBackendAcceptanceHarness
 import com.javaee.aiservice.rag.vector.contract.VectorBackendType;
 import com.javaee.aiservice.rag.vector.contract.VectorStoreMode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.nio.file.Path;
 
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Runs only through scripts/qdrant/run-qv04-acceptance.ps1 -Integrated.
  */
+@EnabledIfSystemProperty(named = "qv04.acceptance.providerClass", matches = ".+")
 class Qv04IntegratedGateTest {
 
     @Test

@@ -110,6 +110,7 @@ ai:
       timeout-ms: 3000
     migration:
       batch-size: 100
+      checkpoint-path: ${VECTOR_MIGRATION_CHECKPOINT_PATH:var/qdrant-migration/checkpoint.json}
   aiops:
     metrics:
       retention-ms: 900000

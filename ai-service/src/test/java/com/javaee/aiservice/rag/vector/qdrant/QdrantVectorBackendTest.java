@@ -120,6 +120,17 @@ class QdrantVectorBackendTest {
     }
 
     @Test
+    void migrationCountValidatesEmbeddingAndCountsTheActiveCollection() {
+        operations.countResult = 17;
+
+        assertThat(backend.count(EMBEDDING)).isEqualTo(17);
+        assertThatThrownBy(() -> backend.count(new EmbeddingSpec("other", 3, 1)))
+                .isInstanceOfSatisfying(VectorBackendException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(VectorErrorCode.VECTOR_CONFIGURATION_ERROR));
+    }
+
+    @Test
     void mapsPayloadBackToLogicalMatchWithoutReservedMetadata() {
         Map<String, Value> payload = Map.of(
                 "id", Value.newBuilder().setStringValue("segment-1").build(),

@@ -4,10 +4,12 @@ import com.javaee.aiservice.rag.vector.contract.EmbeddingSpec;
 import com.javaee.aiservice.rag.vector.contract.VectorBackendException;
 import com.javaee.aiservice.rag.vector.contract.VectorBackendType;
 import com.javaee.aiservice.rag.vector.contract.VectorErrorCode;
+import com.javaee.aiservice.rag.vector.contract.VectorExportRequest;
 import com.javaee.aiservice.rag.vector.contract.VectorFilter;
 import com.javaee.aiservice.rag.vector.contract.VectorMatch;
 import com.javaee.aiservice.rag.vector.contract.VectorQuery;
 import com.javaee.aiservice.rag.vector.contract.VectorRecord;
+import com.javaee.aiservice.rag.vector.contract.VectorRecordPage;
 import com.javaee.aiservice.rag.vector.contract.VectorScope;
 import com.javaee.aiservice.rag.vector.contract.VectorStoreMode;
 import org.junit.jupiter.api.BeforeEach;
@@ -190,6 +192,30 @@ class LocalRedisHnswVectorBackendTest {
                 .isInstanceOf(VectorBackendException.class)
                 .extracting(error -> ((VectorBackendException) error).getErrorCode())
                 .isEqualTo(VectorErrorCode.VECTOR_CONFIGURATION_ERROR);
+    }
+
+    @Test
+    void migrationExportUsesStableIdCursorAndPreservesScope() {
+        backend.upsert(record("segment-c", "doc-c", USER_A, vector(0.0f, 0.0f, 1.0f)));
+        backend.upsert(record("segment-a", "doc-a", USER_A, vector(1.0f, 0.0f, 0.0f)));
+        backend.upsert(record("segment-b", "doc-b", USER_B, vector(0.0f, 1.0f, 0.0f)));
+        stubScan("vector:segment-c", "vector:segment-a", "vector:segment-b");
+
+        VectorRecordPage first = backend.exportPage(new VectorExportRequest("", 2, EMBEDDING));
+
+        assertThat(first.complete()).isFalse();
+        assertThat(first.nextCursor()).isEqualTo("segment-b");
+        assertThat(first.records()).extracting(VectorRecord::id)
+                .containsExactly("segment-a", "segment-b");
+        assertThat(first.records().get(1).scope()).isEqualTo(USER_B);
+
+        stubScan("vector:segment-b", "vector:segment-c", "vector:segment-a");
+        VectorRecordPage second = backend.exportPage(
+                new VectorExportRequest(first.nextCursor(), 2, EMBEDDING));
+
+        assertThat(second.complete()).isTrue();
+        assertThat(second.nextCursor()).isEmpty();
+        assertThat(second.records()).extracting(VectorRecord::id).containsExactly("segment-c");
     }
 
     private static VectorRecord record(String id, String documentId, VectorScope scope, float[] vector) {

@@ -1,5 +1,6 @@
 package com.javaee.aiservice.rag;
 
+import com.javaee.aiservice.rag.vector.contract.VectorScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -100,10 +101,15 @@ public class KnowledgeBase {
 
         try {
             List<String> segmentIds = getSegmentIds(documentId);
+            Map<String, Object> documentMetadata = getDocumentMetadata(documentId);
+            VectorScope scope = new VectorScope(
+                    scopeValue(documentMetadata.get("userId"), "system"),
+                    scopeValue(documentMetadata.get("knowledgeBaseId"), "default"));
+
+            vectorStore.deleteByDocument(documentId, scope);
 
             for (String segmentId : segmentIds) {
                 redisTemplate.delete(SEGMENT_PREFIX + segmentId);
-                vectorStore.delete(segmentId);
             }
 
             redisTemplate.delete(DOC_SEGMENTS_PREFIX + documentId);
@@ -469,6 +475,13 @@ public class KnowledgeBase {
         normalized.putIfAbsent("userId", "system");
         normalized.putIfAbsent("knowledgeBaseId", "default");
         return normalized;
+    }
+
+    private static String scopeValue(Object value, String fallback) {
+        if (value == null || value.toString().isBlank()) {
+            return fallback;
+        }
+        return value.toString();
     }
 
     private List<String> scanKeys(String pattern, int count) {

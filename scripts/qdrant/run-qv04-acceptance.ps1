@@ -288,7 +288,9 @@ $integratedProperties = @(
     "-Dqv04.acceptance.providerClass=$ProviderClass",
     "-Dqv04.test.collection=$testCollection",
     "-Dqv04.report.dir=$ReportDirectory",
-    '-Dqv04.remoteEmbedding=false'
+    '-Dqv04.remoteEmbedding=false',
+    '-Dqdrant.integration=true',
+    '-Dqdrant.persistence.phase=cleanup'
 )
 $integratedCounts = Invoke-Qv04MavenTests -Name 'QV04 integrated' -Selection $integratedSelection -Properties $integratedProperties
 

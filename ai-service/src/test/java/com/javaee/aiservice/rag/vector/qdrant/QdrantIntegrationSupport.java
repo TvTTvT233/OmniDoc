@@ -19,18 +19,23 @@ final class QdrantIntegrationSupport {
     static Runtime open(String alias, String collectionPrefix, EmbeddingSpec embedding) {
         QdrantProperties properties = properties(alias);
         QdrantClient client = new QdrantConfiguration().qdrantClient(properties);
-        OfficialQdrantOperations operations = new OfficialQdrantOperations(client);
-        QdrantCollectionManager manager = new QdrantCollectionManager(
-                operations,
-                properties,
-                embedding,
-                new QdrantCollectionNameFactory(collectionPrefix));
-        QdrantVectorBackend backend = new QdrantVectorBackend(
-                operations,
-                properties,
-                manager,
-                new UuidV5VectorPointIdFactory());
-        return new Runtime(client, operations, manager, backend, properties);
+        try {
+            OfficialQdrantOperations operations = new OfficialQdrantOperations(client);
+            QdrantCollectionManager manager = new QdrantCollectionManager(
+                    operations,
+                    properties,
+                    embedding,
+                    new QdrantCollectionNameFactory(collectionPrefix));
+            QdrantVectorBackend backend = new QdrantVectorBackend(
+                    operations,
+                    properties,
+                    manager,
+                    new UuidV5VectorPointIdFactory());
+            return new Runtime(client, operations, manager, backend, properties);
+        } catch (RuntimeException failure) {
+            client.close();
+            throw failure;
+        }
     }
 
     static QdrantClient client(String alias) {
@@ -38,8 +43,9 @@ final class QdrantIntegrationSupport {
     }
 
     static void cleanup(QdrantClient client, String alias, String collection) {
-        if (!alias.startsWith("test_") || !collection.startsWith("test_")) {
-            throw new IllegalArgumentException("Integration cleanup is restricted to test_ resources");
+        if (!testResource(alias) || !testResource(collection)) {
+            throw new IllegalArgumentException(
+                    "Integration cleanup is restricted to test_ and qv04_test_ resources");
         }
         List<AliasDescription> aliases = await(client.listAliasesAsync(TIMEOUT));
         if (aliases.stream().anyMatch(candidate -> alias.equals(candidate.getAliasName()))) {
@@ -48,6 +54,10 @@ final class QdrantIntegrationSupport {
         if (await(client.collectionExistsAsync(collection, TIMEOUT))) {
             await(client.deleteCollectionAsync(collection, TIMEOUT));
         }
+    }
+
+    private static boolean testResource(String name) {
+        return name != null && (name.startsWith("test_") || name.startsWith("qv04_test_"));
     }
 
     private static QdrantProperties properties(String alias) {

@@ -10,10 +10,13 @@ import com.javaee.aiservice.rag.vector.contract.VectorBackendException;
 import com.javaee.aiservice.rag.vector.contract.VectorBackendHealth;
 import com.javaee.aiservice.rag.vector.contract.VectorBackendType;
 import com.javaee.aiservice.rag.vector.contract.VectorErrorCode;
+import com.javaee.aiservice.rag.vector.contract.VectorExportRequest;
 import com.javaee.aiservice.rag.vector.contract.VectorFilter;
 import com.javaee.aiservice.rag.vector.contract.VectorMatch;
 import com.javaee.aiservice.rag.vector.contract.VectorQuery;
 import com.javaee.aiservice.rag.vector.contract.VectorRecord;
+import com.javaee.aiservice.rag.vector.contract.VectorRecordExporter;
+import com.javaee.aiservice.rag.vector.contract.VectorRecordPage;
 import com.javaee.aiservice.rag.vector.contract.VectorScope;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -21,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 import java.io.Serializable;
@@ -32,17 +36,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /** Existing Redis persistence and in-process HNSW index exposed through the frozen backend contract. */
 @Component
-public class LocalRedisHnswVectorBackend implements VectorBackend, LegacyVectorOperations {
+@Conditional(LocalVectorEnabledCondition.class)
+public class LocalRedisHnswVectorBackend
+        implements VectorBackend, LegacyVectorOperations, VectorRecordExporter {
 
     private static final Logger log = LoggerFactory.getLogger(LocalRedisHnswVectorBackend.class);
     private static final String VECTOR_PREFIX = "vector:";
     private static final String METADATA_PREFIX = "metadata:";
+    private static final Set<String> RESERVED_METADATA_KEYS = Set.of(
+            "id", "userId", "knowledgeBaseId", "documentId",
+            "embeddingModel", "embeddingDimension", "schemaVersion");
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -244,6 +254,85 @@ public class LocalRedisHnswVectorBackend implements VectorBackend, LegacyVectorO
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    @Override
+    public VectorRecordPage exportPage(VectorExportRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
+        }
+        lock.readLock().lock();
+        try {
+            List<String> ids = scanKeys(VECTOR_PREFIX + "*", 1000).stream()
+                    .map(key -> key.substring(VECTOR_PREFIX.length()))
+                    .filter(id -> request.cursor().isBlank() || id.compareTo(request.cursor()) > 0)
+                    .sorted()
+                    .toList();
+            int pageSize = Math.min(request.batchSize(), ids.size());
+            List<VectorRecord> records = new ArrayList<>(pageSize);
+            for (int index = 0; index < pageSize; index++) {
+                records.add(exportRecord(ids.get(index), request.assumedEmbedding()));
+            }
+            boolean complete = pageSize == ids.size();
+            String nextCursor = complete || records.isEmpty() ? "" : records.get(records.size() - 1).id();
+            return new VectorRecordPage(records, nextCursor, complete);
+        } catch (VectorBackendException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw backendException(
+                    VectorErrorCode.VECTOR_MIGRATION_FAILED,
+                    "Local vector export failed",
+                    true,
+                    exception);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    private VectorRecord exportRecord(String id, EmbeddingSpec assumedEmbedding) {
+        float[] vector = convertToFloatArray(redisTemplate.opsForValue().get(VECTOR_PREFIX + id));
+        if (vector == null || vector.length == 0) {
+            throw backendException(
+                    VectorErrorCode.VECTOR_MIGRATION_FAILED,
+                    "Local vector export found an empty vector",
+                    false,
+                    null);
+        }
+        Map<String, Object> stored = new LinkedHashMap<>(getMetadata(id));
+        EmbeddingSpec embedding = exportEmbedding(stored, vector.length, assumedEmbedding);
+        if (!embedding.equals(assumedEmbedding)) {
+            throw backendException(
+                    VectorErrorCode.VECTOR_CONFIGURATION_ERROR,
+                    "Local vector export found an incompatible embedding specification",
+                    false,
+                    null);
+        }
+        String userId = text(stored.get("userId"));
+        String knowledgeBaseId = text(stored.get("knowledgeBaseId"));
+        String documentId = text(stored.get("documentId"));
+        VectorScope scope = new VectorScope(
+                userId == null ? "system" : userId,
+                knowledgeBaseId == null ? "default" : knowledgeBaseId);
+        stored.keySet().removeAll(RESERVED_METADATA_KEYS);
+        return new VectorRecord(
+                id,
+                documentId == null ? id : documentId,
+                vector,
+                scope,
+                embedding,
+                stored);
+    }
+
+    private static EmbeddingSpec exportEmbedding(
+            Map<String, Object> metadata,
+            int vectorDimension,
+            EmbeddingSpec assumedEmbedding
+    ) {
+        String storedModel = text(metadata.get("embeddingModel"));
+        String model = storedModel == null ? assumedEmbedding.model() : storedModel;
+        int dimension = intValue(metadata.get("embeddingDimension"), vectorDimension);
+        int schemaVersion = intValue(metadata.get("schemaVersion"), assumedEmbedding.schemaVersion());
+        return new EmbeddingSpec(model, dimension, schemaVersion);
     }
 
     private void persist(VectorRecord record) {
