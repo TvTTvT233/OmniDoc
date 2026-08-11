@@ -164,6 +164,31 @@ describe('structured conversation API contract', () => {
     })
   })
 
+  it('preserves stable authentication and persistence error codes', async () => {
+    request.get.mockRejectedValueOnce({
+      response: {
+        status: 401,
+        data: { errorCode: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required' },
+      },
+    })
+    await expect(conversationApi.getConversation('conv-contract-1')).rejects.toMatchObject({
+      code: 'AUTHENTICATION_REQUIRED',
+      status: 401,
+    })
+
+    request.get.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        data: { errorCode: 'MEMORY_PERSISTENCE_DISABLED', message: 'Memory is disabled' },
+      },
+    })
+    await expect(conversationApi.getConversation('conv-contract-1')).rejects.toMatchObject({
+      code: 'MEMORY_PERSISTENCE_DISABLED',
+      status: 503,
+      retryable: true,
+    })
+  })
+
   it('rejects private/system messages and legacy fallback ids at the client boundary', async () => {
     request.get.mockResolvedValue({
       data: {

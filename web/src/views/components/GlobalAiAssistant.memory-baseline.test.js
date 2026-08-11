@@ -2,27 +2,44 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  route: { path: '/dashboard' },
+  createConversation: vi.fn(),
+  listConversations: vi.fn(),
+  getConversation: vi.fn(),
+  listMessages: vi.fn(),
+  archiveConversation: vi.fn(),
+  restoreConversation: vi.fn(),
+  deleteConversation: vi.fn(),
   getModels: vi.fn(),
-  startChat: vi.fn(),
-  getConversationHistory: vi.fn(),
   executeTask: vi.fn(),
   confirmApproval: vi.fn(),
+  cancelApproval: vi.fn(),
   searchDocs: vi.fn(),
   confirm: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock('../../api/conversation.js', () => ({
+  conversationApi: {
+    createConversation: mocks.createConversation,
+    listConversations: mocks.listConversations,
+    getConversation: mocks.getConversation,
+    listMessages: mocks.listMessages,
+    archiveConversation: mocks.archiveConversation,
+    restoreConversation: mocks.restoreConversation,
+    deleteConversation: mocks.deleteConversation,
+  },
 }))
 
 vi.mock('../../api/ai', () => ({
-  aiApi: {
-    getModels: mocks.getModels,
-    startChat: mocks.startChat,
-    getConversationHistory: mocks.getConversationHistory,
-  },
+  aiApi: { getModels: mocks.getModels },
 }))
 
 vi.mock('../../api/agent', () => ({
   agentApi: {
     executeTask: mocks.executeTask,
     confirmApproval: mocks.confirmApproval,
+    cancelApproval: mocks.cancelApproval,
   },
 }))
 
@@ -30,30 +47,49 @@ vi.mock('../../api/document.js', () => ({
   docApi: { searchDocs: mocks.searchDocs },
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ path: '/dashboard' }),
-}))
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual('vue-router')
+  return { ...actual, useRoute: () => mocks.route }
+})
 
 vi.mock('element-plus', () => ({
   ElMessage: {
     success: vi.fn(),
     warning: vi.fn(),
-    error: vi.fn(),
+    error: mocks.error,
+    info: vi.fn(),
   },
   ElMessageBox: { confirm: mocks.confirm },
 }))
 
 import GlobalAiAssistant from './GlobalAiAssistant.vue'
-import { useGlobalAi } from '../../utils/useGlobalAi.js'
 
-const ButtonStub = {
-  template: '<button><slot /></button>',
+const conversation = (conversationId, status = 'ACTIVE') => ({
+  conversationId,
+  title: conversationId,
+  status,
+  createdAt: '2026-08-11T00:00:00Z',
+  updatedAt: '2026-08-11T00:00:00Z',
+})
+
+const message = (conversationId, sequence, role, content) => ({
+  messageId: `${conversationId}-${sequence}`,
+  conversationId,
+  sequence,
+  role,
+  messageType: 'TEXT',
+  content,
+  createdAt: '2026-08-11T00:00:00Z',
+})
+
+const token = (userId) => {
+  const payload = btoa(JSON.stringify({ userId, exp: Math.floor(Date.now() / 1000) + 3600 }))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `header.${payload}.signature`
 }
 
-const DrawerStub = {
-  template: '<section><slot /></section>',
-}
-
+const ButtonStub = { template: '<button v-bind="$attrs"><slot /></button>' }
+const DrawerStub = { template: '<section><slot /></section>' }
 const mountAssistant = () => mount(GlobalAiAssistant, {
   global: {
     stubs: {
@@ -71,51 +107,59 @@ const mountAssistant = () => mount(GlobalAiAssistant, {
   },
 })
 
-describe('GlobalAiAssistant current memory baseline', () => {
+describe('GlobalAiAssistant Memory V1 target behavior', () => {
   beforeEach(() => {
-    const session = useGlobalAi()
-    session.resetConversation()
     localStorage.clear()
+    sessionStorage.clear()
+    Object.values(mocks).forEach((value) => value?.mockReset?.())
     mocks.getModels.mockResolvedValue({ data: [] })
-    mocks.startChat.mockResolvedValue({ data: 'conv-created' })
-    mocks.executeTask.mockResolvedValue({
-      data: { answer: '已完成', toolResults: [] },
-    })
+    mocks.listConversations.mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+    mocks.listMessages.mockResolvedValue({ items: [], nextBeforeSequence: null, hasMore: false })
+    mocks.executeTask.mockResolvedValue({ data: { answer: '已完成', toolResults: [] } })
     mocks.confirm.mockResolvedValue('confirm')
-    vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('does not load history or create a backend conversation when mounted', async () => {
+  it('restores durable structured history on mount', async () => {
+    localStorage.setItem('accessToken', token('global-refresh'))
+    localStorage.setItem(
+      'omnidoc:conversation:v1:global-refresh:global-assistant:active',
+      'conv-refresh',
+    )
+    mocks.getConversation.mockResolvedValue(conversation('conv-refresh'))
+    mocks.listMessages.mockResolvedValue({
+      items: [
+        message('conv-refresh', 1, 'USER', '持久化用户消息'),
+        message('conv-refresh', 2, 'ASSISTANT', '持久化助手回答'),
+      ],
+      nextBeforeSequence: null,
+      hasMore: false,
+    })
+
     const wrapper = mountAssistant()
     await flushPromises()
 
-    expect(mocks.getModels).toHaveBeenCalledOnce()
-    expect(mocks.getConversationHistory).not.toHaveBeenCalled()
-    expect(mocks.startChat).not.toHaveBeenCalled()
-    expect(useGlobalAi().chatHistory.value).toEqual([])
-
+    expect(mocks.getConversation).toHaveBeenCalledWith('conv-refresh')
+    expect(wrapper.text()).toContain('持久化用户消息')
+    expect(wrapper.text()).toContain('持久化助手回答')
     wrapper.unmount()
   })
 
-  it('uses a temp id for the Agent request when backend conversation creation fails', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(1786400000123)
-    mocks.startChat.mockRejectedValueOnce(new Error('create failed'))
+  it('keeps the draft and never executes the Agent when real conversation creation fails', async () => {
+    localStorage.setItem('accessToken', token('global-create-fail'))
+    mocks.createConversation.mockRejectedValue(new Error('create failed'))
 
     const wrapper = mountAssistant()
     await flushPromises()
-
     const input = wrapper.get('input.custom-input')
-    await input.setValue('测试临时会话')
+    await input.setValue('必须保留的草稿')
     await input.trigger('keyup.enter')
     await flushPromises()
 
-    expect(mocks.startChat).toHaveBeenCalledOnce()
-    expect(mocks.executeTask).toHaveBeenCalledWith(expect.objectContaining({
-      conversationId: 'temp_1786400000123',
-      task: '测试临时会话',
-    }))
-    expect(useGlobalAi().currentConvId.value).toBe('temp_1786400000123')
-
+    expect(mocks.createConversation).toHaveBeenCalledOnce()
+    expect(mocks.executeTask).not.toHaveBeenCalled()
+    expect(input.element.value).toBe('必须保留的草稿')
+    expect(localStorage.getItem('global_conv_id')).toBeNull()
+    expect(mocks.error).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

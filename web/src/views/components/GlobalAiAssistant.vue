@@ -34,6 +34,7 @@
             <el-button
                 link
                 icon="Plus"
+                :disabled="isConversationBusy"
                 @click="handleNewConversation"
                 style="font-size: 16px; color: #3370ff; margin-right: 8px;"
                 title="开始新对话"
@@ -50,7 +51,67 @@
           </div>
         </div>
 
+        <div class="conversation-toolbar">
+          <select
+              class="conversation-select"
+              :value="currentConvId || ''"
+              :disabled="isConversationBusy"
+              aria-label="选择历史会话"
+              @change="handleConversationSelect"
+          >
+            <option value="" disabled>选择历史会话</option>
+            <optgroup v-if="activeConversations.length" label="进行中">
+              <option v-for="item in activeConversations" :key="item.conversationId" :value="item.conversationId">
+                {{ item.title || '未命名会话' }}
+              </option>
+            </optgroup>
+            <optgroup v-if="archivedConversations.length" label="已归档">
+              <option v-for="item in archivedConversations" :key="item.conversationId" :value="item.conversationId">
+                {{ item.title || '未命名会话' }}（已归档）
+              </option>
+            </optgroup>
+          </select>
+          <el-button
+              v-if="activeConversation"
+              link
+              size="small"
+              :disabled="isConversationBusy"
+              @click="handleArchiveToggle"
+          >
+            {{ activeConversation.status === 'ARCHIVED' ? '恢复' : '归档' }}
+          </el-button>
+          <el-button
+              v-if="activeConversation"
+              link
+              size="small"
+              type="danger"
+              :disabled="isConversationBusy"
+              @click="handleDeleteConversation"
+          >删除</el-button>
+          <el-button
+              v-if="activeHasMore"
+              link
+              size="small"
+              :loading="isLoadingConversations"
+              @click="loadMoreConversations('active')"
+          >更多进行中</el-button>
+          <el-button
+              v-if="archivedHasMore"
+              link
+              size="small"
+              :loading="isLoadingConversations"
+              @click="loadMoreConversations('archived')"
+          >更多归档</el-button>
+        </div>
+
         <div class="chat-scroll-area">
+          <el-button
+              v-if="hasOlderMessages"
+              class="load-older-btn"
+              link
+              :loading="isLoadingMessages"
+              @click="loadOlderMessages"
+          >加载更早消息</el-button>
           <div class="message-row ai" v-if="chatHistory.length === 0">
             <div class="avatar-box ai-avatar">
               <el-icon size="16" color="#fff"><Cpu /></el-icon>
@@ -60,7 +121,7 @@
             </div>
           </div>
 
-          <div v-for="(msg, i) in chatHistory" :key="i" :class="['message-row', msg.role]">
+          <div v-for="msg in chatHistory" :key="msg.id" :class="['message-row', msg.role]">
             <div class="avatar-box" :class="msg.role === 'user' ? 'user-avatar' : 'ai-avatar'">
               <el-icon size="16" color="#fff">
                 <User v-if="msg.role === 'user'" />
@@ -98,7 +159,8 @@
             <input
                 v-model="userInput"
                 class="custom-input"
-                placeholder="发送全局指令，如：查阅资料、清理垃圾..."
+                :placeholder="activeConversation?.status === 'ARCHIVED' ? '请先恢复该会话' : '发送全局指令，如：查阅资料、清理垃圾...'"
+                :disabled="activeConversation?.status === 'ARCHIVED' || isConversationBusy"
                 @keyup.enter="handleSend"
                 @focus="isInputFocused = true"
                 @blur="isInputFocused = false"
@@ -114,193 +176,225 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { useGlobalAi } from '../../utils/useGlobalAi.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { agentApi } from '../../api/agent'
 import { aiApi } from '../../api/ai'
-import { ElMessage, ElMessageBox} from 'element-plus'
 import { docApi } from '../../api/document.js'
+import {
+  CONVERSATION_ERROR,
+  CONVERSATION_STATUS,
+  normalizeConversationError,
+} from '../../api/conversationContract.js'
+import {
+  CONVERSATION_ENTRY,
+} from '../../composables/useConversationSession.js'
+import {
+  toConversationChatMessage,
+  useConversationWorkspace,
+} from '../../composables/useConversationWorkspace.js'
+import { useGlobalAi } from '../../utils/useGlobalAi.js'
+import { getAuthenticatedUserId } from '../../utils/jwt.js'
 
 const route = useRoute()
-const userInput = ref('')
-const isInputFocused = ref(false)
+const authenticatedUserId = getAuthenticatedUserId()
+if (!authenticatedUserId) throw new Error('Authenticated conversation scope is unavailable')
 
-// 模型选择相关的变量
-const currentModel = ref('glm-5') // 默认绑定智谱 GLM-5
+const conversationWorkspace = useConversationWorkspace({
+  userId: authenticatedUserId,
+  entry: CONVERSATION_ENTRY.GLOBAL_ASSISTANT,
+})
+const { isAiPanelVisible, toggleAiPanel } = useGlobalAi()
+const currentModel = ref('glm-5')
 const modelOptions = ref([])
+const isInputFocused = ref(false)
+const isAiThinking = ref(false)
+const isLifecycleBusy = ref(false)
+const pendingPreview = ref(null)
+const latestActionResult = ref(null)
 
-const { isAiPanelVisible, chatHistory, isAiThinking, currentConvId, toggleAiPanel, appendMessage, resetConversation, saveConvId} = useGlobalAi()
-
-// 组件挂载时自动拉取模型列表
-onMounted(async () => {
-  try {
-    const res = await aiApi.getModels()
-    modelOptions.value = res.data
-    currentModel.value = 'glm-5'
-  } catch {
-    // 接口报错时的本地保底数据
-    modelOptions.value = [
-      { code: 'glm-5', name: '智谱GLM-5', available: true },
-      { code: 'qwen3.7-max-2026-05-20', name: '通义千问 3.7 Max', available: true },
-    ]
-    currentModel.value = 'glm-5'
+const currentConvId = conversationWorkspace.activeConversationId
+const activeConversation = conversationWorkspace.activeConversation
+const activeConversations = conversationWorkspace.activeConversations
+const archivedConversations = conversationWorkspace.archivedConversations
+const activeHasMore = conversationWorkspace.activeHasMore
+const archivedHasMore = conversationWorkspace.archivedHasMore
+const hasOlderMessages = conversationWorkspace.hasOlderMessages
+const isLoadingConversations = conversationWorkspace.isLoadingConversations
+const isLoadingMessages = conversationWorkspace.isLoadingMessages
+const userInput = computed({
+  get: () => conversationWorkspace.session.draft.value,
+  set: (value) => conversationWorkspace.setDraft(value),
+})
+const isConversationBusy = computed(() => isAiThinking.value
+  || isLifecycleBusy.value
+  || conversationWorkspace.isLoadingMessages.value)
+const chatHistory = computed(() => {
+  const items = conversationWorkspace.messages.value.map(toConversationChatMessage)
+  if (latestActionResult.value) {
+    const lastAssistant = items.findLastIndex((item) => item.role === 'ai')
+    if (lastAssistant >= 0) items[lastAssistant] = {
+      ...items[lastAssistant],
+      actionResult: latestActionResult.value,
+    }
   }
+  if (pendingPreview.value) items.push(pendingPreview.value)
+  return items
+})
+
+onMounted(async () => {
+  const modelRequest = aiApi.getModels()
+    .then((res) => {
+      modelOptions.value = res.data
+      currentModel.value = 'glm-5'
+    })
+    .catch(() => {
+      modelOptions.value = [
+        { code: 'glm-5', name: '智谱GLM-5', available: true },
+        { code: 'qwen3.7-max-2026-05-20', name: '通义千问 3.7 Max', available: true },
+      ]
+      currentModel.value = 'glm-5'
+    })
+  await Promise.all([modelRequest, conversationWorkspace.initialize()])
+  scrollToBottom()
 })
 
 const scrollToBottom = () => {
   nextTick(() => {
-    const c = document.querySelector('.global-ai-drawer .chat-scroll-area')
-    if (c) c.scrollTop = c.scrollHeight
+    const container = document.querySelector('.global-ai-drawer .chat-scroll-area')
+    if (container) container.scrollTop = container.scrollHeight
   })
 }
 
+const conversationTitle = (content) => content.trim().slice(0, 40) || '新对话'
+
 const handleSend = async () => {
-  if (!userInput.value.trim() || isAiThinking.value) return
-
-  const q = userInput.value
-  appendMessage({ role: 'user', text: q })
-  userInput.value = ''
+  if (!userInput.value.trim() || isConversationBusy.value) return
+  const draftBeforeSend = userInput.value
+  let submission = null
   isAiThinking.value = true
-  scrollToBottom()
-
-  const uid = localStorage.getItem('userId') || '1'
-
+  latestActionResult.value = null
   try {
     if (!currentConvId.value) {
-      try {
-        const chatRes = await aiApi.startChat(uid)
-        saveConvId(chatRes.data)
-      } catch (err) {
-        console.error('创建对话失败:', err)
-        const tempId = `temp_${Date.now()}`
-        saveConvId(tempId)
-      }
+      await conversationWorkspace.createConversation({ title: conversationTitle(draftBeforeSend) })
     }
+    submission = conversationWorkspace.beginSubmission()
+    pendingPreview.value = {
+      id: `pending-${submission.clientRequestId}`,
+      role: 'user',
+      text: submission.content,
+    }
+    scrollToBottom()
 
     let pageContext = `用户当前所处页面路径：${route.path}。`
     const paperElement = document.querySelector('.paper')
-    if (paperElement && paperElement.innerText) {
+    if (paperElement?.innerText) {
       pageContext += `\n当前页面文档内容：${paperElement.innerText.substring(0, 1500)}`
     }
-
     const res = await agentApi.executeTask({
-      task: q,
+      task: submission.content,
       model: currentModel.value,
-      conversationId: currentConvId.value,
-      userId: uid,
+      conversationId: submission.conversationId,
+      clientRequestId: submission.clientRequestId,
       context: {
         isGlobalContext: true,
-        pageContext: pageContext
-      }
+        pageContext,
+      },
     })
-
     const agentResult = res.data
+    latestActionResult.value = parseToolResults(agentResult?.toolResults)
+    pendingPreview.value = null
+    const completion = await conversationWorkspace.completeSubmission(submission.clientRequestId)
+    if (completion.historyReloadFailed) {
+      ElMessage.warning('任务已完成，但历史暂时未刷新；重新打开会话后可再次加载。')
+    }
+    scrollToBottom()
 
-    // 检测到需要审批
-    if (agentResult.status === 'action_required' && agentResult.pendingApproval) {
-      const approval = agentResult.pendingApproval
+    if (agentResult?.status === 'action_required' && agentResult.pendingApproval) {
+      await handleApproval(agentResult.pendingApproval, agentResult)
+    }
+  } catch (error) {
+    pendingPreview.value = null
+    if (submission) conversationWorkspace.markSubmissionFailed(error)
+    const normalized = normalizeConversationError(error)
+    if (normalized.code === CONVERSATION_ERROR.NOT_FOUND) {
+      conversationWorkspace.invalidateActiveConversation()
+      await conversationWorkspace.refreshConversationLists().catch(() => {})
+      ElMessage.warning('当前会话已失效，草稿已保留。请新建或选择其他会话后重试。')
+    } else if (normalized.code === CONVERSATION_ERROR.ARCHIVED) {
+      ElMessage.warning('该会话已归档，请先恢复后再发送。')
+    } else {
+      ElMessage.error(normalized.message || '全局助理暂时无法响应，草稿已保留。')
+    }
+    await conversationWorkspace.reloadMessages().catch(() => {})
+  } finally {
+    isAiThinking.value = false
+    scrollToBottom()
+  }
+}
 
-      appendMessage({
-        role: 'ai',
-        text: agentResult.answer || '检测到需要确认的操作。',
-        actionResult: parseToolResults(agentResult.toolResults),
-        toolCalls: agentResult.toolResults || []
+const cancelApproval = async (approval) => {
+  try {
+    if (approval?.agentApprovalToken) {
+      await agentApi.cancelApproval(approval.agentApprovalToken)
+    }
+  } catch {
+    ElMessage.warning('审批取消状态同步失败，请勿重复确认旧操作。')
+    return
+  }
+  ElMessage.info('操作已取消')
+}
+
+const handleApproval = async (approval, agentResult) => {
+  const toolName = approval.toolName
+  const params = approval.params || {}
+  try {
+    if (toolName === 'document-delete') {
+      const fileName = params.objectName || ''
+      const keyword = fileName.replace('.docx', '').replace('.doc', '')
+      const searchRes = await docApi.searchDocs(keyword)
+      const docs = searchRes.data?.data || []
+      if (!docs.length) {
+        ElMessage.warning(`未找到文档：${fileName}`)
+        await cancelApproval(approval)
+        return
+      }
+      const targetDoc = docs[0]
+      await ElMessageBox.confirm(
+        `即将删除文档：${targetDoc.title}\n\n确认继续吗？`,
+        '删除确认',
+        { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' },
+      )
+      await executeApproval(approval, agentResult, {
+        documentId: targetDoc.id,
+        bucketName: targetDoc.bucketName || 'documents',
+        objectName: targetDoc.objectName || targetDoc.fileName || params.objectName,
       })
-      scrollToBottom()
-
-      await handleApproval(approval, agentResult, uid)
       return
     }
 
-    const answerText = agentResult?.answer || agentResult?.text || "指令已执行完毕。"
-    appendMessage({
-      role: 'ai',
-      text: answerText,
-      actionResult: parseToolResults(agentResult?.toolResults),
-      toolCalls: agentResult?.toolResults || []
-    })
-    scrollToBottom()
-
+    await ElMessageBox.confirm(
+      `即将执行操作：${toolName}\n\n确认继续吗？`,
+      '操作确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' },
+    )
+    await executeApproval(approval, agentResult)
   } catch (error) {
-    console.error("Agent 报错监控:", error)
-
-    if (error.message?.includes('对话不存在') || error.message?.includes('无权访问')) {
-      resetConversation()
-      appendMessage({
-        role: 'ai',
-        text: '对话已过期，已自动开始新对话，请重新发送指令。'
-      })
-    } else {
-      appendMessage({ role: 'ai', text: '全局服务响应异常，请检查后端服务运行状态或认证 Token。' })
+    if (error === 'cancel' || error === 'close' || error?.message === 'cancel') {
+      await cancelApproval(approval)
+      return
     }
-    scrollToBottom()
-  } finally {
-    isAiThinking.value = false
+    ElMessage.error(error?.message || '审批操作失败')
   }
 }
 
-const handleApproval = async (approval, agentResult, userId) => {
-  const toolName = approval.toolName
-  const params = approval.params
-
-  if (toolName === 'document-delete') {
-    try {
-      const fileName = params.objectName
-      const keyword = fileName.replace('.docx', '').replace('.doc', '')
-
-      const searchRes = await docApi.searchDocs(keyword)
-
-      const docs = searchRes.data.data
-      if (!docs || docs.length === 0) {
-        appendMessage({ role: 'ai', text: '未找到文档: ' + fileName })
-        scrollToBottom()
-        return
-      }
-
-      const targetDoc = docs[0]
-
-      ElMessageBox.confirm(
-          `即将删除文档：${targetDoc.title}\n\n确认继续吗？`,
-          '删除确认',
-          { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
-      ).then(async () => {
-        await executeApproval(approval, agentResult, userId, {
-          documentId: targetDoc.id,
-          bucketName: targetDoc.bucketName || 'documents',
-          objectName: targetDoc.objectName || targetDoc.fileName || params.objectName
-        })
-      }).catch(() => {
-        appendMessage({ role: 'ai', text: '操作已取消' })
-        scrollToBottom()
-      })
-
-    } catch (err) {
-      console.error('搜索文档失败:', err)
-      appendMessage({ role: 'ai', text: '搜索文档失败: ' + err.message })
-      scrollToBottom()
-    }
-  } else {
-    ElMessageBox.confirm(
-        `即将执行操作：${toolName}\n\n确认继续吗？`,
-        '操作确认',
-        { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
-    ).then(async () => {
-      await executeApproval(approval, agentResult, userId)
-    }).catch(() => {
-      appendMessage({ role: 'ai', text: '操作已取消' })
-      scrollToBottom()
-    })
-  }
-}
-
-const executeApproval = async (approval, agentResult, userId, extraParams = {}) => {
+const executeApproval = async (approval, agentResult, extraParams = {}) => {
   isAiThinking.value = true
   try {
     const confirmRes = await agentApi.confirmApproval({
       task: agentResult.task,
-      conversationId: agentResult.conversationId,
-      userId: userId,
+      conversationId: currentConvId.value,
       model: currentModel.value,
       agentApprovalToken: approval.agentApprovalToken,
       ragEnabled: true,
@@ -315,134 +409,181 @@ const executeApproval = async (approval, agentResult, userId, extraParams = {}) 
         agentApprovalToken: approval.agentApprovalToken,
         documentId: extraParams.documentId,
         bucketName: 'omnidoc',
-        ...extraParams
-      }
+        ...extraParams,
+      },
     })
-
-    appendMessage({
-      role: 'ai',
-      text: confirmRes.data.answer || '操作已执行',
-      actionResult: parseToolResults(confirmRes.data.toolResults),
-      toolCalls: confirmRes.data.toolResults || []
-    })
+    latestActionResult.value = parseToolResults(confirmRes.data?.toolResults)
+    await conversationWorkspace.reloadMessages()
     ElMessage.success('操作已完成')
     scrollToBottom()
-  } catch (err) {
-    console.error('操作失败:', err)
-    appendMessage({
-      role: 'ai',
-      text: '操作失败：' + (err.response?.data?.message || err.message)
-    })
-    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || error.message || '操作失败')
   } finally {
     isAiThinking.value = false
   }
 }
 
-
 const parseToolResults = (toolResults) => {
-  if (!toolResults || !Array.isArray(toolResults)) return null
-
-  for (const tr of toolResults) {
-    if (tr.status === 'error') continue
-    const d = tr.data || {}
-
-    // PPT
-    if (tr.toolName?.includes('ppt') || d.htmlContent || d.fileName?.endsWith('.html')) {
+  if (!Array.isArray(toolResults)) return null
+  for (const result of toolResults) {
+    if (result.status === 'error') continue
+    const data = result.data || {}
+    if (result.toolName?.includes('ppt') || data.htmlContent || data.fileName?.endsWith('.html')) {
       return {
         type: 'ppt',
-        title: d.title || 'PPT演示文稿',
-        slideCount: d.slideCount || 0,
-        htmlContent: d.htmlContent || null,
-        fileName: d.fileName || null,
+        title: data.title || 'PPT演示文稿',
+        slideCount: data.slideCount || 0,
+        htmlContent: data.htmlContent || null,
+        fileName: data.fileName || null,
       }
     }
-
-    // Word
-    if (d.fileName?.endsWith('.docx') || d.objectName?.endsWith('.docx')) {
+    if (data.fileName?.endsWith('.docx') || data.objectName?.endsWith('.docx')) {
       return {
         type: 'doc',
-        fileName: d.fileName || d.objectName,
-        objectName: d.objectName || d.fileName,
+        fileName: data.fileName || data.objectName,
+        objectName: data.objectName || data.fileName,
         bucketName: 'omnidoc',
-        url: d.url || d.downloadUrl || null
+        url: data.url || data.downloadUrl || null,
       }
     }
-
-    // 通用文件
-    if (d.fileName || d.url) {
+    if (data.fileName || data.url) {
       return {
         type: 'file',
-        fileName: d.fileName,
-        url: d.url || d.downloadUrl
+        fileName: data.fileName,
+        url: data.url || data.downloadUrl,
       }
     }
   }
-
   return null
 }
 
-
 const handleDownload = (actionResult) => {
   if (!actionResult) return
-
-  // PPT 类型：直接用 htmlContent 生成 Blob 下载
   if (actionResult.type === 'ppt') {
-    if (actionResult.htmlContent) {
-      const blob = new Blob([actionResult.htmlContent], { type: 'text/html;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${actionResult.title || 'PPT'}.html`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      ElMessage.success('PPT 下载成功')
-    } else {
+    if (!actionResult.htmlContent) {
       ElMessage.warning('PPT 内容为空，无法下载')
+      return
     }
+    const blob = new Blob([actionResult.htmlContent], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${actionResult.title || 'PPT'}.html`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+    ElMessage.success('PPT 下载成功')
     return
   }
-
-  // Word 类型下载修改：
-  if (actionResult.type === 'doc') {
-    if (actionResult.url) {
-      window.open(actionResult.url, '_blank')
-    } else if (actionResult.objectName || actionResult.fileName) {
-      const name = actionResult.objectName || actionResult.fileName
-      window.location.href = `/api/skills/file/download?bucket=omnidoc&objectName=${encodeURIComponent(name)}`
-    } else {
-      ElMessage.warning('无法获取文件下载地址')
-    }
-    return
-  }
-
-// 通用文件下载修改：
   if (actionResult.url) {
     window.open(actionResult.url, '_blank')
-  } else if (actionResult.fileName) {
-    window.location.href = `/api/skills/file/download?objectName=${encodeURIComponent(actionResult.fileName)}`
+  } else if (actionResult.objectName || actionResult.fileName) {
+    const name = actionResult.objectName || actionResult.fileName
+    window.location.href = `/api/skills/file/download?bucket=omnidoc&objectName=${encodeURIComponent(name)}`
+  } else {
+    ElMessage.warning('无法获取文件下载地址')
   }
 }
 
-const handleNewConversation = () => {
-  ElMessageBox.confirm(
-      '确定要开始新对话吗？当前对话记录将被清空。',
-      '提示',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-  ).then(() => {
-    resetConversation()  // 清空对话历史和 ID
-    ElMessage.success('已开始新对话')
-  }).catch(() => {
-    // 用户取消
-  })
+const handleConversationSelect = async (event) => {
+  const conversationId = event.target.value
+  if (!conversationId || conversationId === currentConvId.value || isConversationBusy.value) return
+  isLifecycleBusy.value = true
+  try {
+    latestActionResult.value = null
+    await conversationWorkspace.openConversation(conversationId)
+    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  } finally {
+    isLifecycleBusy.value = false
+  }
 }
 
+const handleNewConversation = async () => {
+  if (isConversationBusy.value) return
+  isLifecycleBusy.value = true
+  try {
+    if (currentConvId.value) {
+      await ElMessageBox.confirm(
+        '将创建一个独立的新对话；当前会话会保留在历史中。',
+        '开始新对话',
+        { confirmButtonText: '创建', cancelButtonText: '取消', type: 'info' },
+      )
+    }
+    await conversationWorkspace.createConversation({ title: '新对话' })
+    latestActionResult.value = null
+    ElMessage.success('新对话已创建')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close' && error?.message !== 'cancel') {
+      ElMessage.error(normalizeConversationError(error).message)
+    }
+  } finally {
+    isLifecycleBusy.value = false
+  }
+}
+
+const handleArchiveToggle = async () => {
+  if (!activeConversation.value || isConversationBusy.value) return
+  isLifecycleBusy.value = true
+  try {
+    if (activeConversation.value.status === CONVERSATION_STATUS.ARCHIVED) {
+      await conversationWorkspace.restoreConversation()
+      ElMessage.success('会话已恢复')
+    } else {
+      await conversationWorkspace.archiveConversation()
+      ElMessage.success('会话已归档')
+    }
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  } finally {
+    isLifecycleBusy.value = false
+  }
+}
+
+const handleDeleteConversation = async () => {
+  if (!activeConversation.value || isConversationBusy.value) return
+  isLifecycleBusy.value = true
+  try {
+    await ElMessageBox.confirm(
+      `确定永久删除“${activeConversation.value.title || '未命名会话'}”吗？此操作无法恢复。`,
+      '永久删除会话',
+      {
+        confirmButtonText: '永久删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+    await conversationWorkspace.deleteConversation()
+    latestActionResult.value = null
+    ElMessage.success('会话已永久删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close' && error?.message !== 'cancel') {
+      ElMessage.error(normalizeConversationError(error).message)
+    }
+  } finally {
+    isLifecycleBusy.value = false
+  }
+}
+
+const loadOlderMessages = async () => {
+  try {
+    await conversationWorkspace.loadOlderMessages()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  }
+}
+
+const loadMoreConversations = async (status) => {
+  try {
+    if (status === 'archived') await conversationWorkspace.loadMoreArchivedConversations()
+    else await conversationWorkspace.loadMoreActiveConversations()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  }
+}
 </script>
 
 <style scoped>
@@ -474,6 +615,27 @@ const handleNewConversation = () => {
   display: flex;
   align-items: center;
 }
+
+.conversation-toolbar {
+  min-height: 42px;
+  padding: 6px 12px;
+  background: #fff;
+  border-bottom: 1px solid #edeef0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conversation-select {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #dee0e3;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: #1f2329;
+  background: #fff;
+}
+.load-older-btn { align-self: center; }
 
 /* 滚动区域 */
 .chat-scroll-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }

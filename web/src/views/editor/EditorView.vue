@@ -7,14 +7,30 @@
         <div class="brand-back" @click="$router.push('/dashboard')">
           <el-icon><ArrowLeft /></el-icon> 返回工作台
         </div>
-        <el-button class="new-chat-btn" icon="Plus" plain @click="startNewChat">开启新话题</el-button>
+        <el-button class="new-chat-btn" icon="Plus" plain :disabled="isConversationBusy" @click="startNewChat">开启新话题</el-button>
 
         <div class="history-group">
           <div class="group-title">历史会话</div>
-          <div class="history-item active">
+          <div
+              v-for="item in activeConversations"
+              :key="item.conversationId"
+              :class="['history-item', { active: item.conversationId === currentConvId }]"
+              @click="openConversationFromHistory(item.conversationId)"
+          >
             <el-icon><ChatLineRound /></el-icon>
-            <span class="text">{{ chatTitle }}</span>
+            <span class="text">{{ item.title || '未命名会话' }}</span>
           </div>
+          <div
+              v-for="item in archivedConversations"
+              :key="item.conversationId"
+              :class="['history-item', 'archived', { active: item.conversationId === currentConvId }]"
+              @click="openConversationFromHistory(item.conversationId)"
+          >
+            <el-icon><ChatLineRound /></el-icon>
+            <span class="text">{{ item.title || '未命名会话' }}（已归档）</span>
+          </div>
+          <el-button v-if="activeHasMore" link :loading="isLoadingConversations" @click="loadMoreConversationList('active')">更多进行中</el-button>
+          <el-button v-if="archivedHasMore" link :loading="isLoadingConversations" @click="loadMoreConversationList('archived')">更多归档</el-button>
         </div>
       </div>
       <div class="sidebar-bottom">
@@ -33,16 +49,20 @@
         <div class="header-inner">
           <span class="title">{{ chatTitle }}</span>
           <div class="header-actions">
-            <el-button icon="Share" link>分享</el-button>
-            <el-button icon="MoreFilled" link></el-button>
+            <el-button v-if="activeConversation" link :disabled="isConversationBusy" @click="archiveOrRestoreConversation">
+              {{ activeConversation.status === 'ARCHIVED' ? '恢复' : '归档' }}
+            </el-button>
+            <el-button v-if="activeConversation" icon="Delete" link type="danger" :disabled="isConversationBusy" @click="deleteCurrentConversation">删除</el-button>
           </div>
         </div>
       </header>
 
       <!-- 聊天内容滚动区 -->
-      <div class="chat-scroll-area" ref="globalChatRef">
-        <div class="chat-content-container">
-          <div v-for="(msg, i) in chatHistory" :key="i" :class="['message-row', msg.role]">
+        <div class="chat-scroll-area" ref="globalChatRef">
+          <div class="chat-content-container">
+          <el-button v-if="hasOlderMessages" link :loading="isLoadingMessages" @click="loadOlderConversationMessages">加载更早消息</el-button>
+          <div v-if="chatHistory.length === 0" class="empty-conversation">Hi！我是 OmniDoc 智能伙伴，今天需要我帮你完成什么工作？</div>
+          <div v-for="msg in chatHistory" :key="msg.id" :class="['message-row', msg.role]">
             <div class="avatar-col" v-if="msg.role === 'ai'">
               <el-avatar :size="36" src="https://api.dicebear.com/7.x/avataaars/svg?seed=AIAssistant" class="ai-avatar" />
             </div>
@@ -109,6 +129,7 @@
               v-model="userMsg"
               class="chat-input"
               placeholder="问问我关于工作的任何指令..."
+              :disabled="activeConversation?.status === 'ARCHIVED' || isConversationBusy"
               @keyup.enter="handleSend"
               @focus="isInputFocused = true"
               @blur="isInputFocused = false"
@@ -202,10 +223,28 @@
               <el-option v-for="m in modelOptions" :key="m.code" :label="m.name" :value="m.code" />
             </el-select>
           </div>
+          <div class="editor-conversation-bar">
+            <select :value="currentConvId || ''" :disabled="isConversationBusy" aria-label="选择编辑器会话" @change="handleEditorConversationSelect">
+              <option value="" disabled>选择历史会话</option>
+              <option v-for="item in activeConversations" :key="item.conversationId" :value="item.conversationId">
+                {{ item.title || '未命名会话' }}
+              </option>
+              <option v-for="item in archivedConversations" :key="item.conversationId" :value="item.conversationId">
+                {{ item.title || '未命名会话' }}（已归档）
+              </option>
+            </select>
+            <el-button link icon="Plus" title="新对话" :disabled="isConversationBusy" @click="startNewChat" />
+            <el-button v-if="activeConversation" link :disabled="isConversationBusy" @click="archiveOrRestoreConversation">
+              {{ activeConversation.status === 'ARCHIVED' ? '恢复' : '归档' }}
+            </el-button>
+            <el-button v-if="activeConversation" link type="danger" icon="Delete" title="永久删除" :disabled="isConversationBusy" @click="deleteCurrentConversation" />
+          </div>
         </div>
 
         <div class="chat-area" ref="sidebarChatRef">
-          <div v-for="(msg, i) in chatHistory" :key="i" :class="['chat-bubble', msg.role]">
+          <el-button v-if="hasOlderMessages" link :loading="isLoadingMessages" @click="loadOlderConversationMessages">加载更早消息</el-button>
+          <div v-if="chatHistory.length === 0" class="empty-conversation">你好！你可以向我提问，或选中文本进行润色。</div>
+          <div v-for="msg in chatHistory" :key="msg.id" :class="['chat-bubble', msg.role]">
             <div class="preserve-format">{{ msg.text }}</div>
 
             <div v-if="msg.actionResult" class="agent-action-box" style="margin-top: 10px;">
@@ -242,8 +281,8 @@
             <el-switch v-model="isRagMode" active-text="全局 RAG" size="small" />
             <el-button link size="small" type="primary" icon="Setting" @click="openRagSettings">知识分段</el-button>
           </div>
-          <el-input v-model="userMsg" type="textarea" :rows="3" placeholder="下达任意指令，如生成PPT、润色、总结..." @keyup.enter.native="handleSend" resize="none" />
-          <el-button type="primary" class="send-btn" :loading="isAiThinking" @click="handleSend" icon="Position">发送给 AI</el-button>
+          <el-input v-model="userMsg" type="textarea" :rows="3" placeholder="下达任意指令，如生成PPT、润色、总结..." :disabled="activeConversation?.status === 'ARCHIVED' || isConversationBusy" @keyup.enter.native="handleSend" resize="none" />
+          <el-button type="primary" class="send-btn" :loading="isAiThinking" :disabled="activeConversation?.status === 'ARCHIVED' || isConversationBusy" @click="handleSend" icon="Position">发送给 AI</el-button>
         </div>
       </aside>
 
@@ -304,16 +343,62 @@ import { agentApi } from '../../api/agent'
 import request from '../../utils/request'
 import CollaboratePanel from '../../collaboration/CollaboratePanel.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  CONVERSATION_ERROR,
+  CONVERSATION_STATUS,
+  normalizeConversationError,
+} from '../../api/conversationContract.js'
+import { CONVERSATION_ENTRY } from '../../composables/useConversationSession.js'
+import {
+  toConversationChatMessage,
+  useConversationWorkspace,
+} from '../../composables/useConversationWorkspace.js'
+import { getAuthenticatedUserId } from '../../utils/jwt.js'
 const route = useRoute(); const router = useRouter(); const docId = route.params.id
+
+const authenticatedUserId = getAuthenticatedUserId()
+if (!authenticatedUserId) throw new Error('Authenticated conversation scope is unavailable')
+const conversationWorkspace = useConversationWorkspace({
+  userId: authenticatedUserId,
+  entry: CONVERSATION_ENTRY.EDITOR,
+})
 
 
 // ===== 状态定义 =====
 const isChatMode = computed(() => docId === 'chat-mode')
-const chatTitle = ref('新对话'); const isInputFocused = ref(false); const isSaving = ref(false); const saveStatusText = ref('已同步')
+const chatTitle = computed(() => conversationWorkspace.activeConversation.value?.title || '新对话'); const isInputFocused = ref(false); const isSaving = ref(false); const saveStatusText = ref('已同步')
 const docName = ref(sessionStorage.getItem('currentDocName') || '未命名文档'); const currentUserName = ref('User')
-const currentUserId = ref(localStorage.getItem('userId') || '')
+const currentUserId = ref(authenticatedUserId)
 const docContent = ref(''); const docLoading = ref(false); const aiSummary = ref('')
-const userMsg = ref(''); const isAiThinking = ref(false); const chatHistory = ref([]); const currentConvId = ref('')
+const isAiThinking = ref(false); const pendingPreview = ref(null); const latestActionResult = ref(null); const isConversationLifecycleBusy = ref(false)
+const currentConvId = conversationWorkspace.activeConversationId
+const activeConversation = conversationWorkspace.activeConversation
+const activeConversations = conversationWorkspace.activeConversations
+const archivedConversations = conversationWorkspace.archivedConversations
+const activeHasMore = conversationWorkspace.activeHasMore
+const archivedHasMore = conversationWorkspace.archivedHasMore
+const hasOlderMessages = conversationWorkspace.hasOlderMessages
+const isLoadingConversations = conversationWorkspace.isLoadingConversations
+const isLoadingMessages = conversationWorkspace.isLoadingMessages
+const userMsg = computed({
+  get: () => conversationWorkspace.session.draft.value,
+  set: (value) => conversationWorkspace.setDraft(value),
+})
+const isConversationBusy = computed(() => isAiThinking.value
+  || isConversationLifecycleBusy.value
+  || isLoadingMessages.value)
+const chatHistory = computed(() => {
+  const items = conversationWorkspace.messages.value.map(toConversationChatMessage)
+  if (latestActionResult.value) {
+    const lastAssistant = items.findLastIndex((item) => item.role === 'ai')
+    if (lastAssistant >= 0) items[lastAssistant] = {
+      ...items[lastAssistant],
+      actionResult: latestActionResult.value,
+    }
+  }
+  if (pendingPreview.value) items.push(pendingPreview.value)
+  return items
+})
 const showAiBall = ref(false); const ballStyle = reactive({ top: '0px', left: '0px' }); const selectedText = ref('')
 const showHistory = ref(false); const versionList = ref([])
 const keywords = ref([]); const keywordsLoading = ref(false); const isRagMode = ref(false)
@@ -348,23 +433,16 @@ const fetchModels = async () => {
 
 // ===== 1. 加载文档与初始化 AI =====
 const loadDocData = async () => {
-  const uid = localStorage.getItem('userId') || '1'
-  currentUserId.value = uid
-  userApi.getUserInfo(uid).then(r => currentUserName.value = r.data.username || 'aa').catch(()=>{})
-
-  // 初始化 AI 对话
-  aiApi.startChat(uid).then(res => currentConvId.value = res.data).catch(() => console.warn('AI 会话开启失败'))
+  currentUserId.value = authenticatedUserId
+  userApi.getUserInfo(authenticatedUserId).then(r => currentUserName.value = r.data.username || 'aa').catch(()=>{})
 
   if (isChatMode.value) {
     const task = sessionStorage.getItem('global_ai_task')
     if (task) {
-      chatTitle.value = task.length > 10 ? task.substring(0, 10) + '...' : task
       userMsg.value = task; sessionStorage.removeItem('global_ai_task'); setTimeout(() => handleSend(), 500)
-    } else { chatHistory.value.push({ role: 'ai', text: 'Hi！我是 OmniDoc 智能伙伴，今天需要我帮你完成什么工作？' }) }
+    }
     return
   }
-
-  chatHistory.value.push({ role: 'ai', text: '你好！我是接入了大语言模型的助手。你可以向我提问，或选中文本进行润色。' })
   docLoading.value = true
   try {
     const docRes = await docApi.getDocDetail(docId)
@@ -404,8 +482,13 @@ const loadDocData = async () => {
 }
 
 // 首次加载
-onMounted(() => {
-  fetchModels()
+onMounted(async () => {
+  const preferredConversationId = isChatMode.value ? route.query?.conversation : undefined
+  await Promise.all([
+    fetchModels(),
+    conversationWorkspace.initialize({ preferredConversationId }),
+  ])
+  syncConversationRoute()
   loadDocData().then(() => {
     const paperElement = document.querySelector('.paper')
     if (paperElement) {
@@ -467,7 +550,7 @@ const handleModelChange = () => {
 
 // ===== 2. 交互逻辑 =====
 const handleSend = async () => {
-  if (!userMsg.value.trim() || isAiThinking.value) return
+  if (!userMsg.value.trim() || isConversationBusy.value) return
 
   const q = userMsg.value
   const pendingSelectedText = selectedText.value
@@ -500,32 +583,29 @@ const handleSend = async () => {
     }
   }
 
-  chatHistory.value.push({ role: 'user', text: q })
-  userMsg.value = ''
+  let submission = null
   isAiThinking.value = true
-  clearSelection()
-  scrollToBottom()
-
-  if (isChatMode.value && chatTitle.value === '新对话') {
-    chatTitle.value = q.substring(0, 10) + '...'
-  }
-
+  latestActionResult.value = null
   try {
-    const contextText = document.querySelector('.paper')?.innerText || ''
-    let finalPrompt = q
-
-    if (!isChatMode.value && contextText.trim().length > 0) {
-      if (isRagMode.value) {
-        finalPrompt = `【系统指令：用户开启了云端知识库查询。如果下面提供的局部文档无法回答，请务必调用 rag-search 工具去检索全量知识库】\n\n【当前正在阅览的文档片段】\n${contextText.substring(0, 2000)}\n\n【用户指令】\n${q}`
-      } else {
-        finalPrompt = `【系统指令：请主要基于以下正在编辑的文档内容执行用户的指令，例如总结、润色、纠错或生成PPT等】\n\n【当前文档内容】\n${contextText.substring(0, 3000)}\n\n【用户指令】\n${q}`
-      }
+    if (!currentConvId.value) {
+      await conversationWorkspace.createConversation({ title: q.trim().slice(0, 40) || '新对话' })
+      syncConversationRoute()
     }
+    submission = conversationWorkspace.beginSubmission()
+    pendingPreview.value = {
+      id: `pending-${submission.clientRequestId}`,
+      role: 'user',
+      text: submission.content,
+    }
+    clearSelection()
+    scrollToBottom()
 
+    const contextText = document.querySelector('.paper')?.innerText || ''
     const res = await agentApi.executeTask({
-      task: (frontendWriteIntent || frontendDeleteIntent) ? q : finalPrompt,
+      task: submission.content,
       model: currentModel.value,
-      conversationId: currentConvId.value || 'default_conv',
+      conversationId: submission.conversationId,
+      clientRequestId: submission.clientRequestId,
       context: {
         documentId: shouldSendCurrentDocumentId ? docId : undefined,
         frontendDocumentWrite: frontendWriteIntent,
@@ -538,19 +618,15 @@ const handleSend = async () => {
     })
 
     const agentResult = res.data
-    const answerText = agentResult.answer || agentResult.text || "任务已完成！"
-
-    isAiThinking.value = false
 
     const writeResult = applyFrontendWriteFromToolResults(agentResult.toolResults)
     const fileResult = parseToolResults(agentResult.toolResults)
-
-    chatHistory.value.push({
-      role: 'ai',
-      text: answerText,
-      actionResult: writeResult || fileResult,
-      toolCalls: agentResult.toolResults || []
-    })
+    latestActionResult.value = writeResult || fileResult
+    pendingPreview.value = null
+    const completion = await conversationWorkspace.completeSubmission(submission.clientRequestId)
+    if (completion.historyReloadFailed) {
+      ElMessage.warning('任务已完成，但历史暂时未刷新；重新打开会话后可再次加载。')
+    }
 
     if (frontendDeleteIntent && hasDeletedCurrentDocument(agentResult.toolResults)) {
       ElMessage.success('文档已永久删除，即将返回工作台')
@@ -561,21 +637,22 @@ const handleSend = async () => {
 
   } catch (error) {
     console.error("AI 交互失败", error)
-    isAiThinking.value = false
-
-    const lowerQ = q.toLowerCase()
-    let mockReply = "网络或模型未响应，这是本地兜底回复：建议在此处增加更多量化指标以提升专业度。"
-
-    if (lowerQ.includes('纠错') || lowerQ.includes('错别字')) {
-      mockReply = `【智能纠错】\n发现 1 处拼写错误：\n- ❌ "严尽" 应修改为 ✅ "严禁"。`
-    } else if (lowerQ.includes('润色')) {
-      mockReply = `【智能润色】建议修改为："为了杜绝安全隐患，严禁私拉乱接电线。"`
-    } else if (lowerQ.includes('总结') || lowerQ.includes('摘要')) {
-      mockReply = `【文档摘要】本文档强调了办公用电安全，要求离开时关闭电源，严禁私拉电线。`
+    pendingPreview.value = null
+    if (submission) conversationWorkspace.markSubmissionFailed(error)
+    const normalized = normalizeConversationError(error)
+    if (normalized.code === CONVERSATION_ERROR.NOT_FOUND) {
+      conversationWorkspace.invalidateActiveConversation()
+      syncConversationRoute()
+      ElMessage.warning('当前会话已失效，草稿已保留。请新建或选择其他会话。')
+    } else if (normalized.code === CONVERSATION_ERROR.ARCHIVED) {
+      ElMessage.warning('该会话已归档，请先恢复后再发送。')
+    } else {
+      ElMessage.error(normalized.message || 'AI 暂时无法响应，草稿已保留。')
     }
-
-    chatHistory.value.push({ role: 'ai', text: mockReply })
+    await conversationWorkspace.reloadMessages().catch(() => {})
     scrollToBottom()
+  } finally {
+    isAiThinking.value = false
   }
 }
 
@@ -846,11 +923,6 @@ const parseToolResults = (toolResults) => {
   return null
 }
 
-const typeEffect = (text) => {
-  isAiThinking.value = false; const aiMsg = reactive({ role: 'ai', text: '' }); chatHistory.value.push(aiMsg)
-  let i = 0; const t = setInterval(() => { if(i < text.length) { aiMsg.text += text.charAt(i); i++; scrollToBottom() } else clearInterval(t) }, 30)
-}
-
 // ===== 3. 手动保存与恢复逻辑 =====
 const handleManualSave = async () => {
   if (isChatMode.value) return
@@ -1061,7 +1133,100 @@ const handleScroll = () => { if(showAiBall.value) showAiBall.value = false }
 const clearSelection = () => { selectedText.value = ''; showAiBall.value = false }
 const handleInput = () => { saveStatusText.value = '修改未保存' }
 const openHistoryDrawer = async () => { const res = await docApi.getVersions(docId); versionList.value = res.data; showHistory.value = true }
-const startNewChat = () => { chatHistory.value = []; chatTitle.value = '新对话' }
+const syncConversationRoute = () => {
+  if (!isChatMode.value || typeof router.replace !== 'function') return
+  const query = { ...(route.query || {}) }
+  if (currentConvId.value) query.conversation = currentConvId.value
+  else delete query.conversation
+  Promise.resolve(router.replace({ path: route.path, query })).catch(() => {})
+}
+const openConversationFromHistory = async (conversationId) => {
+  if (!conversationId || conversationId === currentConvId.value || isConversationBusy.value) return
+  isConversationLifecycleBusy.value = true
+  try {
+    latestActionResult.value = null
+    await conversationWorkspace.openConversation(conversationId)
+    syncConversationRoute()
+    scrollToBottom()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  } finally {
+    isConversationLifecycleBusy.value = false
+  }
+}
+const handleEditorConversationSelect = (event) => openConversationFromHistory(event.target.value)
+const startNewChat = async () => {
+  if (isConversationBusy.value) return
+  isConversationLifecycleBusy.value = true
+  try {
+    await conversationWorkspace.createConversation({ title: '新对话' })
+    latestActionResult.value = null
+    syncConversationRoute()
+    ElMessage.success('新对话已创建')
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  } finally {
+    isConversationLifecycleBusy.value = false
+  }
+}
+const archiveOrRestoreConversation = async () => {
+  if (!activeConversation.value || isConversationBusy.value) return
+  isConversationLifecycleBusy.value = true
+  try {
+    if (activeConversation.value.status === CONVERSATION_STATUS.ARCHIVED) {
+      await conversationWorkspace.restoreConversation()
+      ElMessage.success('会话已恢复')
+    } else {
+      await conversationWorkspace.archiveConversation()
+      ElMessage.success('会话已归档')
+    }
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  } finally {
+    isConversationLifecycleBusy.value = false
+  }
+}
+const deleteCurrentConversation = async () => {
+  if (!activeConversation.value || isConversationBusy.value) return
+  isConversationLifecycleBusy.value = true
+  try {
+    await ElMessageBox.confirm(
+      `确定永久删除“${activeConversation.value.title || '未命名会话'}”吗？此操作无法恢复。`,
+      '永久删除会话',
+      {
+        confirmButtonText: '永久删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+    await conversationWorkspace.deleteConversation()
+    latestActionResult.value = null
+    syncConversationRoute()
+    ElMessage.success('会话已永久删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close' && error?.message !== 'cancel') {
+      ElMessage.error(normalizeConversationError(error).message)
+    }
+  } finally {
+    isConversationLifecycleBusy.value = false
+  }
+}
+const loadOlderConversationMessages = async () => {
+  try {
+    await conversationWorkspace.loadOlderMessages()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  }
+}
+const loadMoreConversationList = async (status) => {
+  try {
+    if (status === 'archived') await conversationWorkspace.loadMoreArchivedConversations()
+    else await conversationWorkspace.loadMoreActiveConversations()
+  } catch (error) {
+    ElMessage.error(normalizeConversationError(error).message)
+  }
+}
 const scrollToBottom = () => { nextTick(() => {
   const c = isChatMode.value ? document.querySelector('.chat-scroll-area') : document.querySelector('.chat-area'); if(c) c.scrollTop = c.scrollHeight
 }) }
@@ -1100,7 +1265,11 @@ const scrollToBottom = () => { nextTick(() => {
 .brand-back:hover { color: #3370ff; }
 .new-chat-btn { width: 100%; border-radius: 8px; margin-bottom: 30px; font-weight: 600; height: 36px; }
 .group-title { font-size: 12px; color: #8f959e; margin-bottom: 12px; padding-left: 4px; }
-.history-item { padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; gap: 10px; font-size: 14px; background: #e1eaff; color: #3370ff; cursor: pointer; font-weight: 500; }
+.history-group { display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 250px); overflow-y: auto; }
+.history-item { padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #4e5969; cursor: pointer; font-weight: 500; }
+.history-item:hover { background: #f2f3f5; }
+.history-item.active { background: #e1eaff; color: #3370ff; }
+.history-item.archived { color: #8f959e; }
 .history-item .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 侧边栏底部用户 */
@@ -1130,6 +1299,7 @@ const scrollToBottom = () => { nextTick(() => {
   justify-content: center;
 }
 .chat-content-container { width: 100%; max-width: 850px; padding: 0 24px; display: flex; flex-direction: column; }
+.empty-conversation { color: #8f959e; text-align: center; padding: 48px 20px; line-height: 1.7; }
 
 .message-row { display: flex; gap: 16px; margin-bottom: 32px; }
 .message-row.user { flex-direction: row-reverse; }
@@ -1184,6 +1354,8 @@ const scrollToBottom = () => { nextTick(() => {
   align-items: center;
   justify-content: space-between;
 }
+.editor-conversation-bar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+.editor-conversation-bar select { flex: 1; min-width: 0; height: 30px; border: 1px solid #dee0e3; border-radius: 6px; padding: 0 8px; color: #4e5969; background: #fff; }
 .chat-area { flex-grow: 1; padding: 20px; overflow-y: auto; background: #fafbfc; display: flex; flex-direction: column; }
 .chat-bubble { max-width: 90%; padding: 12px 16px; border-radius: 14px; margin-bottom: 16px; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
 .chat-bubble.ai { background: #fff; border: 1px solid #dee0e3; align-self: flex-start; border-bottom-left-radius: 2px;}

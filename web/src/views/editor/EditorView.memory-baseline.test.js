@@ -2,66 +2,81 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  route: { path: '/editor/chat-mode', params: { id: 'chat-mode' } },
+  route: { path: '/editor/chat-mode', params: { id: 'chat-mode' }, query: {} },
   routerPush: vi.fn(),
+  routerReplace: vi.fn(),
+  createConversation: vi.fn(),
+  listConversations: vi.fn(),
+  getConversation: vi.fn(),
+  listMessages: vi.fn(),
+  archiveConversation: vi.fn(),
+  restoreConversation: vi.fn(),
+  deleteConversation: vi.fn(),
   getModels: vi.fn(),
-  startChat: vi.fn(),
   executeTask: vi.fn(),
   getUserInfo: vi.fn(),
+  error: vi.fn(),
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => mocks.route,
-  useRouter: () => ({ push: mocks.routerPush }),
-}))
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual('vue-router')
+  return {
+    ...actual,
+    useRoute: () => mocks.route,
+    useRouter: () => ({ push: mocks.routerPush, replace: mocks.routerReplace }),
+  }
+})
 
-vi.mock('../../api/ai', () => ({
-  aiApi: {
-    getModels: mocks.getModels,
-    startChat: mocks.startChat,
+vi.mock('../../api/conversation.js', () => ({
+  conversationApi: {
+    createConversation: mocks.createConversation,
+    listConversations: mocks.listConversations,
+    getConversation: mocks.getConversation,
+    listMessages: mocks.listMessages,
+    archiveConversation: mocks.archiveConversation,
+    restoreConversation: mocks.restoreConversation,
+    deleteConversation: mocks.deleteConversation,
   },
 }))
 
-vi.mock('../../api/agent', () => ({
-  agentApi: { executeTask: mocks.executeTask },
-}))
-
-vi.mock('../../api/user', () => ({
-  userApi: { getUserInfo: mocks.getUserInfo },
-}))
-
+vi.mock('../../api/ai', () => ({ aiApi: { getModels: mocks.getModels } }))
+vi.mock('../../api/agent', () => ({ agentApi: { executeTask: mocks.executeTask } }))
+vi.mock('../../api/user', () => ({ userApi: { getUserInfo: mocks.getUserInfo } }))
 vi.mock('../../api/file', () => ({ fileApi: {} }))
 vi.mock('../../api/document', () => ({ docApi: {} }))
 vi.mock('../../utils/request', () => ({ default: {} }))
 vi.mock('../../collaboration/CollaboratePanel.vue', () => ({
   default: { template: '<div />' },
 }))
-
 vi.mock('element-plus', () => ({
   ElMessage: {
     success: vi.fn(),
     warning: vi.fn(),
-    error: vi.fn(),
+    error: mocks.error,
     info: vi.fn(),
   },
   ElMessageBox: { confirm: vi.fn() },
 }))
 
 import EditorView from './EditorView.vue'
-import GlobalAiAssistant from '../components/GlobalAiAssistant.vue'
-import { useGlobalAi } from '../../utils/useGlobalAi.js'
 
-const ButtonStub = {
-  template: '<button><slot /></button>',
+const conversation = (conversationId) => ({
+  conversationId,
+  title: conversationId,
+  status: 'ACTIVE',
+  createdAt: '2026-08-11T00:00:00Z',
+  updatedAt: '2026-08-11T00:00:00Z',
+})
+
+const token = (userId) => {
+  const payload = btoa(JSON.stringify({ userId, exp: Math.floor(Date.now() / 1000) + 3600 }))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `header.${payload}.signature`
 }
 
-const DrawerStub = {
-  template: '<section><slot /></section>',
-}
-
+const ButtonStub = { template: '<button v-bind="$attrs" @click="$emit(\'click\')"><slot /></button>' }
 const globalStubs = {
   'el-button': ButtonStub,
-  'el-drawer': DrawerStub,
   'el-icon': true,
   'el-select': true,
   'el-option': true,
@@ -69,99 +84,66 @@ const globalStubs = {
   'el-tooltip': { template: '<div><slot /></div>' },
   'el-divider': true,
 }
+const mountEditor = () => mount(EditorView, { global: { stubs: globalStubs } })
 
-const mountEditor = () => mount(EditorView, {
-  global: { stubs: globalStubs },
-})
-
-const mountGlobalAssistant = () => mount(GlobalAiAssistant, {
-  global: { stubs: globalStubs },
-})
-
-const sendFromEditor = async (wrapper, message) => {
-  const input = wrapper.get('input.chat-input')
-  await input.setValue(message)
-  await input.trigger('keyup.enter')
-  await flushPromises()
-}
-
-describe('EditorView current memory baseline', () => {
+describe('EditorView Memory V1 target behavior', () => {
   beforeEach(() => {
-    useGlobalAi().resetConversation()
     localStorage.clear()
     sessionStorage.clear()
+    Object.values(mocks).forEach((value) => value?.mockReset?.())
     mocks.route.path = '/editor/chat-mode'
-    mocks.route.params.id = 'chat-mode'
+    mocks.route.params = { id: 'chat-mode' }
+    mocks.route.query = {}
+    mocks.routerReplace.mockResolvedValue(undefined)
     mocks.getModels.mockResolvedValue({ data: [] })
-    mocks.startChat.mockResolvedValue({ data: 'conv-editor-existing' })
-    mocks.executeTask.mockResolvedValue({
-      data: { answer: '编辑器回答', toolResults: [] },
-    })
     mocks.getUserInfo.mockResolvedValue({ data: { username: 'tester' } })
-    vi.spyOn(console, 'log').mockImplementation(() => {})
+    mocks.listConversations.mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+    mocks.listMessages.mockResolvedValue({ items: [], nextBeforeSequence: null, hasMore: false })
+    mocks.executeTask.mockResolvedValue({ data: { answer: '编辑器回答', toolResults: [] } })
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
-  it('clears the chat UI for a new topic but reuses the existing backend id', async () => {
+  it('creates and switches to a real backend conversation before sending', async () => {
+    localStorage.setItem('accessToken', token('editor-create'))
+    mocks.createConversation.mockResolvedValue(conversation('conv-editor-new'))
+
     const wrapper = mountEditor()
     await flushPromises()
-
-    expect(mocks.startChat).toHaveBeenCalledOnce()
-
     await wrapper.get('.new-chat-btn').trigger('click')
-    await sendFromEditor(wrapper, '新话题的第一条消息')
+    await flushPromises()
+    const input = wrapper.get('input.chat-input')
+    await input.setValue('新话题的第一条消息')
+    await input.trigger('keyup.enter')
+    await flushPromises()
 
-    expect(mocks.startChat).toHaveBeenCalledOnce()
+    expect(mocks.createConversation).toHaveBeenCalledOnce()
     expect(mocks.executeTask).toHaveBeenCalledWith(expect.objectContaining({
-      conversationId: 'conv-editor-existing',
+      conversationId: 'conv-editor-new',
       task: '新话题的第一条消息',
+      clientRequestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
     }))
-
+    expect(mocks.routerReplace).toHaveBeenCalledWith(expect.objectContaining({
+      query: expect.objectContaining({ conversation: 'conv-editor-new' }),
+    }))
     wrapper.unmount()
   })
 
-  it('falls back to default_conv when editor conversation creation fails', async () => {
-    mocks.startChat.mockRejectedValueOnce(new Error('create failed'))
+  it('preserves the draft and does not send with a default id when creation fails', async () => {
+    localStorage.setItem('accessToken', token('editor-create-fail'))
+    mocks.createConversation.mockRejectedValue(new Error('create failed'))
 
     const wrapper = mountEditor()
     await flushPromises()
-    await sendFromEditor(wrapper, '创建失败后的消息')
+    const input = wrapper.get('input.chat-input')
+    await input.setValue('创建失败后的消息')
+    await input.trigger('keyup.enter')
+    await flushPromises()
 
-    expect(mocks.executeTask).toHaveBeenCalledWith(expect.objectContaining({
-      conversationId: 'default_conv',
-      task: '创建失败后的消息',
-    }))
-
+    expect(mocks.createConversation).toHaveBeenCalledOnce()
+    expect(mocks.executeTask).not.toHaveBeenCalled()
+    expect(input.element.value).toBe('创建失败后的消息')
+    expect(mocks.error).toHaveBeenCalled()
     wrapper.unmount()
-  })
-
-  it('keeps global assistant and editor active conversation state split', async () => {
-    const globalSession = useGlobalAi()
-    globalSession.saveConvId('conv-global-existing')
-
-    const editor = mountEditor()
-    await flushPromises()
-    await sendFromEditor(editor, '编辑器消息')
-
-    const globalAssistant = mountGlobalAssistant()
-    await flushPromises()
-    const globalInput = globalAssistant.get('input.custom-input')
-    await globalInput.setValue('全局助理消息')
-    await globalInput.trigger('keyup.enter')
-    await flushPromises()
-
-    expect(mocks.executeTask).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      conversationId: 'conv-editor-existing',
-      task: '编辑器消息',
-    }))
-    expect(mocks.executeTask).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      conversationId: 'conv-global-existing',
-      task: '全局助理消息',
-    }))
-    expect(globalSession.currentConvId.value).toBe('conv-global-existing')
-
-    editor.unmount()
-    globalAssistant.unmount()
   })
 })
