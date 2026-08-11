@@ -27,15 +27,20 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -188,6 +193,57 @@ class AgentExecutionServiceTest {
         verify(fileDeleteService).deleteFile(
                 argThat(dto -> "a.txt".equals(dto.getObjectName()) && "omnidoc".equals(dto.getBucketName())),
                 eq("agent-approved:user-1"));
+    }
+
+    @Test
+    void continuationAndApprovalPathsRecheckConversationOwnerBeforeMutation() {
+        AgentExecutionService service = new AgentExecutionService();
+        ConversationManager conversationManager = mock(ConversationManager.class);
+        RequestUserContext requestUserContext = mock(RequestUserContext.class);
+        AgentApprovalService approvalService = mock(AgentApprovalService.class);
+        AgentTaskRegistry taskRegistry = new AgentTaskRegistry();
+
+        when(requestUserContext.getRequiredUserId()).thenReturn("owner");
+        doThrow(new SecurityException("conversation owner mismatch"))
+                .when(conversationManager).assertOwner("conv-foreign", "owner");
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("traceId", "trace-owner");
+        snapshot.put("conversationId", "conv-foreign");
+        snapshot.put("userId", "owner");
+        snapshot.put("task", "protected task");
+        snapshot.put("status", "action_required");
+        snapshot.put("context", new HashMap<>());
+        snapshot.put("pendingApproval", Map.of("agentApprovalToken", "approval-owner"));
+        taskRegistry.save("trace-owner", snapshot);
+
+        ReflectionTestUtils.setField(service, "conversationManager", conversationManager);
+        ReflectionTestUtils.setField(service, "requestUserContext", requestUserContext);
+        ReflectionTestUtils.setField(service, "agentApprovalService", approvalService);
+        ReflectionTestUtils.setField(service, "taskRegistry", taskRegistry);
+
+        AgentExecutionRequest continuation = new AgentExecutionRequest();
+        continuation.setTask("continue");
+        continuation.setContinueTraceId("trace-owner");
+
+        AgentExecutionRequest confirmation = new AgentExecutionRequest();
+        confirmation.setApprovalToken("approval-owner");
+
+        assertThatThrownBy(() -> service.execute(continuation))
+                .isInstanceOf(SecurityException.class)
+                .hasMessage("conversation owner mismatch");
+        assertThatThrownBy(() -> service.confirmApproval(confirmation))
+                .isInstanceOf(SecurityException.class)
+                .hasMessage("conversation owner mismatch");
+        assertThatThrownBy(() -> service.cancelApproval("approval-owner", "owner"))
+                .isInstanceOf(SecurityException.class)
+                .hasMessage("conversation owner mismatch");
+
+        verify(conversationManager, times(3)).assertOwner("conv-foreign", "owner");
+        verify(approvalService, never()).cancel("approval-owner");
+        assertThat(taskRegistry.get("trace-owner"))
+                .containsEntry("status", "action_required")
+                .containsEntry("pendingApproval", Map.of("agentApprovalToken", "approval-owner"));
     }
 
     @SuppressWarnings("unchecked")

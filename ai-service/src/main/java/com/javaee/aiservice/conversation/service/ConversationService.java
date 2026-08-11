@@ -10,6 +10,7 @@ import com.javaee.aiservice.conversation.model.ConversationPage;
 import com.javaee.aiservice.conversation.model.ConversationRole;
 import com.javaee.aiservice.conversation.model.ConversationStatus;
 import com.javaee.aiservice.conversation.model.MessageAppendCommand;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateCleanup;
 import com.javaee.aiservice.conversation.store.ConversationStore;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +27,18 @@ public class ConversationService {
 
     private final ConversationStore conversationStore;
     private final LegacyConversationImporter legacyImporter;
+    private final RuntimeStateCleanup runtimeStateCleanup;
     private final MemoryPersistenceProperties properties;
 
     public ConversationService(
             ConversationStore conversationStore,
             LegacyConversationImporter legacyImporter,
+            RuntimeStateCleanup runtimeStateCleanup,
             MemoryPersistenceProperties properties
     ) {
         this.conversationStore = conversationStore;
         this.legacyImporter = legacyImporter;
+        this.runtimeStateCleanup = runtimeStateCleanup;
         this.properties = properties;
     }
 
@@ -142,6 +146,9 @@ public class ConversationService {
 
     public void delete(String conversationId, String userId) {
         requireOwned(conversationId, userId);
+        // Runtime cleanup is required before the durable delete. If Redis is unavailable, the
+        // conversation remains owned and durable so the caller can safely retry deletion.
+        runtimeStateCleanup.clearConversation(conversationId);
         // Clear a compatible legacy source before committing the durable delete. Otherwise a
         // subsequent lookup could import the same conversation again and make deletion reversible.
         legacyImporter.deleteOwnedSource(conversationId, userId);

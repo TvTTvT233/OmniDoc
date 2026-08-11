@@ -1,8 +1,15 @@
 package com.javaee.aiservice.memory;
 
+import com.javaee.aiservice.agent.execution.AgentExecutionService;
+import com.javaee.aiservice.agent.execution.approval.AgentApprovalService;
+import com.javaee.aiservice.agent.execution.model.AgentExecutionRequest;
+import com.javaee.aiservice.agent.execution.task.AgentTaskRegistry;
 import com.javaee.aiservice.conversation.ConversationPersistenceTestFixture;
+import com.javaee.aiservice.conversation.ConversationManager;
 import com.javaee.aiservice.conversation.model.ConversationMessage;
 import com.javaee.aiservice.conversation.model.ConversationRole;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
+import com.javaee.aiservice.conversation.runtime.ConversationRuntimeDerivativeCleanup;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateField;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateProperties;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateScope;
@@ -10,12 +17,16 @@ import com.javaee.aiservice.conversation.runtime.RuntimeStateService;
 import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
 import com.javaee.aiservice.conversation.service.ConversationService;
+import com.javaee.aiservice.security.RequestUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,6 +34,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * Executable inventory of frozen Memory V1 gaps. Each test remains disabled only until the
@@ -137,16 +152,94 @@ class MemoryV1ExpectedContractTest {
         assertThat(otherTrace).isNotEqualTo(otherConversation);
     }
 
-    @Disabled("M03: deletion must clear Runtime State, task snapshots and approval references")
     @Test
     void m03ConversationDeletionCascadesRuntimeDerivatives() {
-        pending("M03 cascade cleanup");
+        RuntimeStateService runtimeStateService = mock(RuntimeStateService.class);
+        AgentTaskRegistry taskRegistry = new AgentTaskRegistry();
+        AgentApprovalService approvalService = mock(AgentApprovalService.class);
+        when(approvalService.cancel("approval-delete")).thenReturn(true);
+        taskRegistry.save("trace-delete", new LinkedHashMap<>(Map.of(
+                "traceId", "trace-delete",
+                "conversationId", "conv-delete",
+                "userId", "owner",
+                "pendingApproval", Map.of("agentApprovalToken", "approval-delete"))));
+
+        ConversationRuntimeDerivativeCleanup derivatives = new ConversationRuntimeDerivativeCleanup(
+                runtimeStateService, taskRegistry, approvalService);
+        derivatives.clearConversation("conv-delete");
+
+        verify(runtimeStateService).clearConversation("conv-delete");
+        verify(approvalService).cancel("approval-delete");
+        assertThat(taskRegistry.get("trace-delete")).isEmpty();
+
+        AtomicInteger durableRowsSeenByCleanup = new AtomicInteger(-1);
+        ConversationService cleanupAware = fixture.newService(conversationId ->
+                durableRowsSeenByCleanup.set(conversationRowCount(fixture, conversationId)));
+        String deletedConversationId = cleanupAware.createConversation("owner").conversationId();
+
+        cleanupAware.delete(deletedConversationId, "owner");
+
+        assertThat(durableRowsSeenByCleanup).hasValue(1);
+        assertThat(conversationRowCount(fixture, deletedConversationId)).isZero();
+
+        ConversationPersistenceTestFixture retryableFixture = new ConversationPersistenceTestFixture();
+        ConversationService cleanupUnavailable = retryableFixture.newService(conversationId -> {
+            throw new RuntimeStateException.Unavailable("test-cleanup", new IllegalStateException("Redis unavailable"));
+        });
+        String retryableConversationId = cleanupUnavailable.createConversation("owner").conversationId();
+        cleanupUnavailable.appendExchange(
+                retryableConversationId, "owner", "request-1", "turn-1", "question", "answer");
+
+        assertThatThrownBy(() -> cleanupUnavailable.delete(retryableConversationId, "owner"))
+                .isInstanceOf(RuntimeStateException.Unavailable.class)
+                .hasMessageContaining("test-cleanup");
+        assertThat(conversationRowCount(retryableFixture, retryableConversationId)).isEqualTo(1);
+        assertThat(retryableFixture.jdbcTemplate().queryForObject(
+                "SELECT COUNT(*) FROM ai_conversation_message WHERE conversation_id = ?",
+                Integer.class,
+                retryableConversationId)).isEqualTo(2);
     }
 
-    @Disabled("M03: service-level continuation and approval cancellation must recheck ownership first")
     @Test
     void m03ContinuationAndApprovalCancellationEnforceOwnershipInsideService() {
-        pending("M03 service-level owner checks");
+        AgentExecutionService agentService = new AgentExecutionService();
+        AgentTaskRegistry taskRegistry = new AgentTaskRegistry();
+        AgentApprovalService approvalService = mock(AgentApprovalService.class);
+        ConversationManager conversationManager = mock(ConversationManager.class);
+        RequestUserContext userContext = mock(RequestUserContext.class);
+        when(userContext.getRequiredUserId()).thenReturn("intruder");
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("traceId", "trace-owner");
+        snapshot.put("conversationId", "conv-owner");
+        snapshot.put("userId", "owner");
+        snapshot.put("task", "protected task");
+        snapshot.put("status", "action_required");
+        snapshot.put("context", new HashMap<>());
+        snapshot.put("pendingApproval", Map.of("agentApprovalToken", "approval-owner"));
+        taskRegistry.save("trace-owner", snapshot);
+
+        ReflectionTestUtils.setField(agentService, "requestUserContext", userContext);
+        ReflectionTestUtils.setField(agentService, "conversationManager", conversationManager);
+        ReflectionTestUtils.setField(agentService, "taskRegistry", taskRegistry);
+        ReflectionTestUtils.setField(agentService, "agentApprovalService", approvalService);
+
+        AgentExecutionRequest continuation = new AgentExecutionRequest();
+        continuation.setTask("continue as the owner");
+        continuation.setUserId("owner");
+        continuation.setContinueTraceId("trace-owner");
+
+        assertThatThrownBy(() -> agentService.execute(continuation))
+                .isInstanceOf(SecurityException.class)
+                .hasMessage("无权续接该任务");
+        assertThatThrownBy(() -> agentService.cancelApproval("approval-owner", "owner"))
+                .isInstanceOf(SecurityException.class)
+                .hasMessage("无权取消该任务");
+
+        assertThat(taskRegistry.get("trace-owner"))
+                .containsEntry("status", "action_required")
+                .containsEntry("pendingApproval", Map.of("agentApprovalToken", "approval-owner"));
+        verifyNoInteractions(approvalService, conversationManager);
     }
 
     @Disabled("M04: Planner, Direct Answer, Reflection, completion, Final and RAG Answer use one builder")
@@ -206,5 +299,15 @@ class MemoryV1ExpectedContractTest {
                 .isInstanceOf(ConversationMemoryException.class)
                 .satisfies(error -> assertThat(((ConversationMemoryException) error).getCode())
                         .isEqualTo(ConversationErrorCode.CONVERSATION_NOT_FOUND));
+    }
+
+    private static int conversationRowCount(
+            ConversationPersistenceTestFixture persistenceFixture,
+            String conversationId
+    ) {
+        return persistenceFixture.jdbcTemplate().queryForObject(
+                "SELECT COUNT(*) FROM ai_conversation WHERE conversation_id = ?",
+                Integer.class,
+                conversationId);
     }
 }

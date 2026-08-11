@@ -2,6 +2,7 @@ package com.javaee.aiservice.conversation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.conversation.config.MemoryPersistenceProperties;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateCleanup;
 import com.javaee.aiservice.conversation.service.ConversationService;
 import com.javaee.aiservice.conversation.service.LegacyConversationImporter;
 import com.javaee.aiservice.conversation.service.LegacyConversationSource;
@@ -16,6 +17,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 public final class ConversationPersistenceTestFixture {
+
+    private static final RuntimeStateCleanup NO_RUNTIME_STATE = conversationId -> {
+    };
 
     private final JdbcDataSource dataSource;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -32,13 +36,24 @@ public final class ConversationPersistenceTestFixture {
     }
 
     public ConversationService newService() {
-        return newService((conversationId, userId) -> Optional.empty());
+        return newService((conversationId, userId) -> Optional.empty(), NO_RUNTIME_STATE);
     }
 
     public ConversationService newService(LegacyConversationSource legacySource) {
+        return newService(legacySource, NO_RUNTIME_STATE);
+    }
+
+    public ConversationService newService(RuntimeStateCleanup runtimeStateCleanup) {
+        return newService((conversationId, userId) -> Optional.empty(), runtimeStateCleanup);
+    }
+
+    public ConversationService newService(
+            LegacyConversationSource legacySource,
+            RuntimeStateCleanup runtimeStateCleanup
+    ) {
         JdbcConversationStore store = newStore();
         LegacyConversationImporter importer = new LegacyConversationImporter(store, legacySource, properties);
-        return new ConversationService(store, importer, properties);
+        return new ConversationService(store, importer, runtimeStateCleanup, properties);
     }
 
     public JdbcConversationStore newStore() {

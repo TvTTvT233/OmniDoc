@@ -180,6 +180,7 @@ public class AgentExecutionService {
             if (existingSnapshot == null || existingSnapshot.isEmpty()) {
                 throw new IllegalArgumentException("续接任务不存在: " + continueTraceId);
             }
+            assertSnapshotAndConversationOwner(existingSnapshot, userId, "无权续接该任务");
             traceId = continueTraceId;
             conversationId = asString(existingSnapshot.get("conversationId"));
             context = existingSnapshot.get("context") instanceof Map<?, ?> raw
@@ -442,7 +443,7 @@ public class AgentExecutionService {
         if (snapshot.isEmpty()) {
             return Map.of("status", "not_found", "message", "未找到待确认任务或审批已失效");
         }
-        assertSnapshotOwner(snapshot, userId, "无权确认该任务");
+        assertSnapshotAndConversationOwner(snapshot, userId, "无权确认该任务");
 
         Map<String, Object> pending = snapshot.get("pendingApproval") instanceof Map<?, ?> raw
                 ? new LinkedHashMap<>((Map<String, Object>) raw)
@@ -475,18 +476,22 @@ public class AgentExecutionService {
     }
 
     public boolean cancelApproval(String token, String userId) {
+        String authenticatedUserId = requestUserContext.getRequiredUserId();
         Map<String, Object> snapshot = taskRegistry.findByApprovalToken(token);
-        boolean removed = agentApprovalService.cancel(token);
         if (snapshot.isEmpty()) {
-            return removed;
+            return false;
         }
-        assertSnapshotOwner(snapshot, userId, "无权取消该任务");
+        assertSnapshotAndConversationOwner(snapshot, authenticatedUserId, "无权取消该任务");
+        boolean removed = agentApprovalService.cancel(token);
+        if (!removed) {
+            return false;
+        }
         snapshot.put("status", "cancelled");
         snapshot.put("stoppedReason", "approval_cancelled");
         snapshot.put("pendingApproval", null);
         snapshot.put("cancelledAt", System.currentTimeMillis());
         taskRegistry.save(asString(snapshot.get("traceId")), snapshot);
-        publishTaskEvent("task_cancelled", asString(snapshot.get("traceId")), userId, "cancelled", 100,
+        publishTaskEvent("task_cancelled", asString(snapshot.get("traceId")), authenticatedUserId, "cancelled", 100,
                 "用户已否定高危操作，Agent 任务取消", snapshot);
         return true;
     }
@@ -602,11 +607,13 @@ public class AgentExecutionService {
         };
     }
 
-    private void assertSnapshotOwner(Map<String, Object> snapshot, String userId, String message) {
+    private void assertSnapshotAndConversationOwner(Map<String, Object> snapshot, String userId, String message) {
         String owner = asString(snapshot.get("userId"));
-        if (!requestUserContext.isAdmin() && !valueOrDefault(owner, "").equals(userId)) {
+        String conversationId = asString(snapshot.get("conversationId"));
+        if (!valueOrDefault(owner, "").equals(userId) || isBlank(conversationId)) {
             throw new SecurityException(message);
         }
+        conversationManager.assertOwner(conversationId, userId);
     }
 
     private AgentPlanStep findStep(Object planObj, String stepId) {
