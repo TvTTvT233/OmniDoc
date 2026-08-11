@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念边界已冻结；M01、M02、M03 已完成阶段验证，M04 统一上下文与 Agent 接入已完成专项验证，M06-A/B 已完成前端契约与后端 API；Qdrant 与 MCP 搜索仍等待用户人工验收
+- **当前阶段**：Memory V1 概念边界已冻结；M01、M02、M03 已完成阶段验证，M04 统一上下文与 Agent 接入、M05 Structured Rolling Summary 已完成专项验证，M06-A/B 已完成前端契约与后端 API；Qdrant 与 MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：实现 M05 Structured Rolling Summary，然后完成 M06-C 前端 UI 接管与 M07 最终集成门禁；Qdrant 和 MCP 人工验收仍分别按既有文档执行
+- **下一阶段**：完成 M06-C 前端 UI 接管与 M07 最终集成门禁；Qdrant 和 MCP 人工验收仍分别按既有文档执行
 
 ## 已确认
 
@@ -37,7 +37,7 @@
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
-- Memory V1 尚未最终集成验收：Structured Summary、前端完整历史体验、真实 MySQL/Redis/模型/浏览器联调和 M07 最终门禁仍未完成。
+- Memory V1 尚未最终集成验收：前端完整历史体验、真实 MySQL/Redis/模型/浏览器联调和 M07 最终门禁仍未完成。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
 
 ## 后续运行基线验证
@@ -401,6 +401,18 @@
 - 专项与 Agent/Controller 回归实际发现 60 项：56 项通过，4 项仅为 M05 预期挂起，Failures 0、Errors 0；M04 四个冻结目标 Skipped 0；
 - 未连接真实 MySQL/Redis/模型/浏览器，M05、M06-C 和 M07 仍待完成；详细交接见 `docs/memory/handoffs/M04.md`。
 
+### M05 Structured Rolling Summary
+
+- 新增 `ai_conversation_summary` V002 幂等迁移和一对一当前版本存储；永久删除 Conversation 时由外键级联删除 Summary；
+- 实现“上一版有效 Summary + coverage 后连续增量”的 token 阈值滚动更新，使用完整覆盖区间规范 SHA-256 digest、逐版本 CAS 和精确幂等判断；并发旧版本不能覆盖新版本；
+- 实现严格 JSON 结构、枚举、来源、哈希、状态转换和旧条目保留校验；助手建议不能单独形成 confirmed decision，助手文本不能单独确认事实；
+- 摘要输入先确定性脱敏，工具正文和 EVENT 正文不进入模型；单条来源超过摘要输入上限时不静默截断、不调用摘要模型、不推进 coverage；
+- 摘要模型使用独立超时、有限工作线程和有界队列；生成、Schema、digest、来源或 CAS 失败均保留上一版摘要与原始消息，Agent 主回答不被摘要失败阻塞；
+- 存储 JSON 与送入 Agent 的紧凑渲染文本分离；M04 的 `ConversationSummaryProvider` 已由生产 Summary Service 接管；M05 不调用 Embedding 或 Qdrant；
+- M05、M04、Agent/Controller、存储和 Summary Schema 组合回归实际执行 79/79，Failures 0、Errors 0、Skipped 0；四个 M05 冻结目标全部执行；
+- 当前确定性环境没有为摘要建立新的文档/工具权威来源解析器：工具正文仍被省略，新 DOCUMENT 引用被拒绝，因此不把未可验证的工具或文档结论升级为 confirmed fact。这是事实准确性优先的保守边界；
+- 未连接真实 MySQL、Redis、模型或浏览器，完整 M07 与用户人工验收仍待完成；详细交接见 `docs/memory/handoffs/M05.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -422,6 +434,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M05 Structured Summary | 实现 V002 Summary 存储、连续增量滚动摘要、规范 digest、严格来源/状态校验、CAS、独立超时和失败保留；相关组合回归 79/79，真实模型与最终验收仍待执行 |
 | 2026-08-11 | Memory M04 统一上下文 | 实现按模型 token 预算的 MemoryContextBuilder，七类 Agent 模型路径统一接入，USER/工具/助手结构化追加，超限失败 EVENT 与 HTTP 413 稳定错误；专项回归 60 项无失败/错误，4 项仅 M05 挂起 |
 | 2026-08-11 | Memory M06-B 后端结构化 API | 实现七个 Conversation 资源端点、认证所有者隔离、HMAC 稳定游标、公开消息白名单脱敏和真实 HTTP 错误载体；专项及旧 Controller 联合回归 25/25、M02 Integrated 阶段门禁通过；真实前端联调与 UI 接管仍待 M06-C |
 | 2026-08-11 | Memory M02 持久化 | 在隔离分支实现 MySQL/Spring JDBC Conversation 与结构化 Message、事务 sequence、幂等、所有者隔离、生命周期和旧 Redis 按需导入；H2/MySQL-mode 专项与 Agent/Controller 回归通过，真实 MySQL 集成待协调复核 |

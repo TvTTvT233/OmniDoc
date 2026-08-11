@@ -21,6 +21,13 @@ public interface ConversationStore {
 
     ConversationMessagePage listMessagesOwned(String conversationId, String userId, Long beforeSequence, int limit);
 
+    List<ConversationMessage> listMessagesAfterOwned(
+            String conversationId,
+            String userId,
+            long afterSequence,
+            int limit
+    );
+
     List<ConversationMessage> appendMessages(
             String conversationId,
             String userId,

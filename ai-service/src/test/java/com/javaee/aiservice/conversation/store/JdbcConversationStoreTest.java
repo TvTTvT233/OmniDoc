@@ -39,9 +39,12 @@ class JdbcConversationStoreTest {
                 "SELECT COUNT(*) FROM ai_memory_schema_version WHERE version = 1", Integer.class))
                 .isEqualTo(1);
         assertThat(fixture.jdbcTemplate().queryForObject(
+                "SELECT COUNT(*) FROM ai_memory_schema_version WHERE version = 2", Integer.class))
+                .isEqualTo(1);
+        assertThat(fixture.jdbcTemplate().queryForObject(
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                        + "WHERE TABLE_NAME IN ('ai_conversation', 'ai_conversation_message')",
-                Integer.class)).isEqualTo(2);
+                        + "WHERE TABLE_NAME IN ('ai_conversation', 'ai_conversation_message', 'ai_conversation_summary')",
+                Integer.class)).isEqualTo(3);
     }
 
     @Test
@@ -54,7 +57,7 @@ class JdbcConversationStoreTest {
 
         assertThatThrownBy(() -> new MemorySchemaInitializer(dataSource, properties).afterPropertiesSet())
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("schema version 1 is missing")
+                .hasMessageContaining("schema version 2 is missing")
                 .hasMessageContaining("auto-migration.enabled");
     }
 

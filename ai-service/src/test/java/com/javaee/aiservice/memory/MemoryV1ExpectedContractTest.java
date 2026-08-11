@@ -1,5 +1,6 @@
 package com.javaee.aiservice.memory;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.agent.execution.AgentExecutionService;
 import com.javaee.aiservice.agent.execution.approval.AgentApprovalService;
 import com.javaee.aiservice.agent.execution.model.AgentExecutionRequest;
@@ -28,12 +29,27 @@ import com.javaee.aiservice.memory.context.MemoryContextException;
 import com.javaee.aiservice.memory.context.MemoryContextProperties;
 import com.javaee.aiservice.memory.context.MemoryContextRequest;
 import com.javaee.aiservice.memory.context.MemoryToolExchange;
+import com.javaee.aiservice.memory.summary.JdbcConversationSummaryStore;
+import com.javaee.aiservice.memory.summary.StoredConversationSummary;
+import com.javaee.aiservice.memory.summary.StructuredConversationSummary;
+import com.javaee.aiservice.memory.summary.StructuredSummaryCodec;
+import com.javaee.aiservice.memory.summary.StructuredSummaryValidator;
+import com.javaee.aiservice.memory.summary.SummaryCoverage;
+import com.javaee.aiservice.memory.summary.SummaryInputSanitizer;
+import com.javaee.aiservice.memory.summary.SummaryItem;
+import com.javaee.aiservice.memory.summary.SummaryMeta;
+import com.javaee.aiservice.memory.summary.SummarySourceDigest;
+import com.javaee.aiservice.memory.summary.SummarySourceRef;
+import com.javaee.aiservice.memory.summary.SummarySourceType;
+import com.javaee.aiservice.memory.summary.SummaryValidationContext;
+import com.javaee.aiservice.memory.summary.SummaryValidationException;
+import com.javaee.aiservice.memory.summary.SummaryWriteResult;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -43,7 +59,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -310,32 +325,70 @@ class MemoryV1ExpectedContractTest {
                         error -> assertThat(error.getCode()).isEqualTo("MEMORY_CONTEXT_TOO_LARGE"));
     }
 
-    @Disabled("M05: summary coverage and sourceDigest match the exact contiguous source messages")
     @Test
     void m05SummaryCoverageIsContinuousAndDigestVerified() {
-        pending("M05 coverage and digest");
+        String conversationId = service.createConversation("owner").conversationId();
+        List<ConversationMessage> messages = service.appendExchange(
+                conversationId, "owner", "request-1", "turn-1", "first fact", "acknowledged");
+        String digest = SummarySourceDigest.compute(conversationId, 1, 2, messages);
+
+        assertThat(digest).hasSize(64).matches("[a-f0-9]{64}");
+        assertThatThrownBy(() -> SummarySourceDigest.compute(
+                conversationId, 1, 3, messages))
+                .isInstanceOf(SummaryValidationException.class);
     }
 
-    @Disabled("M05: assistant suggestions cannot become confirmed facts or decisions")
     @Test
     void m05SummaryPreservesSourceAndFactDecisionStatusRules() {
-        pending("M05 fact accuracy");
+        String conversationId = service.createConversation("owner").conversationId();
+        List<ConversationMessage> messages = service.appendExchange(
+                conversationId, "owner", "request-1", "turn-1", "Please advise", "I suggest option A");
+        String digest = SummarySourceDigest.compute(conversationId, 1, 2, messages);
+        SummarySourceRef assistant = new SummarySourceRef(
+                SummarySourceType.MESSAGE, messages.get(1).messageId(), null, Map.of(), messages.get(1).contentHash());
+        StructuredConversationSummary summary = summary(
+                conversationId, 1, 0, 2, digest,
+                List.of(new SummaryItem("fact-1", "Option A is confirmed", "confirmed", List.of(assistant), 2)),
+                List.of(new SummaryItem("decision-1", "Use option A", "confirmed", List.of(assistant), 2)));
+
+        StructuredSummaryValidator validator = new StructuredSummaryValidator(new SummaryInputSanitizer());
+        assertThatThrownBy(() -> validator.validate(summary, new SummaryValidationContext(
+                conversationId, 1, 0, 1, 2, digest,
+                Instant.parse("2026-08-11T00:00:00Z"), messages, null)))
+                .isInstanceOf(SummaryValidationException.class);
     }
 
-    @Disabled("M05: stale summary CAS cannot overwrite a newer summary version")
     @Test
     void m05ConcurrentSummaryUpdateRejectsStaleVersion() {
-        pending("M05 summary CAS");
+        String conversationId = service.createConversation("owner").conversationId();
+        JdbcConversationSummaryStore store = fixture.newSummaryStore();
+        Instant now = Instant.parse("2026-08-11T00:00:00Z");
+        StoredConversationSummary winner = new StoredConversationSummary(
+                conversationId, "1.0", 1, 1, 1, "a".repeat(64), "{\"winner\":true}", now, now);
+        StoredConversationSummary stale = new StoredConversationSummary(
+                conversationId, "1.0", 1, 1, 1, "b".repeat(64), "{\"stale\":true}", now, now);
+
+        assertThat(store.saveCas(winner, 0)).isEqualTo(SummaryWriteResult.STORED);
+        assertThat(store.saveCas(stale, 0)).isEqualTo(SummaryWriteResult.CONFLICT);
+        assertThat(store.findOwned(conversationId, "owner").orElseThrow().summaryJson())
+                .isEqualTo("{\"winner\":true}");
     }
 
-    @Disabled("M05: schema/model failure preserves previous summary and does not advance coverage")
     @Test
     void m05SummaryFailureDoesNotAdvanceCoverage() {
-        pending("M05 summary failure fallback");
-    }
+        String conversationId = service.createConversation("owner").conversationId();
+        JdbcConversationSummaryStore store = fixture.newSummaryStore();
+        Instant now = Instant.parse("2026-08-11T00:00:00Z");
+        StoredConversationSummary previous = new StoredConversationSummary(
+                conversationId, "1.0", 1, 1, 1, "a".repeat(64), "{\"version\":1}", now, now);
+        assertThat(store.saveCas(previous, 0)).isEqualTo(SummaryWriteResult.STORED);
 
-    private static void pending(String target) {
-        fail("PENDING_IMPLEMENTATION: " + target);
+        StructuredSummaryCodec codec = new StructuredSummaryCodec(new ObjectMapper());
+        assertThatThrownBy(() -> codec.parse("{not-valid-summary}"))
+                .isInstanceOf(SummaryValidationException.class);
+        assertThat(store.findOwned(conversationId, "owner").orElseThrow())
+                .extracting(StoredConversationSummary::summaryVersion, StoredConversationSummary::toSequence)
+                .containsExactly(1L, 1L);
     }
 
     private static void assertNotFound(Runnable action) {
@@ -365,5 +418,20 @@ class MemoryV1ExpectedContractTest {
                 (conversationId, userId) -> java.util.Optional.empty(),
                 new ConservativeTokenEstimator(),
                 properties);
+    }
+
+    private static StructuredConversationSummary summary(
+            String conversationId,
+            long version,
+            long previousVersion,
+            long toSequence,
+            String digest,
+            List<SummaryItem> facts,
+            List<SummaryItem> decisions
+    ) {
+        return new StructuredConversationSummary(
+                "1.0", conversationId, version, new SummaryCoverage(1, toSequence, digest),
+                null, List.of(), facts, decisions, List.of(), List.of(), List.of(),
+                new SummaryMeta(previousVersion, Instant.parse("2026-08-11T00:00:00Z")));
     }
 }

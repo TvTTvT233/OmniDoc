@@ -169,6 +169,29 @@ public class JdbcConversationStore implements ConversationStore {
     }
 
     @Override
+    public List<ConversationMessage> listMessagesAfterOwned(
+            String conversationId,
+            String userId,
+            long afterSequence,
+            int limit
+    ) {
+        requireOwned(conversationId, userId, false);
+        return jdbcTemplate.query("""
+                        SELECT message_id, conversation_id, `sequence`, turn_id, client_request_id,
+                               turn_ordinal, role, message_type, content, trace_id, tool_call_id,
+                               metadata_json, content_hash, created_at
+                        FROM ai_conversation_message
+                        WHERE conversation_id = ? AND `sequence` > ?
+                        ORDER BY `sequence` ASC
+                        LIMIT ?
+                        """,
+                messageMapper,
+                conversationId,
+                afterSequence,
+                limit);
+    }
+
+    @Override
     public List<ConversationMessage> appendMessages(
             String conversationId,
             String userId,

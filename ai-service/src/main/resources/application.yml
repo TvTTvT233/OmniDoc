@@ -91,6 +91,14 @@ ai:
       safety-reserve-percent: ${AI_MEMORY_CONTEXT_SAFETY_PERCENT:10}
       history-page-size: ${AI_MEMORY_CONTEXT_HISTORY_PAGE_SIZE:200}
       block-overhead-tokens: ${AI_MEMORY_CONTEXT_BLOCK_OVERHEAD_TOKENS:8}
+    summary:
+      enabled: ${AI_MEMORY_SUMMARY_ENABLED:true}
+      trigger-input-tokens: ${AI_MEMORY_SUMMARY_TRIGGER_TOKENS:12000}
+      retain-recent-tokens: ${AI_MEMORY_SUMMARY_RETAIN_RECENT_TOKENS:4000}
+      max-source-tokens: ${AI_MEMORY_SUMMARY_MAX_SOURCE_TOKENS:16000}
+      max-attempts: ${AI_MEMORY_SUMMARY_MAX_ATTEMPTS:2}
+      timeout: ${AI_MEMORY_SUMMARY_TIMEOUT:20s}
+      model: ${AI_MEMORY_SUMMARY_MODEL:}
     schema:
       auto-migration:
         enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}

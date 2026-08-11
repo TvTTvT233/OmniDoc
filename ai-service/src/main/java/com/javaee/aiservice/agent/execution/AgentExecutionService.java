@@ -44,6 +44,7 @@ import com.javaee.aiservice.memory.context.MemoryContextException;
 import com.javaee.aiservice.memory.context.MemoryContextRequest;
 import com.javaee.aiservice.memory.context.MemoryToolExchange;
 import com.javaee.aiservice.memory.context.MemoryTurnContext;
+import com.javaee.aiservice.memory.summary.ConversationSummaryUpdater;
 import com.javaee.aiservice.rag.KnowledgeBase;
 import com.javaee.aiservice.rag.Reranker;
 import com.javaee.aiservice.security.BucketPermissionService;
@@ -111,6 +112,9 @@ public class AgentExecutionService {
 
     @Autowired
     private MemoryContextBuilder memoryContextBuilder;
+
+    @Autowired(required = false)
+    private ConversationSummaryUpdater conversationSummaryUpdater;
 
     @Autowired
     private InternalService internalService;
@@ -467,6 +471,14 @@ public class AgentExecutionService {
                         traceId,
                         null,
                         Map.of("source", "agent"))));
+        if (conversationSummaryUpdater != null) {
+            try {
+                conversationSummaryUpdater.maybeUpdate(conversationId, userId, request.getModel());
+            } catch (RuntimeException summaryError) {
+                log.warn("Conversation Summary update degraded without blocking the Agent response: conversationId={}, errorType={}",
+                        conversationId, summaryError.getClass().getSimpleName());
+            }
+        }
         context.put("lastAnswer", finalAnswer);
         context.put("lastToolResults", toolResults);
         context.put("lastReflections", reflections);

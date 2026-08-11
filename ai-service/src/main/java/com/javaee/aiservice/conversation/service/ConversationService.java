@@ -109,6 +109,20 @@ public class ConversationService {
         return conversationStore.listMessagesOwned(conversationId, userId, beforeSequence, limit);
     }
 
+    public List<ConversationMessage> listMessagesAfter(
+            String conversationId,
+            String userId,
+            long afterSequence,
+            int limit
+    ) {
+        requireOwned(conversationId, userId);
+        validateLimit(limit);
+        if (afterSequence < 0) {
+            throw invalid("afterSequence must not be negative");
+        }
+        return conversationStore.listMessagesAfterOwned(conversationId, userId, afterSequence, limit);
+    }
+
     public List<ConversationMessage> appendMessages(
             String conversationId,
             String userId,

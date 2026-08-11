@@ -8,6 +8,7 @@ import com.javaee.aiservice.conversation.service.LegacyConversationImporter;
 import com.javaee.aiservice.conversation.service.LegacyConversationSource;
 import com.javaee.aiservice.conversation.store.JdbcConversationStore;
 import com.javaee.aiservice.conversation.store.MemorySchemaInitializer;
+import com.javaee.aiservice.memory.summary.JdbcConversationSummaryStore;
 import org.h2.jdbcx.JdbcDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -61,6 +62,10 @@ public final class ConversationPersistenceTestFixture {
                 new JdbcTemplate(dataSource),
                 new DataSourceTransactionManager(dataSource),
                 objectMapper);
+    }
+
+    public JdbcConversationSummaryStore newSummaryStore() {
+        return new JdbcConversationSummaryStore(new JdbcTemplate(dataSource));
     }
 
     public JdbcTemplate jdbcTemplate() {
