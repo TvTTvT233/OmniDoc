@@ -37,11 +37,12 @@ ai-service/target/memory-v1-acceptance/memory-v1-report.json
 - 不设置 `surefire.failIfNoSpecifiedTests=false`；每个精确类必须有源码、Surefire suite XML 和合法 testcase 计数；
 - 每次 Maven 运行前删除精确 `ai-service/target/surefire-reports/TEST-*.xml`，防止旧报告混入；
 - M02/M03/M04/M05 的 16 个冻结目标方法必须逐名执行且 skipped 为 0；
-- M06-A 两个前端契约文件和 M06-B 后端命名测试必须通过；
+- M06 前端三组精确门禁（契约 25、翻转基线 6、独立 UI 验收 11）和 M06-B 后端命名测试必须通过；
+- 前端异步任务测试与生产构建必须通过；
 - `MemoryV1IntegratedGateTest` 必须生成删除残留、sequence、coverage、隔离、CAS 与 token 预算证据，所有删除残留必须为 0；
 - 运行后工作区仍须保持干净。
 
-当前基线尚未集成 M06-C，因此完整入口在可运行的确定性门禁通过后仍输出 `PENDING_INTEGRATION` 并非零退出。即使未来 M06-C 就绪，真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 未验证时，状态也只能是 `PENDING_EXTERNAL / MANUAL_PENDING`，不得输出 `AUTO_VERIFIED`。
+当前主协调基线已经集成 M06-C。2026-08-11 在 HEAD `40ef1cf` 上运行完整入口，资产 16 + 集成 171 = 187，Failures 0、Errors 0、Skipped 0，状态为 `AUTO_VERIFIED / MANUAL_PENDING`。报告仍明确保留真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 为未验证边界；`AUTO_VERIFIED` 只表示本地确定性门禁通过。
 
 ## 分阶段门禁
 
@@ -135,7 +136,7 @@ M06-A 合入共同分支后执行：
 - 前端目标测试至少 1 项且 skipped 为 0；
 - `AgentExecutionServiceTest + AgentControllerTest` 回归通过。
 
-如 M06-A 使用合理的不同状态模块路径或脚本名，可显式传入 `-ConversationStatePath` 或 `-FrontendTestScript`；API 模块路径可用 `-ConversationApiPath` 指定。该门禁只验证 M06-A 前端契约骨架，不要求后端结构化 API 已实现，也不代表 M06-B/C 完成。完整 `run-m07-acceptance.cmd -Integrated` 仍应保持 `PENDING_INTEGRATION`。
+如 M06-A 使用合理的不同状态模块路径或脚本名，可显式传入 `-ConversationStatePath` 或 `-FrontendTestScript`；API 模块路径可用 `-ConversationApiPath` 指定。该阶段门禁只验证 M06-A 前端契约骨架，不要求后端结构化 API 已实现，也不代表 M06-B/C 或最终 M07 完成；最终状态以完整 `run-m07-acceptance.cmd -Integrated` 的报告为准。
 
 报告：
 

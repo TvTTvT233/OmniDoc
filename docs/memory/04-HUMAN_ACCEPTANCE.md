@@ -3,10 +3,10 @@
 ## 1. 当前状态
 
 ```text
-NOT_READY / IMPLEMENTATION_PENDING
+MANUAL_PENDING
 ```
 
-本清单供 Memory V1 自动验收完成后由用户执行。当前业务实现尚未开始，不能按本文宣称通过。只有自动报告为 `AUTO_VERIFIED` 且用户逐项确认后，最终状态才能改为 `HUMAN_ACCEPTED`。
+Memory V1 的本地确定性自动验收已经完成，本清单现在交由用户执行。真实浏览器/JWT、MySQL、Redis 和模型尚未验证；只有自动报告保持 `AUTO_VERIFIED` 且用户逐项确认后，最终状态才能改为 `HUMAN_ACCEPTED`。
 
 ## 2. 验收前提
 

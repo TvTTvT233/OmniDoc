@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public final class JdbcConversationSummaryStore implements ConversationSummaryStore {
+public class JdbcConversationSummaryStore implements ConversationSummaryStore {
 
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<StoredConversationSummary> rowMapper = this::map;

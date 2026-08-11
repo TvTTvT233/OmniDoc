@@ -3,7 +3,7 @@
 ## 1. 当前状态
 
 ```text
-CONCEPT_FROZEN / M01_BASELINE_VERIFIED / M02_STAGE_VERIFIED / M03_STAGE_VERIFIED / M04_TARGETED_VERIFIED / M05_TARGETED_VERIFIED / M06_TARGETED_VERIFIED_BROWSER_PENDING
+CONCEPT_FROZEN / M01-M06_INTEGRATED / M07_AUTO_VERIFIED / MANUAL_PENDING / PENDING_EXTERNAL
 ```
 
 Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace Memory 和 User Memory 不属于本看板的实现范围。
@@ -21,6 +21,7 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 - `BASELINE_VERIFIED`：当前行为、已知缺口和验收资产已完成集成验证，但目标生产能力仍未实现。
 - `STAGE_VERIFIED`：该阶段的冻结目标与回归门禁已在本地确定性环境通过，但不代表真实外部服务、最终 M07 或人工验收完成。
 - `TARGETED_VERIFIED`：该任务冻结目标的确定性专项与直接回归已通过，但尚未经过 M07 全量门禁、真实外部服务或人工验收。
+- `MANUAL_PENDING`：确定性自动门禁已经通过，真实浏览器、真实外部依赖和用户人工场景仍待执行。
 
 ## 3. 任务总览
 
@@ -33,7 +34,7 @@ Memory V1 保留三级记忆架构，只实现 Conversation Memory。Workspace M
 | M04 | 统一 MemoryContextBuilder 与 Agent 接入 | `TARGETED_VERIFIED` | M02、M03 | token 预算、近期历史、全模型路径接入 |
 | M05 | Structured Rolling Summary | `TARGETED_VERIFIED` | M04 | Summary Schema、更新器、版本控制、回退 |
 | M06 | 前端历史、新对话与删除体验 | `TARGETED_VERIFIED / REAL_BROWSER_PENDING` | M02、M03、M05 | 历史恢复、真正新会话、归档/删除入口 |
-| M07 | 独立自动验收与人工验收 | `IN_PROGRESS` | M01-M06 | 回归、质量门禁、测试报告、人工验收文档 |
+| M07 | 独立自动验收与人工验收 | `AUTO_VERIFIED / MANUAL_PENDING` | M01-M06 | 回归、质量门禁、测试报告、人工验收文档 |
 
 ## 4. 实施顺序与边界
 

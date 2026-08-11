@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念边界已冻结；M01-M03 已完成阶段验证，M04-M06 已完成本地确定性目标验证；Qdrant 与 MCP 搜索仍等待用户人工验收
+- **当前阶段**：Memory V1 概念边界已冻结，M01-M07 已集成且最终确定性门禁 `AUTO_VERIFIED`；真实浏览器与外部依赖处于 `MANUAL_PENDING`
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：审查并集成独立 M06-C 前端验收与 M07 最终门禁，随后交付真实浏览器/外部依赖人工验收；Qdrant 和 MCP 人工验收仍分别按既有文档执行
+- **下一阶段**：由用户按 Memory V1 人工清单验证真实浏览器/JWT、MySQL、Redis 和模型；奖学金审查 Agent 仍保持独立规划，不纳入本轮 Memory 实现
 
 ## 已确认
 
@@ -37,7 +37,7 @@
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
-- Memory V1 尚未最终集成验收：M06 前端生产接管已完成本地确定性验证，但真实 MySQL/Redis/模型/浏览器联调、异步 job 断线恢复和 M07 最终门禁仍未完成。
+- Memory V1 已完成最终确定性集成验收，但真实 MySQL/Redis/模型/浏览器联调和异步 job 提交后刷新恢复轮询仍未完成，最终状态不得写为 `HUMAN_ACCEPTED`。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
 
 ## 后续运行基线验证
@@ -422,6 +422,16 @@
 - M01 缺陷基线已翻转为 M06 目标回归；前端契约 25/25、UI 目标回归 6/6、独立 M06-C 验收由起始基线 0/11 转为集成后 11/11、异步轮询 2/2、生产构建通过；
 - 未运行真实浏览器、真实 HTTP、MySQL、Redis、模型或双用户 JWT；异步 job 提交后刷新恢复轮询仍待真实链路验证。详细交接见 `docs/memory/handoffs/M06-C.md`。
 
+### M07 最终自动验收
+
+- 两个独立 Codex 任务分别交付 M06-C 前端验收和 M07 严格门禁，主协调任务完成复核、适配、合入与最终验收；
+- 统一入口 `scripts/memory/run-m07-acceptance.cmd -Integrated` 在干净工作区退出 0，报告状态 `AUTO_VERIFIED / MANUAL_PENDING`；
+- 自动计数为资产 16 + 精确 Java 129 + 前端 42 = 187，Failures 0、Errors 0、Skipped 0；异步任务测试 2/2 和 Web 生产构建另外通过；
+- message loss、重复 sequence、coverage gap/duplicate、stale overwrite、unsupported confirmed items、跨用户成功访问、token 超预算和全部删除残留均为 0，七条模型调用路径 7/7；
+- MCP 搜索集成回归 80/80 通过并完成静态泄漏检查；Qdrant 回归与真实外部依赖按各自验收边界单独记录；
+- 完整服务回归发现并修复 Summary JDBC Store 的 Spring 代理启动缺陷；随后 `AllModelsTest` 应用上下文 1/1 通过，完整本地 `ai-service` 291 项无失败/错误，3 项仅因真实 Qdrant 未启用而跳过；
+- 报告明确记录真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 未执行。详细交接见 `docs/memory/handoffs/M07-final.md`，人工清单见 `docs/memory/04-HUMAN_ACCEPTANCE.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -443,6 +453,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M07 最终自动验收 | 独立门禁与前端验收合入主分支；统一入口 187/187、失败/错误/跳过均为 0，异步轮询 2/2、Web 构建通过，状态 `AUTO_VERIFIED / MANUAL_PENDING` |
 | 2026-08-11 | Memory M06-C 前端会话体验 | Global/Editor 接管结构化会话历史、新建、分页、归档/恢复/删除和 `clientRequestId`，移除临时/默认 ID 与伪回复；前端契约 25/25、翻转回归 6/6、独立验收 0/11→11/11、构建通过，真实浏览器与服务联调待验收 |
 | 2026-08-11 | Memory M05 Structured Summary | 实现 V002 Summary 存储、连续增量滚动摘要、规范 digest、严格来源/状态校验、CAS、独立超时和失败保留；相关组合回归 79/79，真实模型与最终验收仍待执行 |
 | 2026-08-11 | Memory M04 统一上下文 | 实现按模型 token 预算的 MemoryContextBuilder，七类 Agent 模型路径统一接入，USER/工具/助手结构化追加，超限失败 EVENT 与 HTTP 413 稳定错误；专项回归 60 项无失败/错误，4 项仅 M05 挂起 |

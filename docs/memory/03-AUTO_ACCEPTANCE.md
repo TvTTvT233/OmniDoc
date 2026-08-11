@@ -3,10 +3,10 @@
 ## 1. 当前状态
 
 ```text
-PENDING_IMPLEMENTATION
+AUTO_VERIFIED / MANUAL_PENDING
 ```
 
-本文件冻结 M07 的自动验收条件，不声明当前实现已经通过。最终应提供统一入口和机器报告；任何硬门禁失败、缺失、跳过或只做静态检查时，状态都不得写为 `AUTO_VERIFIED`。
+本文件冻结 M07 的自动验收条件。2026-08-11 主协调分支已运行统一入口并得到 `AUTO_VERIFIED / MANUAL_PENDING`；该结论只覆盖本地确定性门禁，不代表真实外部服务或人工验收通过。任何硬门禁失败、缺失、跳过或只做静态检查时，状态都不得写为 `AUTO_VERIFIED`。
 
 验收状态按以下顺序推进：
 
@@ -20,19 +20,21 @@ PENDING_IMPLEMENTATION
 
 ## 2. 统一入口与报告
 
-计划入口：
+统一入口：
 
 ```powershell
 .\scripts\memory\run-m07-acceptance.cmd -Integrated
 ```
 
-计划报告：
+机器报告：
 
 ```text
 ai-service/target/memory-v1-acceptance/memory-v1-report.json
 ```
 
 报告至少包含：Git 提交、时间、操作系统、Java/Node 版本、测试分组、通过/失败/跳过数量、MySQL/Redis/模型边界、token 配置、摘要调用统计、隔离计数、删除残留和回归结果。未连接真实模型时必须记录 `realModel=false`。
+
+本次实际结果：资产 16 + 集成 171 = 187，Failures 0、Errors 0、Skipped 0；七条模型调用路径 7/7，删除残留全部为 0。前端另有异步任务测试 2/2 和生产构建通过。外围回归中 MCP 80/80、Qdrant 本地选择 112/112 通过；完整 `ai-service` 本地回归 291 项无失败/错误，3 项真实 Qdrant 集成门禁按外部服务未启用边界跳过。报告明确记录 `mysqlConnected=false`、`redisConnected=false`、`realModel=false`、`remoteEmbedding=false`，因此下一状态仍是 `MANUAL_PENDING`。
 
 ## 3. P0 硬门禁
 
