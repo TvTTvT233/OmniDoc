@@ -373,6 +373,16 @@
 - 首次 M03-A Integrated 门禁因实现将模型合理拆为 `RuntimeStateSnapshot/Update/Scope`、而脚本只接受单一 `RuntimeState` 类产生误报；已修正门禁接受冻结语义下的拆分模型，同时保留 Service、Redis persistence、白名单、TTL、clear/consume 和专项测试检查；
 - 修正后阶段门禁实际发现 46 项：36 项通过、10 项仅 M03-B/M04/M05 预期跳过、Failures 0、Errors 0；两个 M03-A 固定目标 skipped=0，报告为 `STAGE_GATE / M03_A / STAGE_VERIFIED`、`finalAcceptance=false`；
 - `readinessMissing` 继续明确记录 `M03B_DELETION_CASCADE_PENDING` 与 `M03B_OWNER_APPROVAL_PENDING`；未连接真实 Redis，完整 M03 和最终 M07 尚未完成。
+### M06-B 后端结构化 Conversation API（`feature/memory-m06b-backend-api`）
+
+- 状态：`BACKEND_API_VERIFIED / FRONTEND_UI_INTEGRATION_PENDING`；起始基线 `6bfb979`；完整 M06 仍为 `PENDING`；
+- 已实现 `/api/ai/conversations` 的创建、列表、详情、消息分页、归档、恢复和永久删除七个资源端点；响应 DTO 与 M06-A 的 Conversation/Page/Public Message/Message Page/Delete 契约对齐，时间字段固定输出 ISO-8601 字符串；
+- 所有端点的所有者只来自 `RequestUserContext`，请求体或查询中的 `userId/admin` 不参与授权；不存在、已删除和异主访问继续统一为 `CONVERSATION_NOT_FOUND`，没有管理员绕过；
+- 列表游标只承载冻结的 `updatedAt + conversationId` seek 边界，并使用带域隔离的 HMAC 签名和规范 Base64URL 编码；篡改、异密钥、格式错误或非规范编码统一返回 HTTP 400 + `INVALID_CONVERSATION_CURSOR`，不回退第一页；生产可用 `AI_MEMORY_CURSOR_SIGNING_KEY` 配置跨重启/副本共享密钥，未配置时回退 `OMNIDOC_JWT_SECRET`，两者都缺失时仅使用跨重启稳定的本地开发回退值；
+- 公共消息采用服务端拒绝优先投影：仅保留 USER/ASSISTANT TEXT 和 `displayable=true` 的 TOOL EVENT；SYSTEM、TOOL_CALL、TOOL_RESULT、隐藏事件和内部 metadata 均不返回，工具事件正文从受控 label/toolName/status 重建而不透传原始工具结果或审批信息；
+- 新结构化 API 使用真实非 200 HTTP 状态和 `{errorCode,message}` 错误载体，覆盖 400/401/404/409/503/500；未改变现有旧 chat API 的 `Result` 兼容格式；
+- 后端 API 专项与旧 Controller 联合回归 25/25 通过；M02 Integrated 门禁的 Report Schema 5/5 通过，集成选择 71 项发现、59 项通过、12 项仅 M03-M05 按计划跳过、Failures 0、Errors 0，四个 M02 固定目标 skipped=0，阶段报告为 `STAGE_VERIFIED`；
+- 未运行真实 MySQL/Redis、完整服务、真实 JWT 多用户、前后端联调或浏览器端到端；未修改 Agent 主链、Reflection、Context Manager、Runtime、Summary 或现有 UI。M06-C 仍需完成真实前端联调和 UI 接管，详细交接见 `docs/memory/handoffs/M06-B.md`。
 
 ## 维护规则
 
@@ -395,6 +405,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M06-B 后端结构化 API | 实现七个 Conversation 资源端点、认证所有者隔离、HMAC 稳定游标、公开消息白名单脱敏和真实 HTTP 错误载体；专项及旧 Controller 联合回归 25/25、M02 Integrated 阶段门禁通过；真实前端联调与 UI 接管仍待 M06-C |
 | 2026-08-11 | Memory M02 持久化 | 在隔离分支实现 MySQL/Spring JDBC Conversation 与结构化 Message、事务 sequence、幂等、所有者隔离、生命周期和旧 Redis 按需导入；H2/MySQL-mode 专项与 Agent/Controller 回归通过，真实 MySQL 集成待协调复核 |
 | 2026-08-11 | Memory M03-A Runtime State 核心 | 在独立分支实现五字段 typed Runtime State、conversation+trace 隔离、TTL/大小/消费生命周期、显式 Redis fail/degrade、清理接口与旧 ctx 白名单短期兼容；前两个 M03 门禁启用，删除与 Agent/owner 集成仍挂起 |
 | 2026-08-11 | Memory M01 基线验证 | 三路 Codex 在隔离工作树完成后端 16 项行为基线、前端 7 项行为基线和 14 项验收资产；协调集成复跑通过，16 个 M02-M05 目标契约仍明确挂起，生产实现未开始 |

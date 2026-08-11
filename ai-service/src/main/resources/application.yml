@@ -82,6 +82,9 @@ spring:
 ai:
   memory:
     enabled: ${AI_MEMORY_ENABLED:true}
+    api:
+      # Configure one shared value in production so signed list cursors survive restarts/replicas.
+      cursor-signing-key: ${AI_MEMORY_CURSOR_SIGNING_KEY:${OMNIDOC_JWT_SECRET:}}
     schema:
       auto-migration:
         enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}

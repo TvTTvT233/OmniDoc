@@ -40,7 +40,8 @@ import java.util.Set;
 public class JdbcConversationStore implements ConversationStore {
 
     private static final Set<String> ALLOWED_METADATA_KEYS = Set.of(
-            "legacyImported", "legacyUnparsed", "displayable", "source", "errorCode");
+            "legacyImported", "legacyUnparsed", "displayable", "source", "errorCode",
+            "eventType", "label", "status", "toolName");
     private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
     };
 
@@ -380,7 +381,8 @@ public class JdbcConversationStore implements ConversationStore {
                     && !(value instanceof Boolean)) {
                 throw invalid("Boolean message metadata has an invalid value");
             }
-            if ((key.equals("source") || key.equals("errorCode"))
+            if ((key.equals("source") || key.equals("errorCode") || key.equals("eventType")
+                    || key.equals("label") || key.equals("status") || key.equals("toolName"))
                     && (!(value instanceof String text) || text.length() > 256)) {
                 throw invalid("Text message metadata has an invalid value");
             }
