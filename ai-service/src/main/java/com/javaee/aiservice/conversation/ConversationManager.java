@@ -4,6 +4,8 @@ import com.javaee.aiservice.conversation.model.Conversation;
 import com.javaee.aiservice.conversation.model.ConversationCursor;
 import com.javaee.aiservice.conversation.model.ConversationPage;
 import com.javaee.aiservice.conversation.model.ConversationStatus;
+import com.javaee.aiservice.conversation.model.ConversationMessage;
+import com.javaee.aiservice.conversation.model.MessageAppendCommand;
 import com.javaee.aiservice.conversation.service.ConversationService;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +53,14 @@ public class ConversationManager {
                 turnId,
                 userMessage,
                 assistantMessage);
+    }
+
+    public List<ConversationMessage> appendMessagesForUser(
+            String conversationId,
+            String userId,
+            List<MessageAppendCommand> commands
+    ) {
+        return conversationService.appendMessages(conversationId, userId, commands);
     }
 
     public List<String> getConversationHistoryForUser(String conversationId, String userId) {

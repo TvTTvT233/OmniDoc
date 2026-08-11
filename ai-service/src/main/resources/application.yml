@@ -85,6 +85,12 @@ ai:
     api:
       # Configure one shared value in production so signed list cursors survive restarts/replicas.
       cursor-signing-key: ${AI_MEMORY_CURSOR_SIGNING_KEY:${OMNIDOC_JWT_SECRET:}}
+    context:
+      default-window-tokens: ${AI_MEMORY_CONTEXT_WINDOW_TOKENS:32768}
+      reserved-output-tokens: ${AI_MEMORY_CONTEXT_RESERVED_OUTPUT_TOKENS:4096}
+      safety-reserve-percent: ${AI_MEMORY_CONTEXT_SAFETY_PERCENT:10}
+      history-page-size: ${AI_MEMORY_CONTEXT_HISTORY_PAGE_SIZE:200}
+      block-overhead-tokens: ${AI_MEMORY_CONTEXT_BLOCK_OVERHEAD_TOKENS:8}
     schema:
       auto-migration:
         enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}

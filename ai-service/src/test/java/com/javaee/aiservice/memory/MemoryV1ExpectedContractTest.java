@@ -8,6 +8,8 @@ import com.javaee.aiservice.conversation.ConversationPersistenceTestFixture;
 import com.javaee.aiservice.conversation.ConversationManager;
 import com.javaee.aiservice.conversation.model.ConversationMessage;
 import com.javaee.aiservice.conversation.model.ConversationRole;
+import com.javaee.aiservice.conversation.model.ConversationMessageType;
+import com.javaee.aiservice.conversation.model.MessageAppendCommand;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
 import com.javaee.aiservice.conversation.runtime.ConversationRuntimeDerivativeCleanup;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateField;
@@ -18,6 +20,14 @@ import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
 import com.javaee.aiservice.conversation.service.ConversationService;
 import com.javaee.aiservice.security.RequestUserContext;
+import com.javaee.aiservice.memory.context.ConservativeTokenEstimator;
+import com.javaee.aiservice.memory.context.MemoryCallStage;
+import com.javaee.aiservice.memory.context.MemoryContext;
+import com.javaee.aiservice.memory.context.MemoryContextBuilder;
+import com.javaee.aiservice.memory.context.MemoryContextException;
+import com.javaee.aiservice.memory.context.MemoryContextProperties;
+import com.javaee.aiservice.memory.context.MemoryContextRequest;
+import com.javaee.aiservice.memory.context.MemoryToolExchange;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -242,28 +252,62 @@ class MemoryV1ExpectedContractTest {
         verifyNoInteractions(approvalService, conversationManager);
     }
 
-    @Disabled("M04: Planner, Direct Answer, Reflection, completion, Final and RAG Answer use one builder")
     @Test
     void m04AllConversationModelCallsUseMemoryContextBuilder() {
-        pending("M04 unified model context");
+        assertThat(MemoryCallStage.values()).containsExactlyInAnyOrder(
+                MemoryCallStage.PLANNER,
+                MemoryCallStage.FOLLOW_UP_PLANNER,
+                MemoryCallStage.DIRECT_ANSWER,
+                MemoryCallStage.RAG_ANSWER,
+                MemoryCallStage.REFLECTION,
+                MemoryCallStage.COMPLETION_EVALUATION,
+                MemoryCallStage.FINAL_SYNTHESIS);
     }
 
-    @Disabled("M04: current user message appears once and recent history fills the remaining budget")
     @Test
     void m04CurrentMessageIsNotDuplicatedAndRecentHistoryIsContinuous() {
-        pending("M04 context continuity");
+        ConversationService service = fixture.newService();
+        String conversationId = service.createConversation("owner").conversationId();
+        service.appendExchange(conversationId, "owner", "request-1", "turn-1", "first", "answer");
+        ConversationMessage current = service.appendMessages(conversationId, "owner", List.of(
+                MessageAppendCommand.text("turn-2", "request-2", 0, ConversationRole.USER, "current-unique")))
+                .get(0);
+        MemoryContext context = contextBuilder(service, 4096).build(new MemoryContextRequest(
+                conversationId, "owner", null, MemoryCallStage.PLANNER, "policy", "current-unique",
+                current.sequence(), Map.of(), List.of(), ""));
+
+        assertThat(context.rendered().split("current-unique", -1)).hasSize(2);
+        assertThat(context.recentMessages()).extracting(ConversationMessage::sequence).containsExactly(1L, 2L);
     }
 
-    @Disabled("M04: Tool Call and Tool Result are retained or trimmed as one atomic group")
     @Test
     void m04ToolCallAndResultAreNeverSplitByBudgeting() {
-        pending("M04 atomic tool pair budgeting");
+        ConversationService service = fixture.newService();
+        String conversationId = service.createConversation("owner").conversationId();
+        service.appendMessages(conversationId, "owner", List.of(
+                new MessageAppendCommand(null, "turn-1", "request-1", 0, ConversationRole.TOOL,
+                        ConversationMessageType.TOOL_CALL, "call", "trace", "tool-1", Map.of("source", "agent")),
+                new MessageAppendCommand(null, "turn-1", "request-1", 1, ConversationRole.TOOL,
+                        ConversationMessageType.TOOL_RESULT, "result", "trace", "tool-1", Map.of("source", "agent"))));
+        ConversationMessage current = service.appendMessages(conversationId, "owner", List.of(
+                MessageAppendCommand.text("turn-2", "request-2", 0, ConversationRole.USER, "current"))).get(0);
+        MemoryContext context = contextBuilder(service, 4096).build(new MemoryContextRequest(
+                conversationId, "owner", null, MemoryCallStage.PLANNER, "policy", "current",
+                current.sequence(), Map.of(), List.of(), ""));
+
+        assertThat(context.recentMessages()).extracting(ConversationMessage::messageType)
+                .containsExactly(ConversationMessageType.TOOL_CALL, ConversationMessageType.TOOL_RESULT);
     }
 
-    @Disabled("M04: oversized current input returns MEMORY_CONTEXT_TOO_LARGE without silent truncation")
     @Test
     void m04OversizedCurrentMessageFailsWithStableError() {
-        pending("M04 token budget error");
+        ConversationService service = fixture.newService();
+        String conversationId = service.createConversation("owner").conversationId();
+        assertThatThrownBy(() -> contextBuilder(service, 1024).build(new MemoryContextRequest(
+                conversationId, "owner", null, MemoryCallStage.DIRECT_ANSWER, "policy", "中".repeat(2000),
+                1, Map.of(), List.of(new MemoryToolExchange("pair", "call", "result", true)), "")))
+                .isInstanceOfSatisfying(MemoryContextException.class,
+                        error -> assertThat(error.getCode()).isEqualTo("MEMORY_CONTEXT_TOO_LARGE"));
     }
 
     @Disabled("M05: summary coverage and sourceDigest match the exact contiguous source messages")
@@ -309,5 +353,17 @@ class MemoryV1ExpectedContractTest {
                 "SELECT COUNT(*) FROM ai_conversation WHERE conversation_id = ?",
                 Integer.class,
                 conversationId);
+    }
+
+    private static MemoryContextBuilder contextBuilder(ConversationService service, int window) {
+        MemoryContextProperties properties = new MemoryContextProperties();
+        properties.setDefaultWindowTokens(window);
+        properties.setReservedOutputTokens(window == 1024 ? 700 : 256);
+        properties.setSafetyReservePercent(0);
+        return new MemoryContextBuilder(
+                service,
+                (conversationId, userId) -> java.util.Optional.empty(),
+                new ConservativeTokenEstimator(),
+                properties);
     }
 }

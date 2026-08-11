@@ -40,13 +40,26 @@ public class AgentReflectionService {
                                    Map<String, Object> context,
                                    int iteration,
                                    int maxIterations) {
+        return reflect(request, plan, results, context, iteration, maxIterations, "");
+    }
+
+    public AgentReflection reflect(AgentExecutionRequest request,
+                                   List<AgentPlanStep> plan,
+                                   List<AgentToolResult> results,
+                                   Map<String, Object> context,
+                                   int iteration,
+                                   int maxIterations,
+                                   String memoryContext) {
         if (results == null || results.isEmpty()) {
             return heuristicReflection(iteration, maxIterations, null, "没有工具结果可供反思");
         }
 
         try {
+            String prompt = memoryContext != null && !memoryContext.isBlank()
+                    ? memoryContext
+                    : buildReflectionPrompt(request, plan, results, context, iteration, maxIterations);
             String raw = chatService.callChatApiWithModelCode(
-                    buildReflectionPrompt(request, plan, results, context, iteration, maxIterations),
+                    prompt,
                     request.getModel());
             AgentReflection reflection = parseReflection(raw, iteration);
             normalizeDecision(reflection, request, results, iteration, maxIterations);

@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念与执行边界已冻结，M01 后端/前端/验收基线已集成验证；M03-A Runtime State 核心已在独立分支完成专项验证，删除与 Agent/owner 集成仍待 M02/M03-B；Qdrant 与 MCP 搜索仍等待用户人工验收
+- **当前阶段**：Memory V1 概念边界已冻结；M01、M02、M03 已完成阶段验证，M04 统一上下文与 Agent 接入已完成专项验证，M06-A/B 已完成前端契约与后端 API；Qdrant 与 MCP 搜索仍等待用户人工验收
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：继续 M02 Conversation 持久化，并在集成后把永久删除协调接到 M03-A 清理接口；后续 M03-B 完成 Agent 续接/审批 owner 校验，M07 执行集成门禁；Qdrant 和 MCP 人工验收仍分别按既有文档执行
+- **下一阶段**：实现 M05 Structured Rolling Summary，然后完成 M06-C 前端 UI 接管与 M07 最终集成门禁；Qdrant 和 MCP 人工验收仍分别按既有文档执行
 
 ## 已确认
 
@@ -37,7 +37,7 @@
 - 奖学金审查 V1 的实现完成度、测试覆盖、性能与生产可用性。
 - 真实模型、Tavily MCP、完整服务启动和端到端外部搜索链路的可用性。
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
-- Memory V1 尚未完成集成：M03-A 只在独立分支完成受控 Runtime State 核心与 mock 专项验证；Conversation 持久化、删除协调、Agent/owner 接入、统一上下文组装、Structured Summary、前端完整历史体验和级联删除仍未实现或验证。
+- Memory V1 尚未最终集成验收：Structured Summary、前端完整历史体验、真实 MySQL/Redis/模型/浏览器联调和 M07 最终门禁仍未完成。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
 
 ## 后续运行基线验证
@@ -392,6 +392,15 @@
 - M03 Integrated 门实际运行 69 项：61 项通过、8 项仅属于 M04/M05 的未来项，Failures 0、Errors 0；四个冻结 M03 目标全部执行且 skipped=0，报告为 `STAGE_GATE / M03 / STAGE_VERIFIED`；
 - 该门仍使用本机确定性替身，未验证真实 Redis 故障、真实 MySQL、真实模型、完整 M07 或人工验收。
 
+### M04 统一 MemoryContextBuilder 与 Agent 接入
+
+- 已实现统一受预算上下文组装，覆盖 Planner、Follow-up Planner、Direct Answer、RAG Answer、Reflection、完成度评估和 Final Synthesis 七类 Conversation Agent 模型调用；
+- 当前 USER 在模型调用前持久化，当前消息只注入一次；Summary coverage 后的近期原始消息按 token 预算保留，Tool Call/Result 以原子对裁剪；
+- System/当前消息/必要工具对的优先级高于 Runtime、Summary 和旧历史；Summary 被裁剪时 coverage 不再生效，不引入不可见缺口；
+- 超限输入保留 USER 并追加脱敏失败 EVENT，Agent API 返回 HTTP 413 + `MEMORY_CONTEXT_TOO_LARGE`；日志仅记录长度、计数和裁剪原因；
+- 专项与 Agent/Controller 回归实际发现 60 项：56 项通过，4 项仅为 M05 预期挂起，Failures 0、Errors 0；M04 四个冻结目标 Skipped 0；
+- 未连接真实 MySQL/Redis/模型/浏览器，M05、M06-C 和 M07 仍待完成；详细交接见 `docs/memory/handoffs/M04.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -413,6 +422,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-11 | Memory M04 统一上下文 | 实现按模型 token 预算的 MemoryContextBuilder，七类 Agent 模型路径统一接入，USER/工具/助手结构化追加，超限失败 EVENT 与 HTTP 413 稳定错误；专项回归 60 项无失败/错误，4 项仅 M05 挂起 |
 | 2026-08-11 | Memory M06-B 后端结构化 API | 实现七个 Conversation 资源端点、认证所有者隔离、HMAC 稳定游标、公开消息白名单脱敏和真实 HTTP 错误载体；专项及旧 Controller 联合回归 25/25、M02 Integrated 阶段门禁通过；真实前端联调与 UI 接管仍待 M06-C |
 | 2026-08-11 | Memory M02 持久化 | 在隔离分支实现 MySQL/Spring JDBC Conversation 与结构化 Message、事务 sequence、幂等、所有者隔离、生命周期和旧 Redis 按需导入；H2/MySQL-mode 专项与 Agent/Controller 回归通过，真实 MySQL 集成待协调复核 |
 | 2026-08-11 | Memory M03-A Runtime State 核心 | 在独立分支实现五字段 typed Runtime State、conversation+trace 隔离、TTL/大小/消费生命周期、显式 Redis fail/degrade、清理接口与旧 ctx 白名单短期兼容；前两个 M03 门禁启用，删除与 Agent/owner 集成仍挂起 |

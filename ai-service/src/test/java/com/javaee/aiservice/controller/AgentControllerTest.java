@@ -4,6 +4,7 @@ import com.javaee.aiservice.agent.KnowledgeIndexAgent;
 import com.javaee.aiservice.agent.execution.AgentExecutionService;
 import com.javaee.aiservice.agent.execution.task.AgentTaskRegistry;
 import com.javaee.aiservice.conversation.ConversationManager;
+import com.javaee.aiservice.memory.context.MemoryContextException;
 import com.javaee.aiservice.security.RequestUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,22 @@ class AgentControllerTest {
         ReflectionTestUtils.setField(controller, "requestUserContext", requestUserContext);
         ReflectionTestUtils.setField(controller, "conversationManager", conversationManager);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new AgentMemoryExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void executeReturnsStablePayloadTooLargeErrorForMemoryBudgetFailure() throws Exception {
+        when(agentExecutionService.execute(any())).thenThrow(new MemoryContextException("internal budget detail"));
+
+        mockMvc.perform(post("/api/ai/agent/execute")
+                        .contentType("application/json")
+                        .content("{\"task\":\"oversized\"}"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.errorCode").value("MEMORY_CONTEXT_TOO_LARGE"))
+                .andExpect(jsonPath("$.message")
+                        .value("Conversation input exceeds the configured model context budget"));
     }
 
     @Test

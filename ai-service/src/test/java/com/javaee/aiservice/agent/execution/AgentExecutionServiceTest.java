@@ -412,7 +412,7 @@ class AgentExecutionServiceTest {
         reflection.setContinueExecution(true);
         reflection.setRequiresReplan(true);
         reflection.setReason("需要根据检索结果继续回答，但未提供 revisedPlan");
-        when(reflectionService.reflect(any(), any(), any(), any(), eq(1), eq(2))).thenReturn(reflection);
+        when(reflectionService.reflect(any(), any(), any(), any(), eq(1), eq(2), any())).thenReturn(reflection);
 
         doNothing().when(conversationManager).addMessageForUser(eq("conv-1"), eq("user-1"), any(), any());
         doNothing().when(contextManager).updateContext(eq("conv-1"), any());
