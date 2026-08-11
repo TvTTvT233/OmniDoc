@@ -34,6 +34,7 @@
             <el-button
                 link
                 icon="Plus"
+                data-testid="conversation-new"
                 :disabled="isConversationBusy"
                 @click="handleNewConversation"
                 style="font-size: 16px; color: #3370ff; margin-right: 8px;"
@@ -73,6 +74,7 @@
           </select>
           <el-button
               v-if="activeConversation"
+              :data-testid="activeConversation.status === 'ARCHIVED' ? 'conversation-restore' : 'conversation-archive'"
               link
               size="small"
               :disabled="isConversationBusy"
@@ -82,6 +84,7 @@
           </el-button>
           <el-button
               v-if="activeConversation"
+              data-testid="conversation-delete"
               link
               size="small"
               type="danger"
@@ -107,6 +110,7 @@
         <div class="chat-scroll-area">
           <el-button
               v-if="hasOlderMessages"
+              data-testid="conversation-load-older"
               class="load-older-btn"
               link
               :loading="isLoadingMessages"

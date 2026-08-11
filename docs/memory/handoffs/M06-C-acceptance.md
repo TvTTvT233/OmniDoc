@@ -3,7 +3,7 @@
 ## 1. 状态与边界
 
 ```text
-PRE_INTEGRATION_FAILED / PENDING_INTEGRATION
+INTEGRATED_TARGET_VERIFIED / REAL_BROWSER_PENDING
 ```
 
 - 分支：`test/memory-m06c-acceptance`
@@ -12,7 +12,7 @@ PRE_INTEGRATION_FAILED / PENDING_INTEGRATION
 - 生产实现：未修改
 - 测试跳过：0
 
-本交付只冻结并执行 M06-C 前端目标验收。起始基线尚未包含主任务的 M06-C UI 接管，因此目标测试应失败且实际全部失败；这不是回归通过，也不能标记为 `STAGE_VERIFIED`、`AUTO_VERIFIED` 或 `HUMAN_ACCEPTED`。
+本交付从未包含 M06-C UI 的起始基线独立编写。原独立分支运行时 11 项目标测试全部失败；主协调分支集成生产实现后，同一组目标已全部转为通过。该状态仍不是最终 `AUTO_VERIFIED` 或 `HUMAN_ACCEPTED`。
 
 委派中引用的 `docs/memory/00-GOAL_AND_SCOPE.md`、`01-ARCHITECTURE.md`、`02-CONTRACT.md`、`03-TASK_BOARD.md` 在起始提交中不存在。本任务完整阅读了仓库实际对应的 `00-MEMORY_V1_SPEC.md`、`01-TASK_BOARD.md`、`02-API_AND_STORAGE_CONTRACT.md`、`02-PARALLEL_DELIVERY_PLAN.md`、`03-AUTO_ACCEPTANCE.md` 和 `04-HUMAN_ACCEPTANCE.md`，并以这些冻结文件为依据；没有补造或改名公共文档。
 
@@ -40,9 +40,9 @@ PRE_INTEGRATION_FAILED / PENDING_INTEGRATION
 
 ## 3. M01 baseline 的反转关系
 
-既有 `*.memory-baseline.test.js` 是 M01 的历史证据，当前仍以 7/7 通过证明以下旧缺陷存在：只恢复单例 ID、不恢复消息，创建失败使用 `temp_*`，编辑器复用旧 ID/使用 `default_conv`，以及两个入口状态实现分裂。
+既有 `*.memory-baseline.test.js` 在独立起始基线上仍以 7/7 通过证明以下旧缺陷存在：只恢复单例 ID、不恢复消息，创建失败使用 `temp_*`，编辑器复用旧 ID/使用 `default_conv`，以及两个入口状态实现分裂。主协调分支已把这三份测试翻转为 M06 目标回归，当前为 6/6 通过。
 
-本交付没有写权限修改这些历史文件，而是用 11 个 `*.memory-ui.test.js` 目标用例逐项反转其产品断言。M06-C 集成后，最终门禁应运行 `test:memory-ui`；不得继续把 M01 缺陷基线的通过计入 Memory V1 目标通过。历史基线如需保留，应明确标记为审计资产并从最终成功计数中排除。
+本独立任务没有写权限修改这些历史文件，而是用 11 个 `*.memory-ui.test.js` 目标用例逐项反转其产品断言。协调集成后最终门禁应同时运行翻转后的基线和 `test:memory-ui`，不得把独立起始基线的旧缺陷通过计入 Memory V1 目标通过。
 
 ## 4. 实际执行结果
 
@@ -123,4 +123,15 @@ npm.cmd ci --ignore-scripts
 - 确定性 mock 已覆盖 M06-B 所述“公开投影后空页但 `hasMore=true`”的继续翻页，但尚未通过真实后端数据验证；
 - 未验证真实多用户隔离、游标签名跨重启、多副本共享密钥、真实服务重启和永久删除后端残留为零；
 - 构建的大 chunk 警告和 npm 依赖漏洞是既有风险，未因本验收任务改变；
-- 在目标 11/11 通过且完成真实联调前，M06-C 必须保持 `PENDING_INTEGRATION`。
+- 目标测试已在协调分支 11/11 通过；真实联调完成前只能标记 `INTEGRATED_TARGET_VERIFIED / REAL_BROWSER_PENDING`，不得提升为最终自动或人工通过。
+
+## 7. 主协调分支集成复核
+
+- 独立交付提交：`29908f243c36b06817923df85388131a01492483`；
+- 主协调分支挑选提交：`e834a26`；
+- 测试夹具按冻结后的认证边界改为从 JWT claim 建立用户作用域，不再向 `localStorage.userId` 或旧 `useGlobalAi` 单例注入所有者；
+- Agent 成功后的断言改由结构化 durable Message Page 提供真实 assistant 历史，不接受直接把 Agent HTTP 返回临时追加成伪持久化消息；
+- 生产 UI 增加稳定会话操作标识，并把执行中的历史项显式标记为 disabled；业务断言、错误路径和禁止项没有放宽；
+- 集成实际执行 `npm.cmd run test:memory-ui -- --reporter=dot`：2 个文件、11/11 通过、Failures 0、Skipped 0；
+- 独立起始基线的 0/11 与集成后的 11/11 共同证明这些测试先于实现且能够识别旧缺陷；
+- 真实浏览器、JWT 双用户、MySQL、Redis、模型和完整服务仍未运行，状态保持 `INTEGRATED_TARGET_VERIFIED / REAL_BROWSER_PENDING`。

@@ -40,6 +40,7 @@ vi.mock('../../api/agent', () => ({
   agentApi: {
     executeTask: mocks.executeTask,
     confirmApproval: mocks.confirmApproval,
+    cancelApproval: vi.fn(),
   },
 }))
 
@@ -47,9 +48,10 @@ vi.mock('../../api/document.js', () => ({
   docApi: { searchDocs: mocks.searchDocs },
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => mocks.route,
-}))
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual('vue-router')
+  return { ...actual, useRoute: () => mocks.route }
+})
 
 vi.mock('element-plus', () => ({
   ElMessage: {
@@ -65,7 +67,6 @@ import {
   CONVERSATION_ENTRY,
   useConversationSession,
 } from '../../composables/useConversationSession.js'
-import { useGlobalAi } from '../../utils/useGlobalAi.js'
 
 const ButtonStub = {
   inheritAttrs: false,
@@ -122,6 +123,12 @@ const page = (items, { nextBeforeSequence = null, hasMore = false } = {}) => ({
   hasMore,
 })
 
+const token = (userId) => {
+  const payload = btoa(JSON.stringify({ userId, exp: Math.floor(Date.now() / 1000) + 3600 }))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `header.${payload}.signature`
+}
+
 const deferred = () => {
   let resolve
   let reject
@@ -171,10 +178,9 @@ const scopedSession = (userId) => useConversationSession({
 })
 
 const seedActiveConversation = (userId, conversationId) => {
+  localStorage.setItem('accessToken', token(userId))
   const session = scopedSession(userId)
   session.activateConversation(conversationId)
-  // Keep the legacy module deterministic until M06-C removes it from this UI.
-  useGlobalAi().saveConvId(conversationId)
   return session
 }
 
@@ -193,7 +199,6 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
-    useGlobalAi().resetConversation()
     vi.clearAllMocks()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -211,7 +216,6 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
   it('restores the persisted conversation and loads older pages by beforeSequence', async () => {
     const userId = 'm06c-global-refresh'
     const conversationId = 'conv-global-refresh'
-    localStorage.setItem('userId', userId)
     seedActiveConversation(userId, conversationId)
     mocks.conversationApi.getConversation.mockResolvedValue(conversation(conversationId))
     mocks.conversationApi.listMessages.mockImplementation((id, options = {}) => {
@@ -263,7 +267,6 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
   it('continues message pagination when public projection returns an empty page with hasMore', async () => {
     const userId = 'm06c-global-empty-page'
     const conversationId = 'conv-global-empty-page'
-    localStorage.setItem('userId', userId)
     seedActiveConversation(userId, conversationId)
     mocks.conversationApi.getConversation.mockResolvedValue(conversation(conversationId))
     mocks.conversationApi.listMessages.mockImplementation((id, options = {}) => {
@@ -307,7 +310,6 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
     const userId = 'm06c-global-create'
     const oldId = 'conv-global-old'
     const newId = 'conv-global-new'
-    localStorage.setItem('userId', userId)
     const session = seedActiveConversation(userId, oldId)
     mocks.conversationApi.getConversation.mockResolvedValue(conversation(oldId))
     mocks.conversationApi.listMessages.mockResolvedValue(page([
@@ -345,7 +347,7 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
 
   it('preserves the draft and never executes an Agent request when conversation creation fails', async () => {
     const userId = 'm06c-global-create-failure'
-    localStorage.setItem('userId', userId)
+    localStorage.setItem('accessToken', token(userId))
     mocks.conversationApi.createConversation.mockRejectedValue(new Error('create unavailable'))
 
     const wrapper = mountAssistant()
@@ -370,10 +372,13 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
   it('reuses clientRequestId after failure, retains the draft, and shows no pseudo assistant reply', async () => {
     const userId = 'm06c-global-retry'
     const conversationId = 'conv-global-retry'
-    localStorage.setItem('userId', userId)
     seedActiveConversation(userId, conversationId)
     mocks.conversationApi.getConversation.mockResolvedValue(conversation(conversationId))
-    mocks.conversationApi.listMessages.mockResolvedValue(page([]))
+    mocks.conversationApi.listMessages.mockImplementation(() => Promise.resolve(page(
+      mocks.executeTask.mock.calls.length >= 2
+        ? [message(conversationId, 2, 'ASSISTANT', '真实后端回答')]
+        : [],
+    )))
     mocks.executeTask
       .mockRejectedValueOnce(new Error('model unavailable'))
       .mockResolvedValueOnce({ data: { answer: '真实后端回答', toolResults: [] } })
@@ -410,12 +415,12 @@ describe('GlobalAiAssistant Memory V1 UI acceptance', () => {
   it('rejects legacy fallback ids and creates a durable conversation before sending', async () => {
     const userId = 'm06c-global-forbidden-id'
     const durableId = 'conv-global-durable'
-    localStorage.setItem('userId', userId)
+    localStorage.setItem('accessToken', token(userId))
     localStorage.setItem(
       `omnidoc:conversation:v1:${encodeURIComponent(userId)}:global-assistant:active`,
       'temp_legacy',
     )
-    useGlobalAi().saveConvId('default_conv')
+    localStorage.setItem('global_conv_id', 'default_conv')
     mocks.conversationApi.createConversation.mockResolvedValue(conversation(durableId))
     mocks.executeTask.mockResolvedValue({ data: { answer: '持久化回答', toolResults: [] } })
 

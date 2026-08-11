@@ -29,13 +29,17 @@ vi.mock('../../api/conversation.js', () => ({
   conversationApi: mocks.conversationApi,
 }))
 
-vi.mock('vue-router', () => ({
-  useRoute: () => mocks.route,
-  useRouter: () => ({
-    push: mocks.routerPush,
-    replace: mocks.routerReplace,
-  }),
-}))
+vi.mock('vue-router', async () => {
+  const actual = await vi.importActual('vue-router')
+  return {
+    ...actual,
+    useRoute: () => mocks.route,
+    useRouter: () => ({
+      push: mocks.routerPush,
+      replace: mocks.routerReplace,
+    }),
+  }
+})
 
 vi.mock('../../api/ai', () => ({
   aiApi: {
@@ -130,6 +134,12 @@ const messagePage = (items) => ({
   hasMore: false,
 })
 
+const token = (userId) => {
+  const payload = btoa(JSON.stringify({ userId, exp: Math.floor(Date.now() / 1000) + 3600 }))
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `header.${payload}.signature`
+}
+
 const conversationPage = (items) => ({
   items,
   nextCursor: null,
@@ -197,7 +207,7 @@ const isDisabled = (wrapper) => wrapper.attributes('disabled') !== undefined
   || wrapper.classes().some((value) => /disabled|is-loading/.test(value))
 
 const seedEditor = (userId, activeConversationId) => {
-  localStorage.setItem('userId', userId)
+  localStorage.setItem('accessToken', token(userId))
   const session = editorSession(userId)
   if (activeConversationId) session.activateConversation(activeConversationId)
   return session

@@ -7,14 +7,17 @@
         <div class="brand-back" @click="$router.push('/dashboard')">
           <el-icon><ArrowLeft /></el-icon> 返回工作台
         </div>
-        <el-button class="new-chat-btn" icon="Plus" plain :disabled="isConversationBusy" @click="startNewChat">开启新话题</el-button>
+        <el-button class="new-chat-btn" data-testid="conversation-new" icon="Plus" plain :disabled="isConversationBusy" @click="startNewChat">开启新话题</el-button>
 
         <div class="history-group">
           <div class="group-title">历史会话</div>
           <div
               v-for="item in activeConversations"
               :key="item.conversationId"
-              :class="['history-item', { active: item.conversationId === currentConvId }]"
+              :data-testid="`conversation-item-${item.conversationId}`"
+              :data-conversation-id="item.conversationId"
+              :class="['history-item', { active: item.conversationId === currentConvId, disabled: isConversationBusy }]"
+              :aria-disabled="isConversationBusy ? 'true' : 'false'"
               @click="openConversationFromHistory(item.conversationId)"
           >
             <el-icon><ChatLineRound /></el-icon>
@@ -23,7 +26,10 @@
           <div
               v-for="item in archivedConversations"
               :key="item.conversationId"
-              :class="['history-item', 'archived', { active: item.conversationId === currentConvId }]"
+              :data-testid="`conversation-item-${item.conversationId}`"
+              :data-conversation-id="item.conversationId"
+              :class="['history-item', 'archived', { active: item.conversationId === currentConvId, disabled: isConversationBusy }]"
+              :aria-disabled="isConversationBusy ? 'true' : 'false'"
               @click="openConversationFromHistory(item.conversationId)"
           >
             <el-icon><ChatLineRound /></el-icon>
@@ -49,10 +55,10 @@
         <div class="header-inner">
           <span class="title">{{ chatTitle }}</span>
           <div class="header-actions">
-            <el-button v-if="activeConversation" link :disabled="isConversationBusy" @click="archiveOrRestoreConversation">
+            <el-button v-if="activeConversation" :data-testid="activeConversation.status === 'ARCHIVED' ? 'conversation-restore' : 'conversation-archive'" link :disabled="isConversationBusy" @click="archiveOrRestoreConversation">
               {{ activeConversation.status === 'ARCHIVED' ? '恢复' : '归档' }}
             </el-button>
-            <el-button v-if="activeConversation" icon="Delete" link type="danger" :disabled="isConversationBusy" @click="deleteCurrentConversation">删除</el-button>
+            <el-button v-if="activeConversation" data-testid="conversation-delete" icon="Delete" link type="danger" :disabled="isConversationBusy" @click="deleteCurrentConversation">删除</el-button>
           </div>
         </div>
       </header>
@@ -60,7 +66,7 @@
       <!-- 聊天内容滚动区 -->
         <div class="chat-scroll-area" ref="globalChatRef">
           <div class="chat-content-container">
-          <el-button v-if="hasOlderMessages" link :loading="isLoadingMessages" @click="loadOlderConversationMessages">加载更早消息</el-button>
+          <el-button v-if="hasOlderMessages" data-testid="conversation-load-older" link :loading="isLoadingMessages" @click="loadOlderConversationMessages">加载更早消息</el-button>
           <div v-if="chatHistory.length === 0" class="empty-conversation">Hi！我是 OmniDoc 智能伙伴，今天需要我帮你完成什么工作？</div>
           <div v-for="msg in chatHistory" :key="msg.id" :class="['message-row', msg.role]">
             <div class="avatar-col" v-if="msg.role === 'ai'">
@@ -1268,6 +1274,8 @@ const scrollToBottom = () => { nextTick(() => {
 .history-group { display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 250px); overflow-y: auto; }
 .history-item { padding: 12px 16px; border-radius: 8px; display: flex; align-items: center; gap: 10px; font-size: 14px; color: #4e5969; cursor: pointer; font-weight: 500; }
 .history-item:hover { background: #f2f3f5; }
+.history-item.disabled { cursor: not-allowed; opacity: 0.55; }
+.history-item.disabled:hover { background: transparent; }
 .history-item.active { background: #e1eaff; color: #3370ff; }
 .history-item.archived { color: #8f959e; }
 .history-item .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
