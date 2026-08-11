@@ -28,7 +28,9 @@ $surefireRoot = Join-Path $RepositoryRoot 'ai-service\target\surefire-reports'
 $reportPath = Join-Path $ReportDirectory 'memory-v1-report.json'
 $readinessPath = Join-Path $ReportDirectory 'memory-v1-readiness.json'
 $evidencePath = Join-Path $ReportDirectory 'memory-v1-integrated-evidence.json'
-$frontendReportPath = Join-Path $ReportDirectory 'memory-v1-m06-frontend-report.json'
+$frontendContractReportPath = Join-Path $ReportDirectory 'memory-v1-m06-frontend-contract-report.json'
+$frontendBaselineReportPath = Join-Path $ReportDirectory 'memory-v1-m06-frontend-baseline-report.json'
+$frontendUiReportPath = Join-Path $ReportDirectory 'memory-v1-m06-frontend-ui-report.json'
 
 foreach ($requiredFile in @($wrapper, $settings, $fixturePath, $sensitiveCheck, $readinessCheck)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -314,52 +316,55 @@ function Get-PrefixedTargetCounts {
     }
 }
 
-function Invoke-ExactFrontendTests {
+function Invoke-ExactVitestGroup {
+    param(
+        [string]$Name,
+        [string]$ConfigRelativePath,
+        [string[]]$Files,
+        [string]$OutputPath
+    )
+
     $webRoot = Join-Path $RepositoryRoot 'web'
     $vitest = Join-Path $webRoot 'node_modules\.bin\vitest.cmd'
-    $config = Join-Path $webRoot 'vitest.memory-contract.config.js'
-    $files = @(
-        'src/api/conversation.memory-contract.test.js',
-        'src/composables/useConversationSession.memory-contract.test.js'
-    )
-    foreach ($relative in $files) {
+    $config = Join-Path $webRoot $ConfigRelativePath
+    foreach ($relative in $Files) {
         if (-not (Test-Path -LiteralPath (Join-Path $webRoot $relative) -PathType Leaf)) {
-            throw "Exact M06 frontend test file is missing: $relative"
+            throw "$Name exact frontend test file is missing: $relative"
         }
     }
     if (-not (Test-Path -LiteralPath $vitest -PathType Leaf)) {
         throw 'M06 frontend dependencies are not installed; run npm.cmd ci in web before the gate'
     }
     if (-not (Test-Path -LiteralPath $config -PathType Leaf)) {
-        throw "M06 frontend Vitest config is missing: $config"
+        throw "$Name Vitest config is missing: $config"
     }
 
-    Remove-ExactGeneratedFile -Path $frontendReportPath
+    Remove-ExactGeneratedFile -Path $OutputPath
     Push-Location $webRoot
     try {
-        & $vitest run --config $config @files --reporter=json "--outputFile=$frontendReportPath" | Out-Host
+        & $vitest run --config $config @Files --reporter=json "--outputFile=$OutputPath" | Out-Host
         $vitestExit = $LASTEXITCODE
     } finally {
         Pop-Location
     }
     if ($vitestExit -ne 0) {
-        throw "M06 exact frontend tests failed with exit code $vitestExit"
+        throw "$Name exact frontend tests failed with exit code $vitestExit"
     }
-    if (-not (Test-Path -LiteralPath $frontendReportPath -PathType Leaf)) {
-        throw 'M06 exact frontend tests did not produce JSON evidence'
+    if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
+        throw "$Name exact frontend tests did not produce JSON evidence"
     }
-    $result = Get-Content -LiteralPath $frontendReportPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $result = Get-Content -LiteralPath $OutputPath -Raw -Encoding utf8 | ConvertFrom-Json
     $reportedFiles = @($result.testResults | ForEach-Object {
         ([string]$_.name).Replace('\', '/')
     })
-    foreach ($relative in $files) {
+    foreach ($relative in $Files) {
         $normalized = $relative.Replace('\', '/')
         if (-not ($reportedFiles | Where-Object { $_.EndsWith($normalized, [System.StringComparison]::OrdinalIgnoreCase) })) {
-            throw "M06 frontend JSON is missing exact test file: $relative"
+            throw "$Name frontend JSON is missing exact test file: $relative"
         }
     }
-    if ($reportedFiles.Count -ne $files.Count) {
-        throw "M06 frontend JSON contains unexpected test files: $($reportedFiles -join ', ')"
+    if ($reportedFiles.Count -ne $Files.Count) {
+        throw "$Name frontend JSON contains unexpected test files: $($reportedFiles -join ', ')"
     }
     $counts = [pscustomobject][ordered]@{
         run = [int]$result.numTotalTests
@@ -369,9 +374,66 @@ function Invoke-ExactFrontendTests {
         reports = [int]$result.numTotalTestSuites
     }
     if ($counts.run -lt 1 -or $counts.failures -ne 0 -or $counts.skipped -ne 0) {
-        throw "M06 frontend counts are not passing: run=$($counts.run), failures=$($counts.failures), skipped=$($counts.skipped)"
+        throw "$Name frontend counts are not passing: run=$($counts.run), failures=$($counts.failures), skipped=$($counts.skipped)"
     }
     return $counts
+}
+
+function Invoke-ExactFrontendTests {
+    $groups = @(
+        Invoke-ExactVitestGroup `
+            -Name 'M06 contract' `
+            -ConfigRelativePath 'vitest.memory-contract.config.js' `
+            -Files @(
+                'src/api/conversation.memory-contract.test.js',
+                'src/composables/useConversationSession.memory-contract.test.js',
+                'src/composables/useConversationWorkspace.memory-contract.test.js',
+                'src/utils/jwt.memory-contract.test.js') `
+            -OutputPath $frontendContractReportPath
+        Invoke-ExactVitestGroup `
+            -Name 'M06 flipped baseline' `
+            -ConfigRelativePath 'vitest.config.js' `
+            -Files @(
+                'src/utils/useGlobalAi.memory-baseline.test.js',
+                'src/views/components/GlobalAiAssistant.memory-baseline.test.js',
+                'src/views/editor/EditorView.memory-baseline.test.js') `
+            -OutputPath $frontendBaselineReportPath
+        Invoke-ExactVitestGroup `
+            -Name 'M06 independent UI acceptance' `
+            -ConfigRelativePath 'vitest.memory-ui.config.js' `
+            -Files @(
+                'src/views/components/GlobalAiAssistant.memory-ui.test.js',
+                'src/views/editor/EditorView.memory-ui.test.js') `
+            -OutputPath $frontendUiReportPath
+    )
+    $counts = [ordered]@{ run = 0; failures = 0; errors = 0; skipped = 0; reports = 0 }
+    foreach ($group in $groups) {
+        foreach ($field in @('run', 'failures', 'errors', 'skipped', 'reports')) {
+            $counts[$field] += [int]$group.$field
+        }
+    }
+
+    $webRoot = Join-Path $RepositoryRoot 'web'
+    Push-Location $webRoot
+    try {
+        & node --test 'src/api/asyncJob.test.mjs' | Out-Host
+        $nodeExit = $LASTEXITCODE
+        if ($nodeExit -eq 0) {
+            & npm.cmd run build | Out-Host
+            $buildExit = $LASTEXITCODE
+        } else {
+            $buildExit = 1
+        }
+    } finally {
+        Pop-Location
+    }
+    if ($nodeExit -ne 0) {
+        throw "M06 async job regression failed with exit code $nodeExit"
+    }
+    if ($buildExit -ne 0) {
+        throw "M06 production build failed with exit code $buildExit"
+    }
+    return [pscustomobject]$counts
 }
 
 function Read-GateEvidence {
@@ -412,7 +474,7 @@ function New-EmptyCounts {
 
 function Save-MemoryReport {
     param(
-        [ValidateSet('ASSET_VERIFIED', 'PENDING_INTEGRATION', 'PENDING_EXTERNAL', 'FAILED')][string]$Status,
+        [ValidateSet('ASSET_VERIFIED', 'PENDING_INTEGRATION', 'PENDING_EXTERNAL', 'AUTO_VERIFIED', 'FAILED')][string]$Status,
         [object]$AssetCounts,
         [object]$IntegratedCounts,
         [object]$Evidence,
@@ -432,7 +494,7 @@ function Save-MemoryReport {
         reportType = 'FINAL_ACCEPTANCE'
         stage = 'M07'
         status = $Status
-        finalAcceptance = $false
+        finalAcceptance = ($Status -eq 'AUTO_VERIFIED')
         manualStatus = if ($ManualPending) { 'MANUAL_PENDING' } else { 'NOT_READY' }
         generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
         fixture = [ordered]@{
@@ -692,7 +754,7 @@ try {
             'com.javaee.aiservice.conversation.api.ConversationApiServiceTest',
             'com.javaee.aiservice.conversation.api.ConversationControllerTest',
             'com.javaee.aiservice.controller.AgentControllerConversationBaselineTest')
-        M06FrontendContract = $frontendCounts
+        M06Frontend = $frontendCounts
         M07Integrated = Get-SuiteCounts -Suites $javaRun.Suites -FullyQualifiedClasses @(
             'com.javaee.aiservice.memory.acceptance.MemoryV1IntegratedGateTest')
         AgentControllerRegression = Get-SuiteCounts -Suites $javaRun.Suites -FullyQualifiedClasses @(
@@ -726,7 +788,7 @@ try {
     exit 1
 }
 
-$status = if ($m06cMissing.Count -gt 0) { 'PENDING_INTEGRATION' } else { 'PENDING_EXTERNAL' }
+$status = if ($m06cMissing.Count -gt 0) { 'PENDING_INTEGRATION' } else { 'AUTO_VERIFIED' }
 $integrationPending = @($m06cMissing | ForEach-Object { "PENDING_INTEGRATION:$_" })
 Save-MemoryReport `
     -Status $status `
@@ -744,8 +806,10 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[PASS] Exact deterministic suites passed: run=$($integratedCounts.run), failures=0, errors=0, skipped=0."
 if ($status -eq 'PENDING_INTEGRATION') {
     Write-Host "[PENDING_INTEGRATION] M06-C UI dependencies are not integrated: $($m06cMissing -join ', ')"
+    Write-Host '[MANUAL_PENDING] Real browser/JWT, MySQL, Redis, model, Qdrant and remote Embedding remain unverified.'
+    exit 2
 } else {
-    Write-Host '[PENDING_EXTERNAL] Deterministic gates passed, but real external/browser verification is unavailable.'
+    Write-Host '[AUTO_VERIFIED] All deterministic Memory V1 gates passed with failures/errors/skipped equal to zero.'
+    Write-Host '[MANUAL_PENDING] Real browser/JWT, MySQL, Redis and model verification remain for user acceptance.'
+    exit 0
 }
-Write-Host '[MANUAL_PENDING] Real browser/JWT, MySQL, Redis, model, Qdrant and remote Embedding remain unverified.'
-exit 2

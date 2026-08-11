@@ -80,10 +80,14 @@ $checks = [ordered]@{
         -Patterns @('useConversationSession', 'conversationId', 'clientRequestId')
     M06C_GLOBAL_ASSISTANT_UI = Test-SourceContainsAll `
         -RelativePath 'web\src\views\components\GlobalAiAssistant.vue' `
-        -Patterns @('useConversationSession', 'listMessages', 'createAndActivate')
+        -Patterns @(
+            'useConversationWorkspace', 'activeConversations', 'loadOlderMessages',
+            'createConversation', 'archiveConversation', 'deleteConversation', 'clientRequestId')
     M06C_EDITOR_UI = Test-SourceContainsAll `
         -RelativePath 'web\src\views\editor\EditorView.vue' `
-        -Patterns @('useConversationSession', 'listMessages', 'createAndActivate')
+        -Patterns @(
+            'useConversationWorkspace', 'activeConversations', 'loadOlderMessages',
+            'createConversation', 'archiveConversation', 'deleteConversation', 'clientRequestId')
     M07_INTEGRATED_GATE = Test-JavaSourceGroup `
         -RelativePath 'ai-service\src\test\java\com\javaee\aiservice\memory\acceptance\MemoryV1IntegratedGateTest.java' `
         -Pattern '(?m)\bclass\s+MemoryV1IntegratedGateTest\b'
