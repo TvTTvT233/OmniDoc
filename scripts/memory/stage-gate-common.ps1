@@ -117,7 +117,7 @@ function Write-MemoryStageReport {
     param(
         [string]$RepositoryRoot,
         [string]$ReportPath,
-        [ValidateSet('M02', 'M03_A', 'M06_A')][string]$Stage,
+        [ValidateSet('M02', 'M03_A', 'M03', 'M06_A')][string]$Stage,
         [ValidateSet('ASSET_VERIFIED', 'PENDING_INTEGRATION', 'STAGE_VERIFIED', 'FAILED')][string]$Status,
         [object]$AssetCounts,
         [object]$IntegratedCounts,

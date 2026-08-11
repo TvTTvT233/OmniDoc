@@ -39,8 +39,8 @@ class MemoryV1ReportSchemaTest {
         assertThat(stageThen.path("finalAcceptance").path("const").asBoolean()).isFalse();
         assertThat(stageThen.path("manualStatus").path("const").asText()).isEqualTo("NOT_READY");
         assertThat(iterableText(stageThen.path("stage").path("enum")))
-                .containsExactly("M02", "M03_A", "M06_A")
-                .doesNotContain("M03", "M07");
+                .containsExactly("M02", "M03_A", "M03", "M06_A")
+                .doesNotContain("M07");
         assertThat(iterableText(stageGate.path("required"))).containsExactlyInAnyOrder(
                 "ready", "requiredTargets", "readinessMissing", "targetTestsExpected",
                 "targetTestsSkipped", "regressionGroups");

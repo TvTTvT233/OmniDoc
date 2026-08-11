@@ -1,0 +1,23 @@
+{
+  "id": "owner-after-mutation",
+  "expectedReady": false,
+  "expectedStatus": "PENDING_INTEGRATION",
+  "expectedMissing": [
+    "M03_APPROVAL_CANCEL_OWNER_BEFORE_MUTATION",
+    "M03_APPROVAL_CONFIRM_OWNER_BEFORE_MUTATION",
+    "M03_CONTINUATION_OWNER_BEFORE_STATE_USE"
+  ],
+  "sources": {
+    "runtime": [
+      "record RuntimeStateSnapshot(String conversationId) {}",
+      "class RuntimeStateService { RedisTemplate<String, Object> redisTemplate; RuntimeStateField field; Duration ttl = Duration.ofMinutes(10); void update() { redisTemplate.expire(\"runtime\", ttl); } void clearConversation(String conversationId) { redisTemplate.delete(conversationId); } }",
+      "class ConversationRuntimeDerivativeCleanup { void clearConversation(String conversationId) { for (Map snapshot : taskRegistry.findByConversationIdRequired(conversationId)) { approvalService.cancel(token); taskRegistry.deleteRequired(traceId); } } }"
+    ],
+    "conversation": [
+      "class ConversationService { RuntimeStateService runtimeStateService; ConversationStore conversationStore; public void delete(String conversationId, String userId) { requireOwned(conversationId, userId); runtimeStateService.clearConversation(conversationId); conversationStore.deleteOwned(conversationId, userId); } }"
+    ],
+    "agent": [
+      "class AgentExecutionService { public Map execute(Request request) { Map existingSnapshot = taskRegistry.get(continueTraceId); runtimeStateService.consumeTurnInput(scope); assertSnapshotOwner(existingSnapshot, userId); return existingSnapshot; } public Map confirmApproval(Request request) { Map snapshot = taskRegistry.findByApprovalToken(token); Map result = execute(resumed); assertSnapshotOwner(snapshot, userId); return result; } public boolean cancelApproval(String token, String userId) { Map snapshot = taskRegistry.findByApprovalToken(token); agentApprovalService.cancel(token); assertSnapshotOwner(snapshot, userId); return true; } }"
+    ]
+  }
+}
