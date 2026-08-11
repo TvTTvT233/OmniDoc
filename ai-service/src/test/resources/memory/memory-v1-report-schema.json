@@ -26,7 +26,7 @@
     "schemaVersion": {"const": 1},
     "reportType": {"enum": ["FINAL_ACCEPTANCE", "STAGE_GATE"]},
     "stage": {"enum": ["M02", "M03_A", "M03", "M06_A", "M07"]},
-    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED"]},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED"]},
     "finalAcceptance": {"type": "boolean"},
     "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING", "HUMAN_ACCEPTED"]},
     "generatedAtUtc": {"type": "string", "format": "date-time"},
@@ -246,7 +246,7 @@
       "then": {
         "properties": {
           "stage": {"const": "M07"},
-          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED"]},
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "AUTO_VERIFIED", "FAILED"]},
           "stageGate": {"type": "null"}
         }
       }
@@ -254,7 +254,7 @@
     {
       "if": {
         "properties": {
-          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED"]}
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "STAGE_VERIFIED", "FAILED"]}
         },
         "required": ["status"]
       },

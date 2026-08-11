@@ -1,6 +1,6 @@
 # Memory V1 验收入口
 
-本目录在 M01 阶段只验证合成 fixture、Summary JSON Schema、报告 JSON Schema、资产契约测试和敏感信息边界，不修改或替代 Memory V1 生产实现。
+本目录提供 Memory V1 的资产自检、阶段门禁和 M07 最终自动门禁。门禁不修改或替代生产实现，也不会把本地确定性替身写成真实外部服务验证。
 
 ## 资产自检
 
@@ -30,9 +30,18 @@ ai-service/target/memory-v1-acceptance/memory-v1-report.json
 .\scripts\memory\run-m07-acceptance.cmd -Integrated
 ```
 
-M02-M06 生产源组或 `MemoryV1IntegratedGateTest` 缺失时，入口输出 `PENDING_INTEGRATION` 并以非零状态结束，不会把缺失实现计作通过。脚本请求 `exit 2`；当前 Windows PowerShell 调用宿主实际呈现为进程退出码 `1`，调用方应以“是否为零”判断通过或挂起。
+最终入口要求干净工作区，并执行以下硬边界：
 
-M01-AC 版本即使发现候选集成资产也没有权限输出 `AUTO_VERIFIED`。最终状态必须由 M07 在全部 P0/P1 门禁、回归和清理检查完成后实现并复核。
+- readiness 扫描 M02-M05、M06-A/B、M06-C 和 `MemoryV1IntegratedGateTest`；
+- Maven 只使用逐名列出的测试类，不使用 `*Memory*Test`；
+- 不设置 `surefire.failIfNoSpecifiedTests=false`；每个精确类必须有源码、Surefire suite XML 和合法 testcase 计数；
+- 每次 Maven 运行前删除精确 `ai-service/target/surefire-reports/TEST-*.xml`，防止旧报告混入；
+- M02/M03/M04/M05 的 16 个冻结目标方法必须逐名执行且 skipped 为 0；
+- M06-A 两个前端契约文件和 M06-B 后端命名测试必须通过；
+- `MemoryV1IntegratedGateTest` 必须生成删除残留、sequence、coverage、隔离、CAS 与 token 预算证据，所有删除残留必须为 0；
+- 运行后工作区仍须保持干净。
+
+当前基线尚未集成 M06-C，因此完整入口在可运行的确定性门禁通过后仍输出 `PENDING_INTEGRATION` 并非零退出。即使未来 M06-C 就绪，真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 未验证时，状态也只能是 `PENDING_EXTERNAL / MANUAL_PENDING`，不得输出 `AUTO_VERIFIED`。
 
 ## 分阶段门禁
 

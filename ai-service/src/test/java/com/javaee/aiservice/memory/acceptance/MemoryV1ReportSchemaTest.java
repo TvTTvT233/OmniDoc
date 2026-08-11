@@ -19,7 +19,9 @@ class MemoryV1ReportSchemaTest {
         JsonNode schema = loadSchema();
 
         assertThat(iterableText(schema.path("properties").path("status").path("enum")))
-                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED");
+                .containsExactly(
+                        "ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL",
+                        "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED");
         assertThat(iterableText(schema.path("required"))).contains(
                 "reportType", "stage", "status", "finalAcceptance", "manualStatus", "fixture",
                 "environment", "boundaries", "tests", "gates", "contentSafety", "metrics",
@@ -58,7 +60,8 @@ class MemoryV1ReportSchemaTest {
         assertThat(autoThen.path("manualStatus").path("const").asText()).isEqualTo("MANUAL_PENDING");
         assertThat(autoThen.path("stageGate").path("type").asText()).isEqualTo("null");
         assertThat(iterableText(finalThen.path("status").path("enum")))
-                .containsExactly("ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED")
+                .containsExactly(
+                        "ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "AUTO_VERIFIED", "FAILED")
                 .doesNotContain("STAGE_VERIFIED");
         assertThat(finalThen.path("stage").path("const").asText()).isEqualTo("M07");
         assertThat(finalThen.path("stageGate").path("type").asText()).isEqualTo("null");
