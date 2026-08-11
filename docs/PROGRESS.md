@@ -384,6 +384,14 @@
 - 后端 API 专项与旧 Controller 联合回归 25/25 通过；M02 Integrated 门禁的 Report Schema 5/5 通过，集成选择 71 项发现、59 项通过、12 项仅 M03-M05 按计划跳过、Failures 0、Errors 0，四个 M02 固定目标 skipped=0，阶段报告为 `STAGE_VERIFIED`；
 - 未运行真实 MySQL/Redis、完整服务、真实 JWT 多用户、前后端联调或浏览器端到端；未修改 Agent 主链、Reflection、Context Manager、Runtime、Summary 或现有 UI。M06-C 仍需完成真实前端联调和 UI 接管，详细交接见 `docs/memory/handoffs/M06-B.md`。
 
+### M03-B 与完整 M03 阶段门
+
+- 已在永久删除 durable Conversation 之前统一清理 Runtime State、关联 Agent 任务快照和待审批引用；任何必需 Redis 清理失败都会显式返回并保留 MySQL Conversation/Message 以便幂等重试；
+- continuation、approval confirm 与 approval cancel 均在服务层从认证上下文取得用户，并在消费快照、令牌或修改状态前同时验证 snapshot owner 与 Conversation owner；V1 不提供管理员绕过；
+- 完整 M03 门新增四组正/负 fixture，能识别缺失删除级联以及“先改变状态、后校验所有者”的错误实现；阶段状态与最终 `AUTO_VERIFIED` 保持分离；
+- M03 Integrated 门实际运行 69 项：61 项通过、8 项仅属于 M04/M05 的未来项，Failures 0、Errors 0；四个冻结 M03 目标全部执行且 skipped=0，报告为 `STAGE_GATE / M03 / STAGE_VERIFIED`；
+- 该门仍使用本机确定性替身，未验证真实 Redis 故障、真实 MySQL、真实模型、完整 M07 或人工验收。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
