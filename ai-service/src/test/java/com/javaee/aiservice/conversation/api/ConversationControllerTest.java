@@ -10,6 +10,7 @@ import com.javaee.aiservice.conversation.model.ConversationStatus;
 import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
 import com.javaee.aiservice.conversation.service.ConversationService;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
 import com.javaee.aiservice.security.RequestUserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -258,6 +259,20 @@ class ConversationControllerTest {
         mockMvc.perform(get("/api/ai/conversations"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
+    void runtimeCleanupFailureReturnsStable503WithoutClaimingDeletion() throws Exception {
+        org.mockito.Mockito.doThrow(new RuntimeStateException.Unavailable(
+                        "delete conversation derivatives", new IllegalStateException("Redis unavailable")))
+                .when(conversationService).delete("conv-1", OWNER);
+
+        mockMvc.perform(delete("/api/ai/conversations/conv-1"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.errorCode").value("RUNTIME_STATE_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value(
+                        "Conversation runtime cleanup is temporarily unavailable"))
+                .andExpect(jsonPath("$.deleted").doesNotExist());
     }
 
     private static Conversation conversation(

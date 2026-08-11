@@ -2,6 +2,7 @@ package com.javaee.aiservice.conversation.api;
 
 import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
+import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -44,6 +45,13 @@ public final class ConversationApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ConversationApiErrorResponse(
                 "AUTHENTICATION_REQUIRED",
                 "Authentication is required"));
+    }
+
+    @ExceptionHandler(RuntimeStateException.class)
+    public ResponseEntity<ConversationApiErrorResponse> handleRuntimeState(RuntimeStateException error) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(new ConversationApiErrorResponse(
+                error.getCode(),
+                "Conversation runtime cleanup is temporarily unavailable"));
     }
 
     @ExceptionHandler(Exception.class)
