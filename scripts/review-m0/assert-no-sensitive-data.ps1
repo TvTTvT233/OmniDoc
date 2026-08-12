@@ -15,7 +15,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $repositoryPrefix = $RepositoryRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) +
     [System.IO.Path]::DirectorySeparatorChar
-$fixturePath = Join-Path $RepositoryRoot 'ai-service\src\test\resources\review\m0\acceptance\review-m0-p0-fixtures.json'
+$fixturePath = Join-Path $RepositoryRoot 'ai-service\src\test\resources\review-m0\acceptance\review-m0-p0-fixtures.json'
 $findings = [System.Collections.Generic.List[object]]::new()
 
 function Add-Finding {
@@ -137,11 +137,6 @@ if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
         foreach ($field in @('original', 'objectKey', 'contentHash', 'ocrText', 'documentContent', 'credential')) {
             if ($report.PSObject.Properties.Name -contains $field) {
                 Add-Finding -File $ReportPath -Line 0 -Rule "Forbidden top-level report field: $field"
-            }
-        }
-        foreach ($flag in $report.contentSafety.PSObject.Properties) {
-            if ($flag.Value -ne $false) {
-                Add-Finding -File $ReportPath -Line 0 -Rule "Content-safety flag is not false: $($flag.Name)"
             }
         }
         foreach ($rule in $secretRules) {

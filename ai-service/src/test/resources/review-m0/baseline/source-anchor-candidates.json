@@ -71,7 +71,7 @@
     {"code": "OCR_LANGUAGE_DATA_MISSING", "stage": "DEPENDENCY", "retryable": true, "m000Disposition": "JOB_FAILED_SYSTEM_ERROR_NOT_CANNOT_CONFIRM"},
     {"code": "OCR_FAILED", "stage": "PARSE", "retryable": true, "m000Disposition": "OCR_INSUFFICIENT_IF_INPUT_BOUND_OTHERWISE_JOB_FAILED"},
     {"code": "ANCHOR_UNAVAILABLE", "stage": "LOCATE", "retryable": false, "m000Disposition": "DO_NOT_CONFIRM_EXTRACTED_CANDIDATE"},
-    {"code": "ARCHIVE_ENTRY_UNSAFE_PATH", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "M0_00_MAPPING_NEEDS_CLARIFICATION"},
+    {"code": "ARCHIVE_ENTRY_UNSAFE_PATH", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ARCHIVE_SAFETY_LIMIT_EXCEEDED"},
     {"code": "ARCHIVE_LIMIT_EXCEEDED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ARCHIVE_SAFETY_LIMIT_EXCEEDED"},
     {"code": "ARCHIVE_NESTING_LIMIT_EXCEEDED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "NESTED_ARCHIVE_NOT_ALLOWED"},
     {"code": "ARCHIVE_ENCRYPTED_ENTRY_UNSUPPORTED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ENCRYPTED"},

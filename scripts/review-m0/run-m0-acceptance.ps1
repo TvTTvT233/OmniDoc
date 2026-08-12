@@ -21,7 +21,7 @@ $ReportDirectory = [System.IO.Path]::GetFullPath($ReportDirectory)
 
 $wrapper = Join-Path $RepositoryRoot 'mvnw.cmd'
 $settings = Join-Path $RepositoryRoot '.mvn\settings-local.xml'
-$resourceRoot = Join-Path $RepositoryRoot 'ai-service\src\test\resources\review\m0\acceptance'
+$resourceRoot = Join-Path $RepositoryRoot 'ai-service\src\test\resources\review-m0\acceptance'
 $fixturePath = Join-Path $resourceRoot 'review-m0-p0-fixtures.json'
 $selectorPath = Join-Path $resourceRoot 'review-m0-integration-selector.json'
 $reportPath = Join-Path $ReportDirectory 'review-m0-acceptance-report.json'
@@ -29,30 +29,30 @@ $evidencePath = Join-Path $ReportDirectory 'review-m0-integrated-evidence.json'
 $sensitiveCheck = Join-Path $PSScriptRoot 'assert-no-sensitive-data.ps1'
 $surefireRoot = Join-Path $RepositoryRoot 'ai-service\target\surefire-reports'
 $assetClasses = @(
-    'com.javaee.aiservice.review.acceptance.ReviewM0FixtureContractTest',
-    'com.javaee.aiservice.review.acceptance.ReviewM0ReportSchemaTest',
-    'com.javaee.aiservice.review.acceptance.ReviewM0IntegrationSelectorContractTest',
-    'com.javaee.aiservice.review.acceptance.ReviewM0StaticGateContractTest'
+    'com.javaee.aiservice.review.m0.acceptance.ReviewM0FixtureContractTest',
+    'com.javaee.aiservice.review.m0.acceptance.ReviewM0ReportSchemaTest',
+    'com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegrationSelectorContractTest',
+    'com.javaee.aiservice.review.m0.acceptance.ReviewM0StaticGateContractTest'
 )
 $requiredTargetIds = @(1..15 | ForEach-Object { 'M0-P0-{0:D3}' -f $_ })
-$requiredGateNames = @(
-    'inventoryUnconfirmedReviewAttempts',
-    'unanchoredOfficialFindings',
-    'userRulesClaimedOfficial',
+$requiredP0Names = @(
     'missingBeforeUploadConfirmation',
-    'unreadableClassifiedMissing',
-    'ambiguousNamingDefinitiveFindings',
-    'identityMutations',
-    'ignoredReadyTransitions',
-    'idempotencyDuplicates',
-    'recoveryDuplicates',
-    'staleSnapshotsNotOutdated',
-    'successfulCrossUserAccess',
-    'sensitivePayloadLeaks',
-    'forbiddenM0Conclusions',
-    'formalFormatFailures',
-    'unsafeZipAccepted'
+    'deterministicFindingsWithoutRuleEvidence',
+    'deterministicFindingsWithoutMaterialEvidence',
+    'systemErrorsReportedAsMissing',
+    'cannotConfirmReportedAsMissing',
+    'originalFileMutations',
+    'objectKeyMutations',
+    'remoteSendsWithoutMatchingConsent',
+    'candidateChecklistsUsedForReview',
+    'nestedArchivesAccepted',
+    'crossUserSuccessfulReads',
+    'duplicatePublishedReports',
+    'staleReportsMarkedCurrent',
+    'readyReportsWithIgnoredFindings',
+    'incrementalFullMismatches'
 )
+$startedAt = (Get-Date).ToUniversalTime().ToString('o')
 
 foreach ($requiredFile in @($wrapper, $settings, $fixturePath, $selectorPath, $sensitiveCheck)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -253,7 +253,7 @@ function Assert-SelectorReady {
         'schemaVersion', 'contractVersion', 'state', 'adapterId', 'testClasses',
         'targetSelectors', 'staticScanRoots', 'evidenceSystemProperty', 'pendingReasons') `
         -Context 'Integration selector'
-    if ($selector.schemaVersion -ne 1 -or $selector.contractVersion -ne 'review-m0-v1' -or
+    if ($selector.schemaVersion -ne 1 -or $selector.contractVersion -ne 'REVIEW_M0_CONTRACT_V1' -or
             $selector.evidenceSystemProperty -ne 'review.m0.acceptance.evidence.path') {
         throw 'Integration selector identity does not match the frozen Review M0 contract'
     }
@@ -299,9 +299,9 @@ function Read-IntegratedEvidence {
     }
     $evidence = Get-Content -LiteralPath $evidencePath -Raw -Encoding utf8 | ConvertFrom-Json
     Assert-ExactProperties -Object $evidence -Expected @(
-        'schemaVersion', 'contractVersion', 'adapterId', 'targetResults', 'gates', 'contentSafety') `
+        'schemaVersion', 'contractVersion', 'adapterId', 'targetResults', 'p0') `
         -Context 'Integrated evidence'
-    if ($evidence.schemaVersion -ne 1 -or $evidence.contractVersion -ne 'review-m0-v1' -or
+    if ($evidence.schemaVersion -ne 1 -or $evidence.contractVersion -ne 'REVIEW_M0_CONTRACT_V1' -or
             $evidence.adapterId -ne $selector.adapterId) {
         throw 'Integrated evidence identity does not match the selector contract'
     }
@@ -317,32 +317,24 @@ function Read-IntegratedEvidence {
             throw "Integrated target evidence is not passing: $targetId"
         }
     }
-    Assert-ExactProperties -Object $evidence.gates -Expected $requiredGateNames -Context 'Integrated evidence gates'
-    foreach ($gate in $requiredGateNames) {
-        if ($evidence.gates.PSObject.Properties.Name -notcontains $gate -or [int]$evidence.gates.$gate -ne 0) {
-            throw "Integrated negative gate is absent or non-zero: $gate"
-        }
-    }
-    Assert-ExactProperties -Object $evidence.contentSafety -Expected @(
-        'containsDocumentContent', 'containsOcrText', 'containsObjectKey',
-        'containsPersonalIdentifier', 'containsCredential') -Context 'Integrated evidence content safety'
-    foreach ($flag in @('containsDocumentContent', 'containsOcrText', 'containsObjectKey', 'containsPersonalIdentifier', 'containsCredential')) {
-        if ($evidence.contentSafety.PSObject.Properties.Name -notcontains $flag -or $evidence.contentSafety.$flag -ne $false) {
-            throw "Integrated content-safety flag is absent or non-false: $flag"
+    Assert-ExactProperties -Object $evidence.p0 -Expected $requiredP0Names -Context 'Integrated evidence P0 counts'
+    foreach ($name in $requiredP0Names) {
+        if ($evidence.p0.PSObject.Properties.Name -notcontains $name -or [int]$evidence.p0.$name -ne 0) {
+            throw "Integrated P0 count is absent or non-zero: $name"
         }
     }
     return $evidence
 }
 
-function New-NullGates {
-    $gates = [ordered]@{}
-    foreach ($name in $requiredGateNames) { $gates[$name] = $null }
-    return $gates
+function New-NullP0 {
+    $p0 = [ordered]@{}
+    foreach ($name in $requiredP0Names) { $p0[$name] = $null }
+    return $p0
 }
 
 function Save-Report {
     param(
-        [ValidateSet('ASSET_VERIFIED', 'PENDING_INTEGRATION', 'AUTO_VERIFIED', 'FAILED')][string]$Status,
+        [ValidateSet('ASSET_VERIFIED', 'PENDING_INTEGRATION', 'AUTO_VERIFIED')][string]$Status,
         [ValidateSet('ASSET', 'INTEGRATED')][string]$Mode,
         [object]$AssetCounts,
         [object]$IntegratedCounts,
@@ -354,53 +346,32 @@ function Save-Report {
     $integrated = if ($null -eq $IntegratedCounts) { $null } else { $IntegratedCounts }
     $total = if ($null -eq $integrated) { $asset } else { Add-Counts -Left $asset -Right $integrated }
     $report = [ordered]@{
-        schemaVersion = 1
-        contractVersion = 'review-m0-v1'
+        schemaVersion = 'REVIEW_M0_ACCEPTANCE_REPORT_V1'
+        contractVersion = 'REVIEW_M0_CONTRACT_V1'
+        gateType = 'FINAL_ACCEPTANCE'
         mode = $Mode
         status = $Status
-        productionVerified = ($Status -eq 'AUTO_VERIFIED')
-        generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
-        environment = [ordered]@{
-            branch = $branch
-            head = $head
-            os = [System.Environment]::OSVersion.VersionString
-            java = Get-ToolVersion -Command 'java' -Arguments @('-version')
-            externalNetworkIncluded = $false
-        }
-        fixture = [ordered]@{
-            id = $fixture.fixtureSetId
-            synthetic = $true
-            containsRealUserData = $false
-        }
-        selector = [ordered]@{
-            state = if ($Status -eq 'AUTO_VERIFIED') { 'READY' } else { [string]$selector.state }
-            adapterId = if ($null -eq $selector.adapterId) { $null } else { [string]$selector.adapterId }
-            requiredTargets = 15
-            missing = @($Missing)
-        }
-        tests = [ordered]@{
-            run = $total.run
-            failures = $total.failures
+        manualStatus = if ($Status -eq 'AUTO_VERIFIED') { 'MANUAL_PENDING' } else { 'NOT_READY' }
+        finalAcceptance = ($Status -eq 'AUTO_VERIFIED')
+        baselineCommit = $head
+        startedAt = $startedAt
+        finishedAt = (Get-Date).ToUniversalTime().ToString('o')
+        counts = [ordered]@{
+            tests = $total.run
+            passed = $total.run - $total.failures - $total.errors - $total.skipped
+            failed = $total.failures
             errors = $total.errors
             skipped = $total.skipped
-            asset = $asset
-            integrated = $integrated
         }
-        coverage = [ordered]@{
-            requiredP0Targets = 15
-            assetTargetsCovered = 15
-            integratedTargetsPassed = if ($Status -eq 'AUTO_VERIFIED') { 15 } else { $null }
-            formalFormats = 6
-            zipBoundaryCases = @($fixture.zipBoundaries).Count
+        p0 = if ($null -eq $Evidence) { New-NullP0 } else { $Evidence.p0 }
+        external = [ordered]@{
+            realMysql = 'NOT_RUN'
+            realFileService = 'NOT_RUN'
+            realDocumentService = 'NOT_RUN'
+            realRemoteModel = 'NOT_RUN'
+            realBrowser = 'NOT_RUN'
         }
-        gates = if ($null -eq $Evidence) { New-NullGates } else { $Evidence.gates }
-        contentSafety = [ordered]@{
-            containsDocumentContent = $false
-            containsOcrText = $false
-            containsObjectKey = $false
-            containsPersonalIdentifier = $false
-            containsCredential = $false
-        }
+        readinessMissing = @($Missing)
         unverified = @($Unverified)
     }
     $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding utf8
@@ -449,12 +420,10 @@ try {
     exit 0
 } catch {
     $message = $_.Exception.Message
-    $assetCounts = if ($null -eq $assetResult) { New-Counts } else { $assetResult.Counts }
-    $integratedCounts = if ($null -eq $integratedResult) { $null } else { $integratedResult.Counts }
-    Save-Report -Status 'FAILED' -Mode $(if ($Integrated) { 'INTEGRATED' } else { 'ASSET' }) `
-        -AssetCounts $assetCounts -IntegratedCounts $integratedCounts `
-        -Evidence $null -Missing @('GATE_EXECUTION_FAILED') -Unverified @('GATE_EXECUTION_FAILED')
+    if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+        Remove-Item -LiteralPath $reportPath -Force
+    }
     [Console]::Error.WriteLine("[FAILED] Review M0 acceptance gate: $message")
-    [Console]::Error.WriteLine("Report: $reportPath")
+    [Console]::Error.WriteLine('No acceptance report was retained for this failed execution.')
     exit 1
 }

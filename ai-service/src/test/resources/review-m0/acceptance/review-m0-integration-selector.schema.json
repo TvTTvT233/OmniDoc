@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schemaVersion": {"const": 1},
-    "contractVersion": {"const": "review-m0-v1"},
+    "contractVersion": {"const": "REVIEW_M0_CONTRACT_V1"},
     "state": {"enum": ["PENDING_INTEGRATION", "READY"]},
     "adapterId": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]+$"},
     "testClasses": {

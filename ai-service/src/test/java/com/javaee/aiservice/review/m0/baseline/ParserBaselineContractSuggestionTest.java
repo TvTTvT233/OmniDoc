@@ -1,4 +1,4 @@
-package com.javaee.aiservice.review.baseline;
+package com.javaee.aiservice.review.m0.baseline;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +17,7 @@ class ParserBaselineContractSuggestionTest {
 
     @Test
     void fixtureManifestCoversEveryFormalM0FormatWithoutClaimingProductionReadiness() throws Exception {
-        JsonNode manifest = resource("review/m0/baseline/parser-fixture-manifest.json");
+        JsonNode manifest = resource("review-m0/baseline/parser-fixture-manifest.json");
 
         assertThat(manifest.path("classification").asText())
                 .isEqualTo("TEST_ONLY_CURRENT_BEHAVIOR_BASELINE");
@@ -30,7 +30,7 @@ class ParserBaselineContractSuggestionTest {
 
     @Test
     void sourceAnchorFieldsRemainExplicitlyNonFinalAndCoverFormatSpecificCoordinates() throws Exception {
-        JsonNode contract = resource("review/m0/baseline/source-anchor-candidates.json");
+        JsonNode contract = resource("review-m0/baseline/source-anchor-candidates.json");
 
         assertThat(contract.path("contractStatus").asText())
                 .isEqualTo("NON_FINAL_SUGGESTION_FOR_M0_00");
@@ -55,7 +55,7 @@ class ParserBaselineContractSuggestionTest {
 
     @Test
     void proposedFailureCodesAreUniqueAndIncludeDependencyAndArchiveBoundaries() throws Exception {
-        JsonNode contract = resource("review/m0/baseline/source-anchor-candidates.json");
+        JsonNode contract = resource("review-m0/baseline/source-anchor-candidates.json");
         List<String> codes = textValues(contract.path("failureClassification"), "code");
 
         assertThat(new HashSet<>(codes)).hasSameSizeAs(codes);

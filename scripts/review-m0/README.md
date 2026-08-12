@@ -13,7 +13,7 @@ scripts\review-m0\run-m0-acceptance.cmd -Integrated
 
 - Asset mode verifies the versioned schema, synthetic P0 fixtures, report contract, selector contract and static content boundary. A successful run reports `ASSET_VERIFIED`; it is not production evidence.
 - Integrated mode reads `review-m0-integration-selector.json`. While that selector is `PENDING_INTEGRATION`, the command writes a `PENDING_INTEGRATION` report and exits non-zero.
-- `AUTO_VERIFIED` is reserved for a future `READY` selector whose exact test classes and target methods all run with zero failures, errors or skipped tests, whose aggregate evidence has all 15 P0 targets passing and every negative gate at zero, and whose declared production roots pass the static sensitive-data scan.
+- `AUTO_VERIFIED` is reserved for a future `READY` selector whose exact test classes and target methods all run with zero failures, errors or skipped tests, whose aggregate evidence has all 15 P0 targets passing and every frozen P0 counter at zero, and whose declared production roots pass the static sensitive-data scan.
 
 ## Integration adapter boundary
 

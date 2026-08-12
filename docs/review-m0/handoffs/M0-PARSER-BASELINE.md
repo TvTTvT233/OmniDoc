@@ -9,7 +9,7 @@
 - 性质：只读现状刻画、测试夹具和候选契约建议；不是 Review 生产实现。
 - 未修改 `document-service`、`ai-service` 主代码、父 POM、公共配置、共享 Agent 热点、Web 路由或 `docs/PROGRESS.md`。`docs/PROGRESS.md` 未更新是因为本任务的具体授权明确禁止修改，优先于仓库通用交付约定。
 
-本基线只回答“当前项目真实能做到什么以及丢失什么定位信息”。它不证明完整服务、文件服务、Review 流程或生产环境可用，也不决定 M0-00 的最终公共契约。
+本基线只回答“当前项目真实能做到什么以及丢失什么定位信息”。它不证明完整服务、文件服务、Review 流程或生产环境可用；解析产物定位字段与内部失败分类只作为非公共建议，不能改变已经冻结的 M0-00 公共契约。
 
 ## 2. 验证方法
 
@@ -96,15 +96,15 @@ ZIP 恶意边界 fixture 只验证当前 parser 没有进入 ZIP 处理，并未
 - 基础设施或运行依赖瞬时不可用，应使 Job `FAILED`，不能伪装成业务 `CANNOT_CONFIRM`；
 - 定位不可靠时不得确认官方提取候选。
 
-它们不是新增公共 HTTP error code 或 `CannotConfirmReason`，最终枚举仍归 M0-00 决定。
+它们不是新增公共 HTTP error code 或 `CannotConfirmReason`。公共枚举只采用已冻结的 M0-00 值；候选内部码只能由后续实现显式映射，不能直接外泄为公共契约。
 
-### 与只读 M0-00 协调快照的差异建议
+### 与已冻结 M0-00 契约的差异建议
 
-本任务基线提交 `d289cf0` 不包含 M0-00 文档。为避免抢夺契约，本任务只读查看了相邻 M0-00 worktree 在 2026-08-13 的未提交协调快照；该快照仍可能变化：
+本任务基线提交 `d289cf0` 不包含 M0-00 文档。集成后以 `7253f46d0f982a24c6f32eed627d0b6dcbdcd9b4` 引入的冻结契约为准；以下内容只保留为未来解析实现的非公共建议：
 
 1. M0-00 示例把 `sourceRefs` 外层表示为 `basisId + sourceLocator + quotedText`。本任务建议字段只放入 `sourceLocator` 内，不改变该外层结构。
-2. M0-00 示例的 `sourceLocator={page, block}` 对 PDF 有方向，但尚未表达 DOCX table/cell、XLSX sheet/cell、图片 bbox/confidence、ZIP entry/parent archive。建议最终契约采用可判别的格式专用 locator。
-3. M0-00 已声明 ZIP 路径穿越应产生 `CANNOT_CONFIRM`，但只读快照中的公开原因枚举没有专门的不安全路径原因。建议 M0-00 明确映射到 `ARCHIVE_SAFETY_LIMIT_EXCEEDED`，或增加独立稳定原因；本任务不替其决定。
+2. M0-00 已冻结 `OfficialBasisSourceLocator` 的 `entryPath/page/sheet/cellRange/block/entryDigest` 公共字段。DOCX table/cell、图片 bbox/confidence、ZIP 容器父锚点等候选字段不得直接升级公共契约；确需增加时必须走独立契约变更。
+3. M0-00 已将 ZIP 路径穿越等安全问题映射为 `ARCHIVE_SAFETY_LIMIT_EXCEEDED`；内部 `ARCHIVE_ENTRY_UNSAFE_PATH` 仅作为 test-only 诊断候选。
 4. M0-00 正确区分输入 OCR 质量不足与系统依赖失败。本任务的 `OCR_RUNTIME_UNAVAILABLE`/`OCR_LANGUAGE_DATA_MISSING` 仅用于保证未来实现不要把环境缺失写成 `OCR_INSUFFICIENT`。
 5. M0-00 明确 M0 不读取提交材料正文，OCR 只可能用于官方依据候选提取。因此本基线的 PDF/DOCX/XLSX/图片正文 anchor 建议只用于官方依据提取或后续阶段预留；在 M0 正式审查中，提交材料只做类型、容器、命名、分配和计数所需的结构性定位。
 6. M0-00 要求扩展名、签名和可打开性共同校验；当前生产 parser 只信任扩展名并吞掉 parse failure。实现任务不能把当前 fallback 作为满足 M0-00 的证据。
@@ -128,7 +128,7 @@ ZIP 恶意边界 fixture 只验证当前 parser 没有进入 ZIP 处理，并未
 
 ```powershell
 & '.\mvnw.cmd' '-pl' 'ai-service' `
-  '-Dtest=com.javaee.aiservice.review.baseline.*Test' 'test'
+  '-Dtest=com.javaee.aiservice.review.m0.baseline.*Test' 'test'
 ```
 
 最终结果：`BUILD SUCCESS`；13 项发现，11 项通过，2 项跳过，Failures 0，Errors 0。
@@ -154,4 +154,4 @@ Get-Command tesseract -ErrorAction SilentlyContinue
 - ZIP 尚无生产实现，未执行真实安全展开；路径规范化、重复路径、Unicode、symlink、加密、CRC、条目数、单项/总展开量、压缩比、超时和递归限制均待拒绝优先实现。
 - 当前 parser 以 `String` 作为唯一返回类型，未来实现若仍无 typed extraction result，将无法同时表达内容、anchor、部分成功和稳定失败分类。
 
-建议后续 parser 实现以这些测试资产为输入基线，将当前行为刻画测试替换/扩展为目标契约测试，并由 M0-00 所有者最终确认 `sourceLocator` 与 `CannotConfirmReason` 的公共形态。
+建议后续 parser 实现以这些测试资产为输入基线，将当前行为刻画测试替换/扩展为目标契约测试；公共 `sourceLocator` 与 `CannotConfirmReason` 必须保持 M0-00 已冻结形态，除非先完成独立契约变更。

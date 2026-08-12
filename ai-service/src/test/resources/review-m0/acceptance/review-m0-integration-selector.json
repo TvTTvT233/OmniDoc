@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "review-m0-v1",
+  "contractVersion": "REVIEW_M0_CONTRACT_V1",
   "state": "PENDING_INTEGRATION",
   "adapterId": null,
   "testClasses": [],

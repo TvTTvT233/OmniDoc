@@ -1,4 +1,4 @@
-package com.javaee.aiservice.review.baseline;
+package com.javaee.aiservice.review.m0.baseline;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;

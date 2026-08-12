@@ -1,4 +1,4 @@
-package com.javaee.aiservice.review.acceptance;
+package com.javaee.aiservice.review.m0.acceptance;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,7 +66,7 @@ class ReviewM0IntegrationSelectorContractTest {
 
     private static JsonNode selector() throws Exception {
         try (InputStream input = ReviewM0IntegrationSelectorContractTest.class.getResourceAsStream(
-                "/review/m0/acceptance/review-m0-integration-selector.json")) {
+                "/review-m0/acceptance/review-m0-integration-selector.json")) {
             assertThat(input).isNotNull();
             return OBJECT_MAPPER.readTree(input);
         }

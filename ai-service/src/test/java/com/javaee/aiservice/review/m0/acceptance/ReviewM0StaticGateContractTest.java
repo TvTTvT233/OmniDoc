@@ -1,4 +1,4 @@
-package com.javaee.aiservice.review.acceptance;
+package com.javaee.aiservice.review.m0.acceptance;
 
 import org.junit.jupiter.api.Test;
 

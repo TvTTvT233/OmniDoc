@@ -32,7 +32,8 @@
     },
     "formalFormats": {
       "type": "array",
-      "minItems": 7,
+      "minItems": 6,
+      "maxItems": 6,
       "items": {"$ref": "#/$defs/formalFormat"}
     },
     "zipBoundaries": {
@@ -56,13 +57,21 @@
     "formalFormat": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["format", "extension", "mediaType", "signatureHex", "expectedDisposition"],
+      "required": ["format", "extension", "mediaType", "signatureHex", "expectedDisposition", "containerOnly"],
       "properties": {
         "format": {"enum": ["PDF", "DOCX", "XLSX", "JPG", "PNG", "ZIP"]},
         "extension": {"type": "string", "pattern": "^\\.[a-z0-9]+$"},
         "mediaType": {"type": "string"},
         "signatureHex": {"type": "string", "pattern": "^[0-9A-F]+$"},
         "expectedDisposition": {"enum": ["ACCEPT", "CANNOT_CONFIRM"]},
+        "containerOnly": {"type": "boolean"},
+        "allowedLeafFormats": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"enum": ["PDF", "DOCX", "XLSX", "JPG", "PNG"]}
+        },
         "variant": {"type": "string"}
       }
     },
@@ -74,7 +83,15 @@
         "id": {"type": "string", "pattern": "^zip-[a-z0-9-]+$"},
         "condition": {"type": "string"},
         "expectedDisposition": {"enum": ["ACCEPT", "REJECT", "CANNOT_CONFIRM"]},
-        "reasonCode": {"type": "string", "pattern": "^[A-Z0-9_]+$"}
+        "reasonCode": {
+          "enum": [
+            null,
+            "ENCRYPTED",
+            "TYPE_MISMATCH",
+            "NESTED_ARCHIVE_NOT_ALLOWED",
+            "ARCHIVE_SAFETY_LIMIT_EXCEEDED"
+          ]
+        }
       }
     }
   }
