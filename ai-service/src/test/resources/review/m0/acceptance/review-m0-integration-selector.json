@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "review-m0-v1",
+  "state": "PENDING_INTEGRATION",
+  "adapterId": null,
+  "testClasses": [],
+  "targetSelectors": {},
+  "staticScanRoots": [],
+  "evidenceSystemProperty": "review.m0.acceptance.evidence.path",
+  "pendingReasons": [
+    "REVIEW_M0_PRODUCTION_ADAPTER_NOT_DECLARED",
+    "REVIEW_M0_EXACT_INTEGRATED_TEST_SELECTION_NOT_DECLARED",
+    "REVIEW_M0_STATIC_SCAN_ROOTS_NOT_DECLARED"
+  ]
+}

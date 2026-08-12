@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "fixtureSetId": "review-m0-p0-contract-v1",
+  "synthetic": true,
+  "containsRealUserData": false,
+  "requiredTargetIds": [
+    "M0-P0-001",
+    "M0-P0-002",
+    "M0-P0-003",
+    "M0-P0-004",
+    "M0-P0-005",
+    "M0-P0-006",
+    "M0-P0-007",
+    "M0-P0-008",
+    "M0-P0-009",
+    "M0-P0-010",
+    "M0-P0-011",
+    "M0-P0-012",
+    "M0-P0-013",
+    "M0-P0-014",
+    "M0-P0-015"
+  ],
+  "scenarios": [
+    {
+      "id": "m0-inventory-unconfirmed-blocks-review",
+      "targetId": "M0-P0-001",
+      "given": {"inventoryStatus": "DRAFT", "requestedAction": "START_REVIEW"},
+      "expect": {"actionAllowed": false, "reasonCode": "INVENTORY_CONFIRMATION_REQUIRED", "reviewCreated": false}
+    },
+    {
+      "id": "m0-inventory-confirmed-allows-review",
+      "targetId": "M0-P0-001",
+      "given": {"inventoryStatus": "CONFIRMED", "requestedAction": "START_REVIEW"},
+      "expect": {"actionAllowed": true}
+    },
+    {
+      "id": "m0-official-rule-requires-anchor",
+      "targetId": "M0-P0-002",
+      "given": {"provenance": "OFFICIAL", "ruleAnchor": null, "materialAnchor": "material:application:page:2:field:applicant"},
+      "expect": {"definitiveFindingAllowed": false, "disposition": "CANNOT_CONFIRM", "reasonCode": "OFFICIAL_RULE_ANCHOR_REQUIRED"}
+    },
+    {
+      "id": "m0-official-rule-with-dual-anchors",
+      "targetId": "M0-P0-002",
+      "given": {"provenance": "OFFICIAL", "ruleAnchor": "rule:notice:page:1:paragraph:4", "materialAnchor": "material:application:page:2:field:applicant"},
+      "expect": {"definitiveFindingAllowed": true}
+    },
+    {
+      "id": "m0-user-added-rule-remains-user",
+      "targetId": "M0-P0-002",
+      "given": {"provenance": "USER_ADDED", "text": "Synthetic user preference"},
+      "expect": {"storedProvenance": "USER_ADDED", "official": false}
+    },
+    {
+      "id": "m0-user-rewrite-does-not-become-official",
+      "targetId": "M0-P0-002",
+      "given": {"provenance": "USER_REWRITE", "parentProvenance": "USER_ADDED"},
+      "expect": {"storedProvenance": "USER_REWRITE", "official": false}
+    },
+    {
+      "id": "m0-upload-open-cannot-be-missing",
+      "targetId": "M0-P0-003",
+      "given": {"uploadCompletion": "UNCONFIRMED", "expectedMaterialPresent": false},
+      "expect": {"classification": "CANNOT_CONFIRM", "forbiddenClassification": "MISSING", "reasonCode": "UPLOAD_COMPLETION_REQUIRED"}
+    },
+    {
+      "id": "m0-upload-confirmed-can-be-missing",
+      "targetId": "M0-P0-003",
+      "given": {"uploadCompletion": "CONFIRMED", "expectedMaterialPresent": false},
+      "expect": {"classification": "MISSING"}
+    },
+    {
+      "id": "m0-encrypted-file-cannot-confirm",
+      "targetId": "M0-P0-004",
+      "given": {"parseState": "ENCRYPTED"},
+      "expect": {"classification": "CANNOT_CONFIRM", "reasonCode": "FILE_ENCRYPTED"}
+    },
+    {
+      "id": "m0-corrupt-file-cannot-confirm",
+      "targetId": "M0-P0-004",
+      "given": {"parseState": "CORRUPT"},
+      "expect": {"classification": "CANNOT_CONFIRM", "reasonCode": "FILE_CORRUPT"}
+    },
+    {
+      "id": "m0-ocr-failure-cannot-confirm",
+      "targetId": "M0-P0-004",
+      "given": {"parseState": "OCR_FAILED"},
+      "expect": {"classification": "CANNOT_CONFIRM", "reasonCode": "OCR_FAILED"}
+    },
+    {
+      "id": "m0-explicit-naming-rule-is-deterministic",
+      "targetId": "M0-P0-005",
+      "given": {"ruleKind": "EXACT_PATTERN", "rule": "application_<synthetic-id>.pdf", "submissionFileName": "application_demo-01.pdf"},
+      "expect": {"definitiveFindingAllowed": true, "matches": true}
+    },
+    {
+      "id": "m0-ambiguous-naming-rule-cannot-decide",
+      "targetId": "M0-P0-005",
+      "given": {"ruleKind": "NATURAL_LANGUAGE_AMBIGUOUS", "rule": "Use a suitable concise name", "submissionFileName": "demo.pdf"},
+      "expect": {"definitiveFindingAllowed": false, "classification": "CANNOT_CONFIRM", "reasonCode": "NAMING_RULE_AMBIGUOUS"}
+    },
+    {
+      "id": "m0-download-copy-renames-only-submission-name",
+      "targetId": "M0-P0-006",
+      "given": {
+        "before": {"original": "synthetic-original.pdf", "objectKey": "review-m0/object/001", "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "submissionFileName": "synthetic-original.pdf"},
+        "requestedSubmissionFileName": "application_demo-01.pdf"
+      },
+      "expect": {
+        "after": {"original": "synthetic-original.pdf", "objectKey": "review-m0/object/001", "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "submissionFileName": "application_demo-01.pdf"},
+        "downloadIsDerivedCopy": true
+      }
+    },
+    {
+      "id": "m0-ignored-item-remains-not-ready",
+      "targetId": "M0-P0-007",
+      "given": {"itemState": "IGNORED", "requestedTransition": "M0_READY"},
+      "expect": {"itemRetained": true, "transitionAllowed": false, "resultState": "IGNORED"}
+    },
+    {
+      "id": "m0-idempotent-repeat-has-one-result",
+      "targetId": "M0-P0-008",
+      "given": {"operationKey": "synthetic-operation-01", "attempts": 3},
+      "expect": {"createdResults": 1, "duplicateResults": 0, "sameResultIdentity": true}
+    },
+    {
+      "id": "m0-recovery-resumes-from-checkpoint",
+      "targetId": "M0-P0-009",
+      "given": {"checkpoint": "EXTRACTED", "interruption": "SYNTHETIC_RESTART"},
+      "expect": {"resumeFrom": "EXTRACTED", "reprocessedCompletedStages": 0, "duplicateResults": 0}
+    },
+    {
+      "id": "m0-incremental-review-changed-file-only",
+      "targetId": "M0-P0-010",
+      "given": {"changedMaterialIds": ["material-synthetic-02"], "unchangedMaterialIds": ["material-synthetic-01"]},
+      "expect": {"reReviewedMaterialIds": ["material-synthetic-02"], "reusedMaterialIds": ["material-synthetic-01"]}
+    },
+    {
+      "id": "m0-old-result-becomes-outdated",
+      "targetId": "M0-P0-010",
+      "given": {"reviewSnapshot": "snapshot-01", "currentSnapshot": "snapshot-02"},
+      "expect": {"reviewState": "OUTDATED", "m0Ready": false}
+    },
+    {
+      "id": "m0-cross-user-read-is-hidden",
+      "targetId": "M0-P0-011",
+      "given": {"owner": "synthetic-user-a", "requester": "synthetic-user-b", "operation": "READ"},
+      "expect": {"allowed": false, "publicErrorCode": "REVIEW_NOT_FOUND"}
+    },
+    {
+      "id": "m0-cross-user-download-is-hidden",
+      "targetId": "M0-P0-011",
+      "given": {"owner": "synthetic-user-a", "requester": "synthetic-user-b", "operation": "DOWNLOAD_COPY"},
+      "expect": {"allowed": false, "publicErrorCode": "REVIEW_NOT_FOUND"}
+    },
+    {
+      "id": "m0-sensitive-fields-not-in-report",
+      "targetId": "M0-P0-012",
+      "given": {"fields": ["original", "objectKey", "contentHash", "ocrText", "documentContent", "credential"]},
+      "expect": {"allowedInMachineReport": [], "staticLeakCount": 0}
+    },
+    {
+      "id": "m0-forbidden-conclusions-absent",
+      "targetId": "M0-P0-013",
+      "given": {"m0Stage": true},
+      "expect": {"forbiddenConclusionKinds": ["TYPO", "UNFILLED_FIELD", "ELIGIBILITY", "CROSS_MATERIAL_CONSISTENCY"], "emittedCount": 0}
+    },
+    {
+      "id": "m0-formal-formats-have-deterministic-disposition",
+      "targetId": "M0-P0-014",
+      "given": {"manifestSection": "formalFormats"},
+      "expect": {"requiredFormats": ["PDF", "DOCX", "XLSX", "JPG", "PNG", "ZIP"], "unsupportedRequiredFormats": 0}
+    },
+    {
+      "id": "m0-zip-boundaries-fail-closed",
+      "targetId": "M0-P0-015",
+      "given": {"manifestSection": "zipBoundaries"},
+      "expect": {"unsafeAccepted": 0, "unknownClassifiedMissing": 0}
+    }
+  ],
+  "formalFormats": [
+    {"format": "PDF", "extension": ".pdf", "mediaType": "application/pdf", "signatureHex": "25504446", "expectedDisposition": "ACCEPT"},
+    {"format": "DOCX", "extension": ".docx", "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "signatureHex": "504B0304", "expectedDisposition": "ACCEPT"},
+    {"format": "XLSX", "extension": ".xlsx", "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "signatureHex": "504B0304", "expectedDisposition": "ACCEPT"},
+    {"format": "JPG", "extension": ".jpg", "mediaType": "image/jpeg", "signatureHex": "FFD8FFE0", "expectedDisposition": "ACCEPT", "variant": "JFIF"},
+    {"format": "JPG", "extension": ".jpeg", "mediaType": "image/jpeg", "signatureHex": "FFD8FFE1", "expectedDisposition": "ACCEPT", "variant": "EXIF"},
+    {"format": "PNG", "extension": ".png", "mediaType": "image/png", "signatureHex": "89504E470D0A1A0A", "expectedDisposition": "ACCEPT"},
+    {"format": "ZIP", "extension": ".zip", "mediaType": "application/zip", "signatureHex": "504B0304", "expectedDisposition": "ACCEPT"},
+    {"format": "PDF", "extension": ".pdf", "mediaType": "application/pdf", "signatureHex": "25504446", "expectedDisposition": "CANNOT_CONFIRM", "variant": "TRUNCATED"}
+  ],
+  "zipBoundaries": [
+    {"id": "zip-safe-flat-archive", "condition": "bounded flat entries with matching signatures", "expectedDisposition": "ACCEPT", "reasonCode": "ZIP_SAFE"},
+    {"id": "zip-parent-traversal", "condition": "entry path contains parent traversal", "expectedDisposition": "REJECT", "reasonCode": "ZIP_PATH_TRAVERSAL"},
+    {"id": "zip-absolute-path", "condition": "entry path is absolute", "expectedDisposition": "REJECT", "reasonCode": "ZIP_ABSOLUTE_PATH"},
+    {"id": "zip-symlink-entry", "condition": "entry is a symbolic link", "expectedDisposition": "REJECT", "reasonCode": "ZIP_LINK_ENTRY"},
+    {"id": "zip-expanded-size-limit", "condition": "expanded bytes exceed configured bound", "expectedDisposition": "REJECT", "reasonCode": "ZIP_EXPANDED_SIZE_LIMIT"},
+    {"id": "zip-compression-ratio-limit", "condition": "compression ratio exceeds configured bound", "expectedDisposition": "REJECT", "reasonCode": "ZIP_RATIO_LIMIT"},
+    {"id": "zip-entry-count-limit", "condition": "entry count exceeds configured bound", "expectedDisposition": "REJECT", "reasonCode": "ZIP_ENTRY_COUNT_LIMIT"},
+    {"id": "zip-nested-archive", "condition": "nested archive is present", "expectedDisposition": "REJECT", "reasonCode": "ZIP_NESTED_ARCHIVE"},
+    {"id": "zip-encrypted-entry", "condition": "entry is encrypted", "expectedDisposition": "CANNOT_CONFIRM", "reasonCode": "ZIP_ENCRYPTED_ENTRY"},
+    {"id": "zip-normalized-duplicate", "condition": "two names normalize to the same output path", "expectedDisposition": "REJECT", "reasonCode": "ZIP_DUPLICATE_PATH"},
+    {"id": "zip-extension-signature-mismatch", "condition": "entry extension and signature disagree", "expectedDisposition": "CANNOT_CONFIRM", "reasonCode": "ZIP_ENTRY_TYPE_MISMATCH"}
+  ]
+}
