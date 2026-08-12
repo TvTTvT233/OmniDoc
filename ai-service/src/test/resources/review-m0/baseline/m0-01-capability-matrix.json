@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "classification": "TEST_ONLY_CURRENT_BEHAVIOR_BASELINE",
+  "startCommit": "2157ab7d530c8a65996682fc63b1016bef517d07",
+  "productionCodeChanged": false,
+  "usesRealExternalDependencies": false,
+  "capabilities": [
+    {
+      "id": "FILE_OWNER_AUTHORIZATION",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-04",
+      "evidence": "CurrentFileServiceBaselineTest#fileAccessIsBucketScopedAndDoesNotExposeAnOwnedFileContract"
+    },
+    {
+      "id": "FILE_ARTIFACT_SNAPSHOT_SHA256",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-04",
+      "evidence": "CurrentFileServiceBaselineTest#metadataContainsOriginalNameAndRecordedSizeButNoStableSha256"
+    },
+    {
+      "id": "FILE_STREAMING_READ",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-04",
+      "evidence": "CurrentFileServiceBaselineTest#downloadsMaterializeTheWholeObjectAndThereIsNoRangeOrStreamApi"
+    },
+    {
+      "id": "ZIP_SAFE_SINGLE_ENTRY_READ",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-04",
+      "evidence": "CurrentFileServiceBaselineTest#noProductionZipEntryReaderOrArchiveSafetyBoundaryExists"
+    },
+    {
+      "id": "DOCUMENT_PDF_DOCX_CURRENT_BEHAVIOR",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": null,
+      "owner": "M0-01",
+      "evidence": "CurrentDocumentParserBaselineTest"
+    },
+    {
+      "id": "DOCUMENT_XLSX_TYPED_EXTRACTION",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-03",
+      "evidence": "CurrentDocumentParserBaselineTest#xlsxFallsBackToUtf8DecodingOfRawOoxmlBytes"
+    },
+    {
+      "id": "DOCUMENT_IMAGE_REAL_OCR",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-03",
+      "evidence": "CurrentDocumentParserBaselineTest#realJpgOcrAndScannedDocumentAccuracyRemainUnverified"
+    },
+    {
+      "id": "DOCUMENT_TYPED_FAILURE_SEMANTICS",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-03",
+      "evidence": "CurrentDocumentParserBaselineTest#malformedRecognizedFormatIsSilentlyReturnedAsRawUtf8InsteadOfClassified"
+    },
+    {
+      "id": "AI_JDBC_H2_MYSQL_MODE",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": null,
+      "owner": "M0-01",
+      "evidence": "CurrentJdbcMigrationBaselineTest"
+    },
+    {
+      "id": "AI_REAL_MYSQL_STARTUP",
+      "currentStatus": "CURRENT_GAP",
+      "targetStatus": null,
+      "owner": "M0-02_INTEGRATION",
+      "evidence": "PendingImplementationContractTest#realMysql8StartupAndMigrationRemainUnverified"
+    },
+    {
+      "id": "AI_AUTHENTICATED_USER_ID",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": null,
+      "owner": "M0-01",
+      "evidence": "CurrentAuthenticationBaselineTest"
+    },
+    {
+      "id": "AI_STRUCTURED_HTTP_ERRORS",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": "PENDING_IMPLEMENTATION",
+      "owner": "M0-06",
+      "evidence": "CurrentStructuredApiBaselineTest"
+    },
+    {
+      "id": "AI_APPLICATION_CONTEXT_WITH_EXTERNALS_DISABLED",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": null,
+      "owner": "M0-01",
+      "evidence": "AllModelsTest with non-real placeholders and all remote models disabled"
+    }
+  ]
+}
