@@ -1,0 +1,55 @@
+{
+  "classification": "TEST_ONLY_CURRENT_BEHAVIOR_BASELINE",
+  "productionModuleChanged": false,
+  "containsSensitiveData": false,
+  "formats": [
+    {
+      "format": "PDF",
+      "fixtureGenerator": "twoPagePdf",
+      "syntheticOnly": true,
+      "currentParserDispatch": "SUPPORTED",
+      "textExtraction": "DETERMINISTICALLY_VERIFIED",
+      "evidenceLocation": "TEXT_ONLY_PAGE_IDENTITY_LOST"
+    },
+    {
+      "format": "DOCX",
+      "fixtureGenerator": "interleavedDocx",
+      "syntheticOnly": true,
+      "currentParserDispatch": "SUPPORTED",
+      "textExtraction": "DETERMINISTICALLY_VERIFIED",
+      "evidenceLocation": "TEXT_ONLY_BODY_ORDER_AND_COORDINATES_LOST"
+    },
+    {
+      "format": "XLSX",
+      "fixtureGenerator": "oneCellXlsx",
+      "syntheticOnly": true,
+      "currentParserDispatch": "UNSUPPORTED_RAW_UTF8_FALLBACK",
+      "textExtraction": "NOT_IMPLEMENTED",
+      "evidenceLocation": "UNAVAILABLE"
+    },
+    {
+      "format": "JPG",
+      "fixtureGenerator": "jpegWithText",
+      "syntheticOnly": true,
+      "currentParserDispatch": "SUPPORTED_TESS4J_TEXT_ONLY",
+      "textExtraction": "DISABLED_EXTERNAL_RUNTIME_BOUNDARY",
+      "evidenceLocation": "NO_BLOCKS_OR_CONFIDENCE"
+    },
+    {
+      "format": "PNG",
+      "fixtureGenerator": "pngWithText",
+      "syntheticOnly": true,
+      "currentParserDispatch": "SUPPORTED_TESS4J_TEXT_ONLY",
+      "textExtraction": "DISABLED_EXTERNAL_RUNTIME_BOUNDARY",
+      "evidenceLocation": "NO_BLOCKS_OR_CONFIDENCE"
+    },
+    {
+      "format": "ZIP",
+      "fixtureGenerator": "safeZip/traversalZip/highCompressionZip",
+      "syntheticOnly": true,
+      "currentParserDispatch": "UNSUPPORTED_RAW_UTF8_FALLBACK",
+      "textExtraction": "NOT_IMPLEMENTED",
+      "evidenceLocation": "NO_ENTRY_ANCHOR_OR_ARCHIVE_VALIDATION"
+    }
+  ]
+}
