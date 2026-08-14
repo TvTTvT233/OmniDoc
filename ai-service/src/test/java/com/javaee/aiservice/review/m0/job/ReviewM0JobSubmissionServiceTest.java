@@ -11,6 +11,10 @@ import com.javaee.aiservice.review.m0.store.ReviewM0JdbcTestFixture;
 import com.javaee.aiservice.review.m0.store.ReviewM0StoreTestData;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -56,6 +60,55 @@ class ReviewM0JobSubmissionServiceTest {
                 Integer.class)).isZero();
     }
 
+    @Test
+    void crossOwnerCaseSubmissionIsNotFoundAndLeavesNoJobOrIdempotencySideEffect() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        ReviewM0StoreTestData.createCase(fixture, "case-victim", "victim");
+        ReviewM0JobSubmissionService service = service(fixture);
+        IdempotencyScope attackerScope = new IdempotencyScope(
+                "attacker", "POST", "/api/review-m0/cases/case-victim/reviews", "cross-owner");
+
+        assertThatThrownBy(() -> service.submit(
+                attackerScope, "d".repeat(64), queued("job-cross-owner", "case-victim", "attacker")))
+                .isInstanceOf(ReviewM0Exception.class)
+                .extracting(error -> ((ReviewM0Exception) error).errorCode())
+                .isEqualTo(ReviewM0ErrorCode.REVIEW_M0_CASE_NOT_FOUND);
+        assertThat(fixture.jdbc().queryForObject("SELECT COUNT(*) FROM review_m0_job", Integer.class)).isZero();
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isZero();
+    }
+
+    @Test
+    void concurrentCrossOwnerSubmissionsAllFailWithoutCreatingProbeableState() throws Exception {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        ReviewM0StoreTestData.createCase(fixture, "case-private", "owner-a");
+        ReviewM0JobSubmissionService service = service(fixture);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Callable<ReviewM0ErrorCode>> attempts = List.of(
+                    crossOwnerAttempt(service, "attacker-a", "job-probe-a"),
+                    crossOwnerAttempt(service, "attacker-b", "job-probe-b"));
+            var outcomes = executor.invokeAll(attempts).stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (Exception error) {
+                            throw new AssertionError(error);
+                        }
+                    })
+                    .toList();
+
+            assertThat(outcomes).containsExactlyInAnyOrder(
+                    ReviewM0ErrorCode.REVIEW_M0_CASE_NOT_FOUND,
+                    ReviewM0ErrorCode.REVIEW_M0_CASE_NOT_FOUND);
+            assertThat(fixture.jdbc().queryForObject("SELECT COUNT(*) FROM review_m0_job", Integer.class)).isZero();
+            assertThat(fixture.jdbc().queryForObject(
+                    "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isZero();
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private static ReviewM0JobSubmissionService service(ReviewM0JdbcTestFixture fixture) {
         return new ReviewM0JobSubmissionService(
                 new JdbcReviewM0IdempotencyStore(fixture.jdbc(), fixture.transactions()),
@@ -64,10 +117,31 @@ class ReviewM0JobSubmissionServiceTest {
     }
 
     private static ReviewJob queued(String jobId, String caseId) {
+        return queued(jobId, caseId, "owner");
+    }
+
+    private static ReviewJob queued(String jobId, String caseId, String ownerId) {
         return new ReviewJob(
-                jobId, caseId, "owner", ReviewJobType.FORMAL_REVIEW, ReviewJobStatus.QUEUED,
+                jobId, caseId, ownerId, ReviewJobType.FORMAL_REVIEW, ReviewJobStatus.QUEUED,
                 "{}", ReviewM0StoreTestData.DIGEST_EMPTY_OBJECT, null, "idem-" + jobId,
                 0, 1, 0, null, null, null, null, null,
                 0, ReviewM0StoreTestData.T0, null, null, null);
+    }
+
+    private static Callable<ReviewM0ErrorCode> crossOwnerAttempt(
+            ReviewM0JobSubmissionService service,
+            String attacker,
+            String jobId
+    ) {
+        return () -> {
+            try {
+                service.submit(
+                        new IdempotencyScope(attacker, "POST", "/private/reviews", "key-" + attacker),
+                        "e".repeat(64), queued(jobId, "case-private", attacker));
+                throw new AssertionError("Cross-owner submission unexpectedly succeeded");
+            } catch (ReviewM0Exception error) {
+                return error.errorCode();
+            }
+        };
     }
 }

@@ -65,6 +65,28 @@ class ReviewM0ModelContractTest {
     }
 
     @Test
+    void zipRemainsAFormalInputContainerButCannotBecomeAMaterialUnit() {
+        assertThat(FormalFileType.fromFileName("submission.ZIP")).contains(FormalFileType.ZIP);
+        assertThat(FormalFileType.ZIP.isLeafType()).isFalse();
+
+        SubmissionSource container = new SubmissionSource(
+                "source-zip", "case", "file-zip", "submission.zip", "application/zip",
+                FormalFileType.ZIP, SubmissionSourceStatus.ATTACHED, 128, "a".repeat(64), null,
+                1, null, 0, Instant.parse("2026-08-14T00:00:00Z"),
+                Instant.parse("2026-08-14T00:00:00Z"));
+        assertThat(container.formalFileType()).isEqualTo(FormalFileType.ZIP);
+
+        assertThatThrownBy(() -> new SubmissionMaterial(
+                "material-zip", "case", container.sourceId(), MaterialKind.TOP_LEVEL_FILE,
+                null, null, null, "b".repeat(64), FormalFileType.ZIP,
+                "submission.zip", "submission.zip", MaterialStatus.AVAILABLE, null, null,
+                1, 0, 0, Instant.parse("2026-08-14T00:00:00Z"),
+                Instant.parse("2026-08-14T00:00:00Z")))
+                .isInstanceOf(ReviewM0Exception.class)
+                .hasMessageContaining("cannot be persisted as material");
+    }
+
+    @Test
     void illegalAggregateTransitionsAndCandidateFormalReviewAreRejected() {
         ReviewM0StateMachines.requireOfficialBasisTransition(OfficialBasisStatus.ATTACHED, OfficialBasisStatus.READY);
         ReviewM0StateMachines.requireJobTransition(ReviewJobStatus.RUNNING, ReviewJobStatus.CANCEL_REQUESTED);

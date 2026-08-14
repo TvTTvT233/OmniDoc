@@ -15,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -46,6 +47,19 @@ public class ReviewM0SchemaInitializer implements InitializingBean {
             "uk_review_m0_report_input",
             "uk_review_m0_finding_stable",
             "uk_review_m0_decision_ignore");
+    private static final Set<RequiredForeignKey> REQUIRED_V2_FOREIGN_KEYS = Set.of(
+            new RequiredForeignKey(
+                    "review_m0_case", "current_checklist_snapshot_id",
+                    "review_m0_checklist_snapshot", "checklist_snapshot_id"),
+            new RequiredForeignKey(
+                    "review_m0_case", "current_report_id",
+                    "review_m0_report", "report_id"),
+            new RequiredForeignKey(
+                    "review_m0_checklist_revision", "extraction_job_id",
+                    "review_m0_job", "job_id"),
+            new RequiredForeignKey(
+                    "review_m0_remote_consent", "consumed_by_job_id",
+                    "review_m0_job", "job_id"));
     private static final Map<String, String> CYCLIC_REFERENCES = Map.of(
             "fk_review_m0_case_current_checklist",
             "ALTER TABLE review_m0_case ADD CONSTRAINT fk_review_m0_case_current_checklist "
@@ -110,8 +124,11 @@ public class ReviewM0SchemaInitializer implements InitializingBean {
                         resultSet -> { });
             }
             validateIndexes();
+            validateForeignKeys();
         } catch (DataAccessException | SQLException error) {
-            throw invalidSchema("a required table, column, index, or version is missing", error);
+            throw invalidSchema(
+                    "a required table, column, index, or version is missing, or a required foreign key is missing",
+                    error);
         }
     }
 
@@ -146,6 +163,67 @@ public class ReviewM0SchemaInitializer implements InitializingBean {
                 }
             }
         }
+    }
+
+    private void validateForeignKeys() throws SQLException {
+        Set<ForeignKeyMapping> actual = new HashSet<>();
+        try (var connection = dataSource.getConnection()) {
+            DatabaseMetaData metadata = connection.getMetaData();
+            String catalog = connection.getCatalog();
+            String schema;
+            try {
+                schema = connection.getSchema();
+            } catch (SQLException unsupportedSchemaLookup) {
+                schema = null;
+            }
+            for (RequiredForeignKey required : REQUIRED_V2_FOREIGN_KEYS) {
+                collectForeignKeys(metadata, catalog, schema, required.foreignTable(), actual);
+                collectForeignKeys(metadata, catalog, schema,
+                        required.foreignTable().toUpperCase(Locale.ROOT), actual);
+                collectForeignKeys(metadata, null, null, required.foreignTable(), actual);
+                collectForeignKeys(metadata, null, null,
+                        required.foreignTable().toUpperCase(Locale.ROOT), actual);
+            }
+        }
+        Set<RequiredForeignKey> missing = new HashSet<>();
+        for (RequiredForeignKey required : REQUIRED_V2_FOREIGN_KEYS) {
+            boolean present = actual.stream().anyMatch(candidate -> candidate.matches(required));
+            if (!present) {
+                missing.add(required);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw invalidSchema("required V002 foreign-key mappings or restrictive rules are missing: " + missing, null);
+        }
+    }
+
+    private static void collectForeignKeys(
+            DatabaseMetaData metadata,
+            String catalog,
+            String schema,
+            String table,
+            Set<ForeignKeyMapping> foreignKeys
+    ) throws SQLException {
+        try (ResultSet resultSet = metadata.getImportedKeys(catalog, schema, table)) {
+            while (resultSet.next()) {
+                foreignKeys.add(new ForeignKeyMapping(
+                        normalized(resultSet.getString("FKTABLE_NAME")),
+                        normalized(resultSet.getString("FKCOLUMN_NAME")),
+                        normalized(resultSet.getString("PKTABLE_NAME")),
+                        normalized(resultSet.getString("PKCOLUMN_NAME")),
+                        resultSet.getShort("KEY_SEQ"),
+                        resultSet.getShort("DELETE_RULE"),
+                        resultSet.getShort("UPDATE_RULE")));
+            }
+        }
+    }
+
+    private static String normalized(String identifier) {
+        return identifier == null ? null : identifier.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean restrictiveRule(short rule) {
+        return rule == DatabaseMetaData.importedKeyNoAction || rule == DatabaseMetaData.importedKeyRestrict;
     }
 
     private boolean versionInstalled(int version) {
@@ -226,5 +304,33 @@ public class ReviewM0SchemaInitializer implements InitializingBean {
         tables.put("review_m0_finding_decision", "decision_id, report_id, finding_id, decision_type, reason, decided_by, decided_at");
         tables.put("review_m0_idempotency", "owner_id, http_method, canonical_path, idempotency_key, request_digest, response_status, response_type, response_id, state, created_at, updated_at");
         return Map.copyOf(tables);
+    }
+
+    private record RequiredForeignKey(
+            String foreignTable,
+            String foreignColumn,
+            String primaryTable,
+            String primaryColumn
+    ) {
+    }
+
+    private record ForeignKeyMapping(
+            String foreignTable,
+            String foreignColumn,
+            String primaryTable,
+            String primaryColumn,
+            short keySequence,
+            short deleteRule,
+            short updateRule
+    ) {
+        private boolean matches(RequiredForeignKey required) {
+            return keySequence == 1
+                    && foreignTable.equals(required.foreignTable())
+                    && foreignColumn.equals(required.foreignColumn())
+                    && primaryTable.equals(required.primaryTable())
+                    && primaryColumn.equals(required.primaryColumn())
+                    && restrictiveRule(deleteRule)
+                    && restrictiveRule(updateRule);
+        }
     }
 }

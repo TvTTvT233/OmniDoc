@@ -2,6 +2,8 @@ package com.javaee.aiservice.review.m0.store;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.AbstractDataSource;
 
@@ -79,6 +81,66 @@ class ReviewM0SchemaInitializerTest {
         assertThat(jdbc.queryForObject(
                 "SELECT COUNT(*) FROM review_m0_schema_version WHERE version = 2",
                 Integer.class)).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "fk_review_m0_case_current_checklist",
+            "fk_review_m0_case_current_report",
+            "fk_review_m0_checklist_revision_job",
+            "fk_review_m0_remote_consent_job"
+    })
+    void strictValidationRejectsEveryMissingV002ForeignKey(String constraintName) {
+        JdbcDataSource dataSource = dataSource();
+        ReviewM0SchemaInitializer initializer = new ReviewM0SchemaInitializer(dataSource, enabled(true));
+        initializer.afterPropertiesSet();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+
+        String table = switch (constraintName) {
+            case "fk_review_m0_case_current_checklist", "fk_review_m0_case_current_report" -> "review_m0_case";
+            case "fk_review_m0_checklist_revision_job" -> "review_m0_checklist_revision";
+            case "fk_review_m0_remote_consent_job" -> "review_m0_remote_consent";
+            default -> throw new AssertionError("Unexpected fixture constraint " + constraintName);
+        };
+        jdbc.execute("ALTER TABLE " + table + " DROP CONSTRAINT " + constraintName);
+
+        assertThatThrownBy(initializer::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("V002 foreign-key mappings");
+    }
+
+    @Test
+    void strictValidationUsesForeignKeyStructureRatherThanOnlyConstraintName() {
+        JdbcDataSource dataSource = dataSource();
+        ReviewM0SchemaInitializer initializer = new ReviewM0SchemaInitializer(dataSource, enabled(true));
+        initializer.afterPropertiesSet();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("ALTER TABLE review_m0_remote_consent "
+                + "DROP CONSTRAINT fk_review_m0_remote_consent_job");
+        jdbc.execute("ALTER TABLE review_m0_remote_consent "
+                + "ADD CONSTRAINT fk_review_m0_remote_consent_job "
+                + "FOREIGN KEY (consumed_by_job_id) REFERENCES review_m0_case(case_id)");
+
+        assertThatThrownBy(initializer::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("V002 foreign-key mappings");
+    }
+
+    @Test
+    void strictValidationRejectsCascadingRulesOnV002ForeignKeys() {
+        JdbcDataSource dataSource = dataSource();
+        ReviewM0SchemaInitializer initializer = new ReviewM0SchemaInitializer(dataSource, enabled(true));
+        initializer.afterPropertiesSet();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("ALTER TABLE review_m0_remote_consent "
+                + "DROP CONSTRAINT fk_review_m0_remote_consent_job");
+        jdbc.execute("ALTER TABLE review_m0_remote_consent "
+                + "ADD CONSTRAINT fk_review_m0_remote_consent_job "
+                + "FOREIGN KEY (consumed_by_job_id) REFERENCES review_m0_job(job_id) ON DELETE CASCADE");
+
+        assertThatThrownBy(initializer::validate)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("restrictive rules");
     }
 
     @Test

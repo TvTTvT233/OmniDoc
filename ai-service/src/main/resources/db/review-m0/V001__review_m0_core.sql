@@ -200,9 +200,9 @@ CREATE TABLE IF NOT EXISTS review_m0_material (
     CONSTRAINT ck_review_m0_material_kind CHECK (kind IN ('TOP_LEVEL_FILE', 'ZIP_ENTRY')),
     CONSTRAINT ck_review_m0_material_locator CHECK (
         (kind = 'TOP_LEVEL_FILE' AND normalized_entry_path IS NULL)
-        OR (kind = 'ZIP_ENTRY' AND normalized_entry_path IS NOT NULL AND formal_file_type <> 'ZIP')
+        OR (kind = 'ZIP_ENTRY' AND normalized_entry_path IS NOT NULL)
     ),
-    CONSTRAINT ck_review_m0_material_type CHECK (formal_file_type IN ('PDF', 'DOCX', 'XLSX', 'JPG', 'PNG', 'ZIP')),
+    CONSTRAINT ck_review_m0_material_type CHECK (formal_file_type IN ('PDF', 'DOCX', 'XLSX', 'JPG', 'PNG')),
     CONSTRAINT ck_review_m0_material_status CHECK (status IN ('AVAILABLE', 'CANNOT_CONFIRM', 'REMOVED')),
     CONSTRAINT ck_review_m0_material_reason CHECK (
         (status = 'CANNOT_CONFIRM' AND cannot_confirm_reason IS NOT NULL)

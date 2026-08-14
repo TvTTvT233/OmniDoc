@@ -63,6 +63,24 @@ class ReviewM0DdlConstraintTest {
     }
 
     @Test
+    void zipSourceIsSupportedButDatabaseRejectsTheContainerAsAMaterialUnit() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        ReviewM0StoreTestData.createCase(fixture, "case-material", "owner");
+        insertSource(fixture, "source-zip-container", "ZIP");
+
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT formal_file_type FROM review_m0_submission_source WHERE source_id = 'source-zip-container'",
+                String.class)).isEqualTo("ZIP");
+        assertThatThrownBy(() -> insertMaterial(
+                fixture, "mat-zip-container", "source-zip-container", "TOP_LEVEL_FILE", null,
+                "ZIP", "submission.zip"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_material WHERE source_id = 'source-zip-container'",
+                Integer.class)).isZero();
+    }
+
+    @Test
     void schemaContainsNamedUniqueAndForeignKeyConstraints() {
         ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
         Integer foreignKeys = fixture.jdbc().queryForObject("""

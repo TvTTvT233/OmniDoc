@@ -12,5 +12,5 @@ public interface ReviewM0RemoteCallStore {
 
     RemoteCall markOutcomeUnknown(String jobId, String workerId, Instant now);
 
-    Optional<RemoteCall> findByJob(String jobId);
+    Optional<RemoteCall> findOwned(String ownerId, String caseId, String jobId);
 }

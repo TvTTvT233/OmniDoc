@@ -90,15 +90,16 @@ class JdbcReviewCaseStoreTest {
     @EnumSource(RevisionKind.class)
     void everyFrozenRevisionOrEngineChangeExpiresCurrentReportInTheSameMutation(RevisionKind kind) {
         ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        String fingerprint = Integer.toHexString(kind.ordinal()).repeat(64).substring(0, 64);
         ReviewM0StoreTestData.createCase(fixture, "case-" + kind, "owner");
         ReviewM0StoreTestData.publishSnapshot(fixture, "case-" + kind, "owner", 0);
         ReviewM0StoreTestData.createAndLeaseJob(
                 fixture, "job-" + kind, "case-" + kind, "owner",
                 com.javaee.aiservice.review.m0.model.ReviewJobType.FORMAL_REVIEW,
-                "idem-" + kind, "worker");
+                "idem-" + kind, "worker", fingerprint);
         ReviewM0StoreTestData.publishReadyReport(
                 fixture, "case-" + kind, "owner", "job-" + kind, "worker",
-                Integer.toHexString(kind.ordinal()).repeat(64).substring(0, 64));
+                fingerprint);
         JdbcReviewCaseStore store = new JdbcReviewCaseStore(fixture.jdbc(), fixture.transactions());
 
         ReviewCase before = store.findOwned("owner", "case-" + kind).orElseThrow();
@@ -127,7 +128,7 @@ class JdbcReviewCaseStoreTest {
         ReviewM0StoreTestData.createAndLeaseJob(
                 fixture, "job-checklist", "case-checklist", "owner",
                 com.javaee.aiservice.review.m0.model.ReviewJobType.FORMAL_REVIEW,
-                "idem-checklist", "worker");
+                "idem-checklist", "worker", "c".repeat(64));
         ReviewM0StoreTestData.publishReadyReport(
                 fixture, "case-checklist", "owner", "job-checklist", "worker", "c".repeat(64));
         fixture.jdbc().update("""

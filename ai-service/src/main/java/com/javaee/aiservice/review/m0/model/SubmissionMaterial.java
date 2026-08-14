@@ -19,11 +19,14 @@ public record SubmissionMaterial(
         ModelChecks.required(submissionFileName, "submissionFileName", 1024);
         ModelChecks.required(normalizedSubmissionFileName, "normalizedSubmissionFileName", 1024);
         ModelChecks.required(status, "status");
+        if (!formalFileType.isLeafType()) {
+            throw ModelChecks.invalid("ZIP containers cannot be persisted as material units");
+        }
         if (kind == MaterialKind.TOP_LEVEL_FILE && normalizedEntryPath != null) {
             throw ModelChecks.invalid("Top-level materials cannot have an entry path");
         }
-        if (kind == MaterialKind.ZIP_ENTRY && (normalizedEntryPath == null || formalFileType == FormalFileType.ZIP)) {
-            throw ModelChecks.invalid("ZIP entries require a path and a non-container formal type");
+        if (kind == MaterialKind.ZIP_ENTRY && normalizedEntryPath == null) {
+            throw ModelChecks.invalid("ZIP entries require a path");
         }
         if ((status == MaterialStatus.CANNOT_CONFIRM) != (cannotConfirmReason != null)) {
             throw ModelChecks.invalid("Material CANNOT_CONFIRM status and reason must agree");

@@ -58,20 +58,29 @@ public class JdbcReviewM0JobStore implements ReviewM0JobStore {
         }
         CanonicalJsonIntegrity.requireValid(job.requestJson(), job.requestDigest(), "Job request");
         try {
-            jdbcTemplate.update("""
+            int inserted = jdbcTemplate.update("""
                             INSERT INTO review_m0_job(
                                 job_id, case_id, user_id, job_type, status, request_json, request_digest,
                                 input_fingerprint, idempotency_key, progress_completed, progress_total, attempt,
                                 lease_owner, lease_expires_at, cancel_requested_at, result_type, result_id,
                                 error_code, error_retryable, error_message, version, created_at, started_at,
                                 heartbeat_at, finished_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            )
+                            SELECT ?, review_case.case_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                   NULL, NULL, NULL, NULL, NULL, ?, ?, NULL, NULL, NULL
+                            FROM review_m0_case review_case
+                            WHERE review_case.case_id = ? AND review_case.user_id = ?
                             """,
-                    job.jobId(), job.caseId(), job.userId(), job.jobType().name(), job.status().name(),
+                    job.jobId(), job.userId(), job.jobType().name(), job.status().name(),
                     job.requestJson(), job.requestDigest(), job.inputFingerprint(), job.idempotencyKey(),
                     job.progressCompleted(), job.progressTotal(), job.attempt(), job.leaseOwner(),
-                    timestamp(job.leaseExpiresAt()), timestamp(job.cancelRequestedAt()), null, null,
-                    null, null, null, job.version(), timestamp(job.createdAt()), null, null, null);
+                    timestamp(job.leaseExpiresAt()), timestamp(job.cancelRequestedAt()),
+                    job.version(), timestamp(job.createdAt()), job.caseId(), job.userId());
+            if (inserted != 1) {
+                throw new ReviewM0Exception(
+                        ReviewM0ErrorCode.REVIEW_M0_CASE_NOT_FOUND,
+                        "Review case was not found");
+            }
             return job;
         } catch (DuplicateKeyException duplicate) {
             List<ReviewJob> existing = jdbcTemplate.query(

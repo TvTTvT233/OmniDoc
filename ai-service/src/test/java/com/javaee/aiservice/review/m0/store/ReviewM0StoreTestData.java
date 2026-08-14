@@ -74,10 +74,24 @@ public final class ReviewM0StoreTestData {
             String idempotencyKey,
             String workerId
     ) {
+        return createAndLeaseJob(
+                fixture, jobId, caseId, ownerId, type, idempotencyKey, workerId, null);
+    }
+
+    public static ReviewJob createAndLeaseJob(
+            ReviewM0JdbcTestFixture fixture,
+            String jobId,
+            String caseId,
+            String ownerId,
+            ReviewJobType type,
+            String idempotencyKey,
+            String workerId,
+            String inputFingerprint
+    ) {
         JdbcReviewM0JobStore store = new JdbcReviewM0JobStore(fixture.jdbc(), fixture.transactions());
         store.create(new ReviewJob(
                 jobId, caseId, ownerId, type, ReviewJobStatus.QUEUED,
-                "{}", DIGEST_EMPTY_OBJECT, null, idempotencyKey, 0, 1, 0,
+                "{}", DIGEST_EMPTY_OBJECT, inputFingerprint, idempotencyKey, 0, 1, 0,
                 null, null, null, null, null, 0, T0, null, null, null));
         return store.acquireNext(workerId, T0.plusSeconds(3), Duration.ofMinutes(1)).orElseThrow();
     }
@@ -96,7 +110,7 @@ public final class ReviewM0StoreTestData {
                 "clsnap-" + caseId, "upload-" + caseId, 0, 0, 0, 0,
                 null, 0, 0, 0, T0.plusSeconds(4), null, null);
         JdbcReviewM0JobStore jobStore = new JdbcReviewM0JobStore(fixture.jdbc(), fixture.transactions());
-        new JdbcReviewReportStore(fixture.jdbc(), jobStore)
+        new JdbcReviewReportStore(fixture.jdbc(), jobStore, fixture.transactions())
                 .publishOwned(ownerId, workerId, T0.plusSeconds(5), new ReportBundle(report, List.of(), List.of()));
         return report;
     }

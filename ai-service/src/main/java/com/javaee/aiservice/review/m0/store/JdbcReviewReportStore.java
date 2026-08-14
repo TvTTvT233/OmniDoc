@@ -10,11 +10,17 @@ import com.javaee.aiservice.review.m0.model.ReviewAssessment;
 import com.javaee.aiservice.review.m0.model.ReviewFinding;
 import com.javaee.aiservice.review.m0.model.ReviewJob;
 import com.javaee.aiservice.review.m0.model.ReviewJobResultRef;
+import com.javaee.aiservice.review.m0.model.ReviewJobStatus;
+import com.javaee.aiservice.review.m0.model.ReviewJobType;
+import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
+import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import com.javaee.aiservice.review.m0.model.ReviewReport;
 import com.javaee.aiservice.review.m0.model.ReviewReportFreshness;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -24,6 +30,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Repository
@@ -38,11 +45,17 @@ public class JdbcReviewReportStore implements ReviewReportStore {
 
     private final JdbcTemplate jdbcTemplate;
     private final ReviewM0JobStore jobStore;
+    private final TransactionTemplate transactions;
     private final RowMapper<ReviewReport> mapper = this::map;
 
-    public JdbcReviewReportStore(JdbcTemplate jdbcTemplate, ReviewM0JobStore jobStore) {
+    public JdbcReviewReportStore(
+            JdbcTemplate jdbcTemplate,
+            ReviewM0JobStore jobStore,
+            PlatformTransactionManager transactionManager
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.jobStore = jobStore;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
     @Override
@@ -67,52 +80,147 @@ public class JdbcReviewReportStore implements ReviewReportStore {
     public ReviewJob publishOwned(String ownerId, String workerId, Instant now, ReportBundle bundle) {
         validateBundle(bundle);
         ReviewReport report = bundle.report();
-        return jobStore.completeWithResult(report.jobId(), workerId, now, () -> {
-            CaseInput current = requireCurrentCaseInput(ownerId, report.caseId());
-            if (current.basisRevision != report.basisRevision()
-                    || current.materialSetRevision != report.materialSetRevision()
-                    || current.assignmentRevision != report.assignmentRevision()
-                    || current.nameRevision != report.nameRevision()
-                    || !report.checklistSnapshotId().equals(current.currentChecklistSnapshotId)) {
-                throw StoreErrors.versionConflict("Report input revisions are no longer current");
-            }
-            List<ReviewReport> sameInput = jdbcTemplate.query(
-                    "SELECT " + REPORT_COLUMNS + " FROM review_m0_report "
-                            + "WHERE case_id = ? AND input_fingerprint = ?",
-                    mapper, report.caseId(), report.inputFingerprint());
-            if (!sameInput.isEmpty()) {
-                ReviewReport existing = sameInput.get(0);
-                if (existing.freshness() != ReviewReportFreshness.CURRENT
-                        || !existing.reportId().equals(current.currentReportId)) {
-                    throw StoreErrors.versionConflict("An OUTDATED report cannot be restored to CURRENT");
+        return Objects.requireNonNull(transactions.execute(status -> {
+            requirePublicationJobBinding(ownerId, workerId, now, report);
+            return jobStore.completeWithResult(report.jobId(), workerId, now, () -> {
+                CaseInput current = requireCurrentCaseInput(ownerId, report.caseId());
+                if (current.basisRevision != report.basisRevision()
+                        || current.materialSetRevision != report.materialSetRevision()
+                        || current.assignmentRevision != report.assignmentRevision()
+                        || current.nameRevision != report.nameRevision()
+                        || !report.checklistSnapshotId().equals(current.currentChecklistSnapshotId)) {
+                    throw StoreErrors.versionConflict("Report input revisions are no longer current");
                 }
-                return new ReviewJobResultRef("REPORT", existing.reportId());
-            }
-            if (current.currentReportId != null) {
-                int expired = jdbcTemplate.update("""
-                                UPDATE review_m0_report
-                                SET freshness = 'OUTDATED', outdated_at = ?, outdated_reason = 'NEW_REPORT_PUBLISHED'
-                                WHERE report_id = ? AND case_id = ? AND freshness = 'CURRENT'
+                requireUploadBinding(ownerId, report);
+                List<ReviewReport> sameInput = jdbcTemplate.query(
+                        "SELECT " + REPORT_COLUMNS + " FROM review_m0_report "
+                                + "WHERE case_id = ? AND input_fingerprint = ?",
+                        mapper, report.caseId(), report.inputFingerprint());
+                if (!sameInput.isEmpty()) {
+                    ReviewReport existing = sameInput.get(0);
+                    if (existing.freshness() != ReviewReportFreshness.CURRENT
+                            || !existing.reportId().equals(current.currentReportId)) {
+                        throw StoreErrors.versionConflict("An OUTDATED report cannot be restored to CURRENT");
+                    }
+                    return new ReviewJobResultRef("REPORT", existing.reportId());
+                }
+                if (current.currentReportId != null) {
+                    int expired = jdbcTemplate.update("""
+                                    UPDATE review_m0_report
+                                    SET freshness = 'OUTDATED', outdated_at = ?, outdated_reason = 'NEW_REPORT_PUBLISHED'
+                                    WHERE report_id = ? AND case_id = ? AND freshness = 'CURRENT'
+                                    """,
+                            timestamp(now), current.currentReportId, report.caseId());
+                    if (expired != 1) {
+                        throw StoreErrors.versionConflict("Previous CURRENT report could not be expired");
+                    }
+                }
+                insertReport(report);
+                bundle.findings().forEach(this::insertFinding);
+                bundle.evidence().forEach(this::insertEvidence);
+                int pointed = jdbcTemplate.update("""
+                                UPDATE review_m0_case
+                                SET current_report_id = ?, version = version + 1, updated_at = ?
+                                WHERE case_id = ? AND user_id = ? AND version = ?
                                 """,
-                        timestamp(now), current.currentReportId, report.caseId());
-                if (expired != 1) {
-                    throw StoreErrors.versionConflict("Previous CURRENT report could not be expired");
+                        report.reportId(), timestamp(now), report.caseId(), ownerId, current.version);
+                if (pointed != 1) {
+                    throw StoreErrors.versionConflict("Review case changed while publishing report");
                 }
+                return new ReviewJobResultRef("REPORT", report.reportId());
+            });
+        }));
+    }
+
+    private void requirePublicationJobBinding(
+            String ownerId,
+            String workerId,
+            Instant now,
+            ReviewReport report
+    ) {
+        JdbcReviewCaseStore.requireOwner(ownerId);
+        List<PublicationJob> rows = jdbcTemplate.query("""
+                        SELECT job.case_id, job.user_id, job.job_type, job.status, job.input_fingerprint,
+                               job.lease_owner, job.lease_expires_at, job.result_type, job.result_id, job.version
+                        FROM review_m0_job job
+                        JOIN review_m0_case review_case
+                          ON review_case.case_id = job.case_id AND review_case.user_id = job.user_id
+                        WHERE job.job_id = ?
+                        FOR UPDATE
+                        """,
+                (resultSet, rowNumber) -> new PublicationJob(
+                        resultSet.getString("case_id"), resultSet.getString("user_id"),
+                        ReviewJobType.valueOf(resultSet.getString("job_type")),
+                        ReviewJobStatus.valueOf(resultSet.getString("status")),
+                        resultSet.getString("input_fingerprint"), resultSet.getString("lease_owner"),
+                        JdbcReviewCaseStore.instant(resultSet.getTimestamp("lease_expires_at")),
+                        resultSet.getString("result_type"), resultSet.getString("result_id"),
+                        resultSet.getLong("version")),
+                report.jobId());
+        if (rows.isEmpty()) {
+            throw StoreErrors.resourceNotFound("Job");
+        }
+        PublicationJob job = rows.get(0);
+        if (!job.caseId.equals(report.caseId()) || !job.userId.equals(ownerId)) {
+            throw StoreErrors.resourceNotFound("Job");
+        }
+        if ((job.jobType != ReviewJobType.FORMAL_REVIEW && job.jobType != ReviewJobType.INCREMENTAL_REVIEW)
+                || !Objects.equals(job.inputFingerprint, report.inputFingerprint())) {
+            throw StoreErrors.versionConflict("Report does not match the leased Job input");
+        }
+        if (job.status == ReviewJobStatus.SUCCEEDED) {
+            if (!"REPORT".equals(job.resultType) || job.resultId == null) {
+                throw jobStateConflict("Succeeded review Job is not bound to a report");
             }
-            insertReport(report);
-            bundle.findings().forEach(this::insertFinding);
-            bundle.evidence().forEach(this::insertEvidence);
-            int pointed = jdbcTemplate.update("""
-                            UPDATE review_m0_case
-                            SET current_report_id = ?, version = version + 1, updated_at = ?
-                            WHERE case_id = ? AND user_id = ? AND version = ?
-                            """,
-                    report.reportId(), timestamp(now), report.caseId(), ownerId, current.version);
-            if (pointed != 1) {
-                throw StoreErrors.versionConflict("Review case changed while publishing report");
-            }
-            return new ReviewJobResultRef("REPORT", report.reportId());
-        });
+            requireSucceededReportBinding(job, report);
+            return;
+        }
+        if (job.status != ReviewJobStatus.RUNNING || !Objects.equals(job.leaseOwner, workerId)
+                || job.leaseExpiresAt == null || !job.leaseExpiresAt.isAfter(now)) {
+            throw jobStateConflict("Worker does not hold the report publication lease");
+        }
+    }
+
+    private void requireSucceededReportBinding(PublicationJob job, ReviewReport report) {
+        Integer matches = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*) FROM review_m0_report
+                        WHERE report_id = ? AND job_id = ? AND case_id = ? AND input_fingerprint = ?
+                          AND checklist_snapshot_id = ? AND upload_confirmation_id = ?
+                          AND basis_revision = ? AND material_set_revision = ?
+                          AND assignment_revision = ? AND name_revision = ?
+                        """,
+                Integer.class, job.resultId, report.jobId(), report.caseId(), report.inputFingerprint(),
+                report.checklistSnapshotId(), report.uploadConfirmationId(), report.basisRevision(),
+                report.materialSetRevision(), report.assignmentRevision(), report.nameRevision());
+        if (matches == null || matches != 1) {
+            throw StoreErrors.versionConflict("Idempotent report replay does not match the published Job result");
+        }
+    }
+
+    private void requireUploadBinding(String ownerId, ReviewReport report) {
+        Integer matches = jdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM review_m0_upload_confirmation upload
+                        JOIN review_m0_checklist_snapshot snapshot
+                          ON snapshot.checklist_snapshot_id = upload.checklist_snapshot_id
+                         AND snapshot.case_id = upload.case_id
+                        JOIN review_m0_case review_case ON review_case.case_id = upload.case_id
+                        WHERE upload.upload_confirmation_id = ?
+                          AND upload.case_id = ?
+                          AND upload.checklist_snapshot_id = ?
+                          AND upload.material_set_revision = ?
+                          AND upload.confirmed_by = ?
+                          AND review_case.user_id = ?
+                        """,
+                Integer.class, report.uploadConfirmationId(), report.caseId(),
+                report.checklistSnapshotId(), report.materialSetRevision(), ownerId, ownerId);
+        if (matches == null || matches != 1) {
+            throw StoreErrors.versionConflict("Report upload confirmation does not match its Case input");
+        }
+    }
+
+    private static ReviewM0Exception jobStateConflict(String message) {
+        return new ReviewM0Exception(ReviewM0ErrorCode.REVIEW_M0_JOB_STATE_CONFLICT, message);
     }
 
     private CaseInput requireCurrentCaseInput(String ownerId, String caseId) {
@@ -245,6 +353,20 @@ public class JdbcReviewReportStore implements ReviewReportStore {
             long nameRevision,
             String currentChecklistSnapshotId,
             String currentReportId,
+            long version
+    ) {
+    }
+
+    private record PublicationJob(
+            String caseId,
+            String userId,
+            ReviewJobType jobType,
+            ReviewJobStatus status,
+            String inputFingerprint,
+            String leaseOwner,
+            Instant leaseExpiresAt,
+            String resultType,
+            String resultId,
             long version
     ) {
     }
