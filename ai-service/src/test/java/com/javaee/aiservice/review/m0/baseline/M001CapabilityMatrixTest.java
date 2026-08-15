@@ -61,6 +61,29 @@ class M001CapabilityMatrixTest {
                 .isTrue();
     }
 
+    @Test
+    void wave2EvolutionVerifiesOnlyInternalZipCapabilityAndKeepsExternalFileBoundariesOpen() throws Exception {
+        JsonNode capabilities = matrix().path("capabilities");
+
+        assertThat(capability(capabilities, "ZIP_SAFE_SINGLE_ENTRY_READ").path("currentStatus").asText())
+                .isEqualTo("CURRENT_VERIFIED");
+        assertThat(capability(capabilities, "ZIP_SAFE_SINGLE_ENTRY_READ").path("targetStatus").isNull())
+                .isTrue();
+        assertThat(capability(capabilities, "FILE_OWNER_AUTHORIZATION").path("currentStatus").asText())
+                .isEqualTo("CURRENT_GAP");
+        assertThat(capability(capabilities, "FILE_ARTIFACT_SNAPSHOT_SHA256").path("currentStatus").asText())
+                .isEqualTo("CURRENT_GAP");
+        assertThat(capability(capabilities, "FILE_STREAMING_READ").path("currentStatus").asText())
+                .isEqualTo("CURRENT_GAP");
+    }
+
+    private static JsonNode capability(JsonNode capabilities, String id) {
+        return StreamSupport.stream(capabilities.spliterator(), false)
+                .filter(capability -> id.equals(capability.path("id").asText()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Missing capability " + id));
+    }
+
     private static JsonNode matrix() throws Exception {
         try (InputStream input = M001CapabilityMatrixTest.class.getClassLoader()
                 .getResourceAsStream("review-m0/baseline/m0-01-capability-matrix.json")) {

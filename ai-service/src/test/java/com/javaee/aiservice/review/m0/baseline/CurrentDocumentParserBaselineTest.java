@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -135,27 +134,33 @@ class CurrentDocumentParserBaselineTest {
     }
 
     @Test
-    void noProductionArchiveExtractorOrZipSafetyLimitsExist() throws Exception {
-        Path root = ProductionDocumentParserHarness.repositoryRoot();
-        try (Stream<Path> paths = Files.walk(root)) {
-            List<Path> productionJava = paths
-                    .filter(Files::isRegularFile)
-                    .filter(path -> path.toString().replace('\\', '/').contains("/src/main/java/"))
-                    .filter(path -> path.getFileName().toString().endsWith(".java"))
-                    .toList();
-            String productionSource = productionJava.stream()
-                    .map(CurrentDocumentParserBaselineTest::readUnchecked)
-                    .reduce("", (left, right) -> left + "\n" + right);
+    void reviewM0ArchiveInspectorUsesStreamingFailClosedSafetyLimitsOutsideTheLegacyParser() throws Exception {
+        String inspector = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ZipArchiveInspector.java");
+        String limits = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ArchiveSafetyLimits.java");
+        String pathValidation = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ArchivePath.java");
 
-            assertThat(productionSource)
-                    .doesNotContain(
-                            "ZipInputStream",
-                            "java.util.zip.ZipFile",
-                            "ZipArchiveInputStream",
-                            "getCompressedSize()",
-                            "archiveMaxEntries",
-                            "archiveMaxDepth");
-        }
+        assertThat(inspector)
+                .contains("new ZipInputStream(")
+                .contains("limits.maximumEntries()")
+                .contains("limits.maximumEntryUncompressedBytes()")
+                .contains("limits.maximumTotalUncompressedBytes()")
+                .contains("limits.maximumCompressionRatio()")
+                .contains("NESTED_ARCHIVE_NOT_ALLOWED")
+                .contains("ARCHIVE_DUPLICATE_NFC_PATH");
+        assertThat(limits)
+                .contains("maximumProcessingTime")
+                .contains("secureDefaults()")
+                .contains("security")
+                .contains("guardrails, not product capacity commitments");
+        assertThat(pathValidation)
+                .contains("Normalizer.Form.NFC")
+                .contains("ARCHIVE_ENTRY_PATH");
+        assertThat(productionParserSource())
+                .as("the legacy document parser remains separate from the Review M0 archive boundary")
+                .doesNotContain("ZipArchiveInspector", "ZipArchiveEntryOpener");
     }
 
     @Disabled("Boundary only: requires native Tesseract plus eng and chi_sim traineddata; synthetic JPG is not a real scan")
@@ -192,11 +197,4 @@ class CurrentDocumentParserBaselineTest {
         return names;
     }
 
-    private static String readUnchecked(Path path) {
-        try {
-            return Files.readString(path);
-        } catch (Exception exception) {
-            throw new IllegalStateException("Could not read " + path, exception);
-        }
-    }
 }

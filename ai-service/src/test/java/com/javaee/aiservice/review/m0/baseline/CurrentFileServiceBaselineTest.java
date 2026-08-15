@@ -2,13 +2,11 @@ package com.javaee.aiservice.review.m0.baseline;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Characterizes the checked-in file-service boundary. These tests deliberately
- * prove current gaps; they do not provide a replacement file adapter.
+ * Characterizes the checked-in file-service boundary and the Review M0
+ * fail-closed adapter. These tests do not claim a real file-service integration.
  */
 class CurrentFileServiceBaselineTest {
 
@@ -101,24 +99,27 @@ class CurrentFileServiceBaselineTest {
     }
 
     @Test
-    void noProductionZipEntryReaderOrArchiveSafetyBoundaryExists() {
-        List<String> productionSources = List.of(
-                "file-service/src/main/java",
-                "document-service/src/main/java",
-                "ai-service/src/main/java");
-        String combined = productionSources.stream()
-                .map(this::readProductionTree)
-                .reduce("", (left, right) -> left + "\n" + right);
+    void reviewM0ProvidesDigestBoundZipEntryStreamingWhileFileServiceIntegrationRemainsFailClosed() {
+        String port = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/file/ReviewM0FileAccess.java");
+        String verifiedAccess = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/file/VerifiedReviewM0FileAccess.java");
+        String entryOpener = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ZipArchiveEntryOpener.java");
+        String failClosed = RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/file/FailClosedOwnedFileByteSource.java");
 
-        assertThat(combined).doesNotContain(
-                "ZipInputStream",
-                "java.util.zip.ZipFile",
-                "ZipArchiveInputStream",
-                "openZipEntry",
-                "getCompressedSize()",
-                "archiveMaxEntries",
-                "archiveMaxDepth",
-                "maxExpansionRatio");
+        assertThat(port)
+                .contains("InputStream openZipEntry(", "normalizedEntryPath", "expectedEntryDigest");
+        assertThat(verifiedAccess)
+                .contains("zipEntryOpener.open(archive, normalizedEntryPath, expectedEntryDigest)")
+                .contains("new IntegrityVerifyingInputStream");
+        assertThat(entryOpener)
+                .contains("new ZipInputStream(", "TargetEntryInputStream", "expectedEntryDigest");
+        assertThat(failClosed)
+                .contains("SERVICE_UNAVAILABLE")
+                .contains("file service cannot prove fileId ownership")
+                .doesNotContain("X-User-Id", "bucketName", "MinioClient");
     }
 
     private static String source(String fileServiceRelativePath) {
@@ -126,16 +127,4 @@ class CurrentFileServiceBaselineTest {
                 "file-service/src/main/java/com/javaee/fileservice/" + fileServiceRelativePath);
     }
 
-    private String readProductionTree(String repositoryRelativeRoot) {
-        try (var paths = java.nio.file.Files.walk(
-                RepositorySourceEvidence.repositoryRoot().resolve(repositoryRelativeRoot))) {
-            return paths.filter(java.nio.file.Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".java"))
-                    .map(path -> RepositorySourceEvidence.read(
-                            RepositorySourceEvidence.repositoryRoot().relativize(path).toString()))
-                    .reduce("", (left, right) -> left + "\n" + right);
-        } catch (java.io.IOException exception) {
-            throw new IllegalStateException("Could not scan production sources", exception);
-        }
-    }
 }

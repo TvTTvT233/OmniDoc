@@ -28,10 +28,10 @@
     },
     {
       "id": "ZIP_SAFE_SINGLE_ENTRY_READ",
-      "currentStatus": "CURRENT_GAP",
-      "targetStatus": "PENDING_IMPLEMENTATION",
+      "currentStatus": "CURRENT_VERIFIED",
+      "targetStatus": null,
       "owner": "M0-04",
-      "evidence": "CurrentFileServiceBaselineTest#noProductionZipEntryReaderOrArchiveSafetyBoundaryExists"
+      "evidence": "CurrentFileServiceBaselineTest#reviewM0ProvidesDigestBoundZipEntryStreamingWhileFileServiceIntegrationRemainsFailClosed; CurrentDocumentParserBaselineTest#reviewM0ArchiveInspectorUsesStreamingFailClosedSafetyLimitsOutsideTheLegacyParser; ZipArchiveInspectorTest#singleEntryOpenerReturnsOnlyTargetBytesAndVerifiesDigest plus fail-closed archive boundary tests"
     },
     {
       "id": "DOCUMENT_PDF_DOCX_CURRENT_BEHAVIOR",

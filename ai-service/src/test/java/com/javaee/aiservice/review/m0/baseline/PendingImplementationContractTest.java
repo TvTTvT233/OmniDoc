@@ -1,12 +1,15 @@
 package com.javaee.aiservice.review.m0.baseline;
 
+import com.javaee.aiservice.review.m0.archive.ArchiveSafetyLimits;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
- * Frozen target names for downstream owners. Every method is intentionally
- * disabled because the current production capability does not exist or the
- * required real dependency was not run. Empty passing assertions are forbidden.
+ * Frozen target names for downstream owners. Targets stay disabled while the
+ * capability or required real dependency is absent; delivered targets become
+ * positive evidence pointers and must never be replaced by empty assertions.
  */
 class PendingImplementationContractTest {
 
@@ -25,24 +28,61 @@ class PendingImplementationContractTest {
     void ordinaryFileReadIsStreamingAndBounded() {
     }
 
-    @Disabled("PENDING_IMPLEMENTATION M0-04: add digest-bound streaming lookup for exactly one ZIP leaf")
     @Test
     void zipReaderStreamsOnlyTheRequestedDigestBoundLeaf() {
+        assertThat(zipEntryOpenerSource())
+                .contains("new ZipInputStream(", "expectedEntryDigest", "TargetEntryInputStream");
+        assertThat(zipAcceptanceTestSource())
+                .contains("void singleEntryOpenerReturnsOnlyTargetBytesAndVerifiesDigest()")
+                .contains("void singleEntryOpenerRejectsDigestMismatch()")
+                .contains("void singleEntryOpenerDoesNotCompleteWhenLaterEntryIsDangerous()");
     }
 
-    @Disabled("PENDING_IMPLEMENTATION M0-04: reject traversal, absolute paths, NUL and duplicate normalized/NFC paths")
     @Test
     void zipReaderRejectsUnsafeAndDuplicateNormalizedPaths() {
+        assertThat(RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ArchivePath.java"))
+                .contains("Normalizer.Form.NFC", "ARCHIVE_ENTRY_PATH", "codePoint == 0", "Character.isISOControl");
+        assertThat(zipAcceptanceTestSource())
+                .contains("void traversalPathIsRejected()")
+                .contains("void absoluteUnixPathIsRejected()")
+                .contains("void driveAndUncPathsAreRejected()")
+                .contains("void nulAndControlCharactersAreRejected()")
+                .contains("void duplicateNfcNormalizedPathsAreRejected()");
     }
 
-    @Disabled("PENDING_IMPLEMENTATION M0-04: reject nested ZIP, encrypted/corrupt entries and unsupported leaf types")
     @Test
     void zipReaderRejectsNestedEncryptedCorruptAndUnsupportedEntries() {
+        assertThat(RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ZipArchiveInspector.java"))
+                .contains("NESTED_ARCHIVE_NOT_ALLOWED")
+                .contains("ARCHIVE_ENTRY_UNSUPPORTED")
+                .contains("CannotConfirmReason.CORRUPTED")
+                .contains("CannotConfirmReason.ENCRYPTED");
+        assertThat(zipAcceptanceTestSource())
+                .contains("void nestedZipIsRejected()")
+                .contains("void encryptedEntryIsRejectedAsEncrypted()")
+                .contains("void damagedEntryOrCrcIsRejectedAsCorrupted()")
+                .contains("void unsupportedLeafIsRejected()");
     }
 
-    @Disabled("PENDING_IMPLEMENTATION M0-04: enforce configurable entry count, item/total expansion and compression-ratio limits")
     @Test
     void zipReaderEnforcesAllExpansionSafetyLimits() {
+        ArchiveSafetyLimits limits = ArchiveSafetyLimits.secureDefaults();
+        assertThat(limits.maximumEntries()).isPositive();
+        assertThat(limits.maximumEntryUncompressedBytes()).isPositive();
+        assertThat(limits.maximumTotalUncompressedBytes())
+                .isGreaterThanOrEqualTo(limits.maximumEntryUncompressedBytes());
+        assertThat(limits.maximumCompressionRatio()).isGreaterThanOrEqualTo(1.0d);
+        assertThat(limits.maximumProcessingTime()).isPositive();
+        assertThat(zipAcceptanceTestSource())
+                .contains("void entryCountLimitFailsClosed()")
+                .contains("void singleEntryExpansionLimitFailsClosed()")
+                .contains("void totalExpansionLimitFailsClosed()")
+                .contains("void compressionRatioLimitFailsClosed()")
+                .contains("void entryNameLengthLimitFailsClosed()")
+                .contains("void directoryDepthLimitFailsClosed()")
+                .contains("void processingTimeLimitFailsClosed()");
     }
 
     @Disabled("PENDING_IMPLEMENTATION M0-03 parser adapter: retain reliable PDF page/block locator without inventing public fields")
@@ -83,5 +123,15 @@ class PendingImplementationContractTest {
     @Disabled("EXTERNAL_VERIFICATION_PENDING M0-02/integration: run startup and migrations against a real MySQL 8 instance")
     @Test
     void realMysql8StartupAndMigrationRemainUnverified() {
+    }
+
+    private static String zipEntryOpenerSource() {
+        return RepositorySourceEvidence.read(
+                "ai-service/src/main/java/com/javaee/aiservice/review/m0/archive/ZipArchiveEntryOpener.java");
+    }
+
+    private static String zipAcceptanceTestSource() {
+        return RepositorySourceEvidence.read(
+                "ai-service/src/test/java/com/javaee/aiservice/review/m0/archive/ZipArchiveInspectorTest.java");
     }
 }
