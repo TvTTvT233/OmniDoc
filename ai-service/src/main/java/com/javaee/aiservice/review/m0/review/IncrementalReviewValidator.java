@@ -78,7 +78,9 @@ public final class IncrementalReviewValidator {
                 && base.uploadConfirmationId().equals(current.uploadConfirmationId())) {
             throw mismatch("Changed material bytes require a new upload confirmation");
         }
-        return new IncrementalPlan(actual, nameOnly);
+        boolean recomputeCompleteness = nameOnly && actual.stream().anyMatch(id ->
+                typeReliabilityChanged(oldMaterials.get(id), newMaterials.get(id)));
+        return new IncrementalPlan(actual, nameOnly, recomputeCompleteness);
     }
 
     private static boolean addSourceChanges(
@@ -146,6 +148,20 @@ public final class IncrementalReviewValidator {
         return oldValue != null && newValue != null
                 && oldValue.canonicalValueWithoutName().equals(newValue.canonicalValueWithoutName())
                 && !oldValue.submissionFileName().equals(newValue.submissionFileName());
+    }
+
+    private static boolean typeReliabilityChanged(
+            ReviewInputManifest.MaterialFact oldValue,
+            ReviewInputManifest.MaterialFact newValue
+    ) {
+        return extensionMatchesFormalType(oldValue) != extensionMatchesFormalType(newValue);
+    }
+
+    private static boolean extensionMatchesFormalType(ReviewInputManifest.MaterialFact material) {
+        return material != null && java.text.Normalizer.normalize(
+                        material.submissionFileName(), java.text.Normalizer.Form.NFC)
+                .toLowerCase(java.util.Locale.ROOT)
+                .endsWith(material.formalFileType().extension());
     }
 
     private static <T> Map<String, T> byId(List<T> values, Function<T, String> id) {

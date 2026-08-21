@@ -52,11 +52,14 @@ public final class DeterministicReviewEngine {
             IncrementalPlan plan
     ) {
         List<FindingDraft> findings = new ArrayList<>();
-        if (plan.nameOnly()) {
+        if (plan.nameOnly() && !plan.recomputeCompleteness()) {
             baseFindings.stream()
-                    .filter(item -> item.type() != FindingType.FILE_NAME_NONCOMPLIANT
-                            || item.materialId() == null
+                    .filter(item -> item.materialId() == null
                             || !plan.changedMaterialIds().contains(item.materialId()))
+                    .forEach(findings::add);
+            cannotConfirmFindings(input).stream()
+                    .filter(item -> item.materialId() != null
+                            && plan.changedMaterialIds().contains(item.materialId()))
                     .forEach(findings::add);
         } else {
             baseFindings.stream()
