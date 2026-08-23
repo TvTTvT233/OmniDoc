@@ -123,6 +123,9 @@ public class FileMetadataServiceImpl implements FileMetadataService {
     }
 
     private void applyCurrentBucketFilter(QueryWrapper<FileMetadata> wrapper) {
+        // Frozen legacy APIs may continue serving historical owner-null rows, but must never
+        // expose records created by the authenticated owner-aware boundary.
+        wrapper.isNull("owner_id");
         if ("minio".equals(fileStorageConfig.getStorageType())) {
             wrapper.eq("bucket_name", fileStorageConfig.getBucketName());
         }
@@ -130,6 +133,9 @@ public class FileMetadataServiceImpl implements FileMetadataService {
 
     private boolean isCurrentBucketMetadata(FileMetadata metadata) {
         if (metadata == null) {
+            return false;
+        }
+        if (metadata.getOwnerId() != null) {
             return false;
         }
         if (!"minio".equals(fileStorageConfig.getStorageType())) {

@@ -4,6 +4,7 @@ import com.javaee.aiservice.review.m0.archive.ArchiveSafetyLimits;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.net.URI;
 
 /** Review-only typed limits. No common application YAML is required or modified. */
 @ConfigurationProperties(prefix = "ai.review-m0.runtime")
@@ -16,6 +17,9 @@ public final class ReviewM0RuntimeProperties {
     private int maximumArchiveDirectoryDepth = ArchiveSafetyLimits.DEFAULT_MAXIMUM_DIRECTORY_DEPTH;
     private Duration maximumArchiveProcessingTime = ArchiveSafetyLimits.DEFAULT_MAXIMUM_PROCESSING_TIME;
     private Duration regexTimeout = Duration.ofMillis(100);
+    private URI fileServiceBaseUri = URI.create("http://file:8082");
+    private Duration fileServiceConnectTimeout = Duration.ofSeconds(2);
+    private Duration fileServiceRequestTimeout = Duration.ofSeconds(10);
 
     public ArchiveSafetyLimits archiveSafetyLimits() {
         return new ArchiveSafetyLimits(
@@ -31,6 +35,32 @@ public final class ReviewM0RuntimeProperties {
             throw new IllegalStateException("Review M0 regex timeout is invalid");
         }
         return regexTimeout;
+    }
+
+    public URI validatedFileServiceBaseUri() {
+        if (fileServiceBaseUri == null || fileServiceBaseUri.getScheme() == null
+                || !("http".equalsIgnoreCase(fileServiceBaseUri.getScheme())
+                || "https".equalsIgnoreCase(fileServiceBaseUri.getScheme()))
+                || fileServiceBaseUri.getHost() == null) {
+            throw new IllegalStateException("Review M0 file-service base URI is invalid");
+        }
+        return fileServiceBaseUri;
+    }
+
+    public Duration validatedFileServiceConnectTimeout() {
+        return validateFileServiceTimeout(fileServiceConnectTimeout, "connect");
+    }
+
+    public Duration validatedFileServiceRequestTimeout() {
+        return validateFileServiceTimeout(fileServiceRequestTimeout, "request");
+    }
+
+    private static Duration validateFileServiceTimeout(Duration value, String name) {
+        if (value == null || value.isZero() || value.isNegative()
+                || value.compareTo(Duration.ofSeconds(30)) > 0) {
+            throw new IllegalStateException("Review M0 file-service " + name + " timeout is invalid");
+        }
+        return value;
     }
 
     public int getMaximumArchiveEntries() { return maximumArchiveEntries; }
@@ -49,4 +79,10 @@ public final class ReviewM0RuntimeProperties {
     public void setMaximumArchiveProcessingTime(Duration value) { maximumArchiveProcessingTime = value; }
     public Duration getRegexTimeout() { return regexTimeout; }
     public void setRegexTimeout(Duration value) { regexTimeout = value; }
+    public URI getFileServiceBaseUri() { return fileServiceBaseUri; }
+    public void setFileServiceBaseUri(URI value) { fileServiceBaseUri = value; }
+    public Duration getFileServiceConnectTimeout() { return fileServiceConnectTimeout; }
+    public void setFileServiceConnectTimeout(Duration value) { fileServiceConnectTimeout = value; }
+    public Duration getFileServiceRequestTimeout() { return fileServiceRequestTimeout; }
+    public void setFileServiceRequestTimeout(Duration value) { fileServiceRequestTimeout = value; }
 }

@@ -9,6 +9,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.http.HttpStatus;
 
 /**
  * 文件服务安全配置
@@ -59,7 +61,10 @@ public class SecurityConfig extends BaseSecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 // 确保Swagger相关路径的匹配规则在最前面
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/v3/api-docs").permitAll()
-                // 允许文件服务相关接口访问
+                // Owner-aware endpoints always require a verified JWT principal. This rule
+                // must precede the frozen legacy compatibility matcher below.
+                .requestMatchers("/api/files/owned/**").authenticated()
+                // 允许既有文件服务接口访问（冻结兼容边界）
                 .requestMatchers("/api/files/**").permitAll()
                 // 允许静态资源访问
                 .requestMatchers("/static/**", "/public/**").permitAll()
@@ -69,7 +74,9 @@ public class SecurityConfig extends BaseSecurityConfig {
                 .requestMatchers("/error").permitAll()
                 // 其他接口需要认证
                 .anyRequest().authenticated()
-            );
+            )
+            .exceptionHandling(exceptions -> exceptions
+                    .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
 
         return http.build();
     }

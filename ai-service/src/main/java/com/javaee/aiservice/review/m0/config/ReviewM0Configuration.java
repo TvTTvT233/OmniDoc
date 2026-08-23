@@ -8,6 +8,8 @@ import com.javaee.aiservice.review.m0.checklist.*;
 import com.javaee.aiservice.review.m0.evidence.ReviewEvidenceFactory;
 import com.javaee.aiservice.review.m0.extraction.*;
 import com.javaee.aiservice.review.m0.file.FormalContentInspector;
+import com.javaee.aiservice.review.m0.file.HttpOwnedFileByteSource;
+import com.javaee.aiservice.review.m0.file.OwnedFileByteSource;
 import com.javaee.aiservice.review.m0.file.ReviewM0FileAccess;
 import com.javaee.aiservice.review.m0.file.VerifiedReviewM0FileAccess;
 import com.javaee.aiservice.review.m0.idempotency.ReviewM0IdempotencyStore;
@@ -77,9 +79,21 @@ public class ReviewM0Configuration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(OwnedFileByteSource.class)
+    OwnedFileByteSource reviewM0OwnedFileByteSource(ReviewM0RuntimeProperties properties) {
+        return new HttpOwnedFileByteSource(
+                properties.validatedFileServiceBaseUri(),
+                properties.validatedFileServiceConnectTimeout(),
+                properties.validatedFileServiceRequestTimeout());
+    }
+
+    @Bean
     @ConditionalOnMissingBean(ReviewM0FileAccess.class)
-    ReviewM0FileAccess reviewM0FailClosedFileAccess(ZipArchiveEntryOpener opener) {
-        return VerifiedReviewM0FileAccess.failClosed(opener);
+    ReviewM0FileAccess reviewM0FileAccess(
+            OwnedFileByteSource byteSource,
+            ZipArchiveEntryOpener opener
+    ) {
+        return new VerifiedReviewM0FileAccess(byteSource, opener);
     }
 
     @Bean

@@ -3,6 +3,8 @@ package com.javaee.aiservice.review.m0.config;
 import com.javaee.aiservice.review.m0.api.ReviewM0ApiService;
 import com.javaee.aiservice.review.m0.extraction.RemoteCandidateClientFactory;
 import com.javaee.aiservice.review.m0.file.OwnedFileAccessException;
+import com.javaee.aiservice.review.m0.file.HttpOwnedFileByteSource;
+import com.javaee.aiservice.review.m0.file.OwnedFileByteSource;
 import com.javaee.aiservice.review.m0.file.ReviewM0FileAccess;
 import com.javaee.aiservice.review.m0.idempotency.JdbcReviewM0IdempotencyStore;
 import com.javaee.aiservice.review.m0.job.*;
@@ -35,8 +37,10 @@ class ReviewM0ConfigurationTest {
     }
 
     @Test
-    void productionOwnerAwareFileGatewayFailsClosed() {
+    void productionOwnerAwareFileGatewayUsesRealClientAndFailsClosedWithoutDelegatedIdentity() {
         try (AnnotationConfigApplicationContext context = context()) {
+            assertThat(context.getBean(OwnedFileByteSource.class))
+                    .isInstanceOf(HttpOwnedFileByteSource.class);
             ReviewM0FileAccess files = context.getBean(ReviewM0FileAccess.class);
             assertThatThrownBy(() -> files.getOwnedFile("owner-a", "file-a"))
                     .isInstanceOf(OwnedFileAccessException.class)
@@ -69,6 +73,13 @@ class ReviewM0ConfigurationTest {
         properties = new ReviewM0RuntimeProperties();
         properties.setRegexTimeout(java.time.Duration.ofSeconds(6));
         assertThatThrownBy(properties::validatedRegexTimeout).isInstanceOf(IllegalStateException.class);
+        properties = new ReviewM0RuntimeProperties();
+        properties.setFileServiceBaseUri(java.net.URI.create("file:/not-http"));
+        assertThatThrownBy(properties::validatedFileServiceBaseUri).isInstanceOf(IllegalStateException.class);
+        properties = new ReviewM0RuntimeProperties();
+        properties.setFileServiceRequestTimeout(java.time.Duration.ofSeconds(31));
+        assertThatThrownBy(properties::validatedFileServiceRequestTimeout)
+                .isInstanceOf(IllegalStateException.class);
     }
 
     static AnnotationConfigApplicationContext context() {

@@ -7,6 +7,15 @@
         SELECT * FROM file_metadata WHERE file_id = #{fileId}
     </select>
 
+    <!-- owner_id is intentionally part of the predicate; NULL legacy rows fail closed. -->
+    <select id="selectOwnedActiveByFileId" resultType="com.javaee.fileservice.entity.FileMetadata">
+        SELECT *
+        FROM file_metadata
+        WHERE owner_id = #{ownerId}
+          AND file_id = #{fileId}
+          AND status = 'ACTIVE'
+    </select>
+
     <!-- 根据文件名搜索文件 -->
     <select id="searchByFileName" resultType="com.javaee.fileservice.entity.FileMetadata">
         SELECT * FROM file_metadata WHERE file_name LIKE CONCAT('%', #{keyword}, '%') OR original_file_name LIKE CONCAT('%', #{keyword}, '%')
