@@ -24,6 +24,8 @@ $settings = Join-Path $RepositoryRoot '.mvn\settings-local.xml'
 $resourceRoot = Join-Path $RepositoryRoot 'ai-service\src\test\resources\review-m0\acceptance'
 $fixturePath = Join-Path $resourceRoot 'review-m0-p0-fixtures.json'
 $selectorPath = Join-Path $resourceRoot 'review-m0-integration-selector.json'
+$reportSchemaPath = Join-Path $resourceRoot 'review-m0-acceptance-report.schema.json'
+$evidenceSchemaPath = Join-Path $resourceRoot 'review-m0-integrated-evidence.schema.json'
 $reportPath = Join-Path $ReportDirectory 'review-m0-acceptance-report.json'
 $evidencePath = Join-Path $ReportDirectory 'review-m0-integrated-evidence.json'
 $sensitiveCheck = Join-Path $PSScriptRoot 'assert-no-sensitive-data.ps1'
@@ -54,7 +56,9 @@ $requiredP0Names = @(
 )
 $startedAt = (Get-Date).ToUniversalTime().ToString('o')
 
-foreach ($requiredFile in @($wrapper, $settings, $fixturePath, $selectorPath, $sensitiveCheck)) {
+foreach ($requiredFile in @(
+        $wrapper, $settings, $fixturePath, $selectorPath, $reportSchemaPath,
+        $evidenceSchemaPath, $sensitiveCheck)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "Review M0 acceptance asset is missing: $requiredFile"
     }
@@ -257,23 +261,44 @@ function Assert-SelectorReady {
             $selector.evidenceSystemProperty -ne 'review.m0.acceptance.evidence.path') {
         throw 'Integration selector identity does not match the frozen Review M0 contract'
     }
-    if ($selector.state -ne 'READY') {
-        return @([string[]]$selector.pendingReasons)
-    }
     $missing = [System.Collections.Generic.List[string]]::new()
     if ([string]::IsNullOrWhiteSpace([string]$selector.adapterId)) { $missing.Add('ADAPTER_ID_MISSING') }
     $classes = @($selector.testClasses)
     if ($classes.Count -eq 0) { $missing.Add('EXACT_TEST_CLASSES_MISSING') }
+    if (@($classes | Sort-Object -Unique).Count -ne $classes.Count) { $missing.Add('DUPLICATE_TEST_CLASSES') }
     $targetProperties = @($selector.targetSelectors.PSObject.Properties)
     foreach ($targetProperty in $targetProperties) {
         Assert-ExactProperties -Object $targetProperty.Value -Expected @('className', 'methodName') `
             -Context "Integration selector target $($targetProperty.Name)"
+        $mappedClass = [string]$targetProperty.Value.className
+        $mappedMethod = [string]$targetProperty.Value.methodName
+        if ($mappedClass -notin $classes) {
+            $missing.Add("TARGET_CLASS_NOT_SELECTED__$($targetProperty.Name)")
+            continue
+        }
+        $source = Get-TestSourcePath -FullyQualifiedClass $mappedClass
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            $missing.Add("TARGET_CLASS_SOURCE_MISSING__$($targetProperty.Name)")
+            continue
+        }
+        $sourceText = Get-Content -LiteralPath $source -Raw -Encoding utf8
+        if ($sourceText -notmatch "(?m)\bvoid\s+$([regex]::Escape($mappedMethod))\s*\(") {
+            $missing.Add("TARGET_METHOD_SOURCE_MISSING__$($targetProperty.Name)")
+        }
     }
     $actualTargets = @($targetProperties | ForEach-Object { $_.Name } | Sort-Object)
     $targetDifference = @($requiredTargetIds | Where-Object { $_ -notin $actualTargets }) +
         @($actualTargets | Where-Object { $_ -notin $requiredTargetIds })
     if ($targetDifference.Count -gt 0 -or $actualTargets.Count -ne 15) { $missing.Add('EXACT_TARGET_MAP_INVALID') }
     if (@($selector.staticScanRoots).Count -eq 0) { $missing.Add('STATIC_SCAN_ROOTS_MISSING') }
+    if ($selector.state -eq 'PENDING_INTEGRATION') {
+        foreach ($reason in @($selector.pendingReasons)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$reason)) { $missing.Add([string]$reason) }
+        }
+        if (@($selector.pendingReasons).Count -eq 0) { $missing.Add('PENDING_REASON_MISSING') }
+    } elseif (@($selector.pendingReasons).Count -ne 0) {
+        $missing.Add('READY_SELECTOR_HAS_PENDING_REASONS')
+    }
     return $missing.ToArray()
 }
 
@@ -375,6 +400,32 @@ function Save-Report {
         unverified = @($Unverified)
     }
     $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $reportPath -Encoding utf8
+    Assert-SavedReport -ExpectedStatus $Status -ExpectedMode $Mode
+}
+
+function Assert-SavedReport {
+    param([string]$ExpectedStatus, [string]$ExpectedMode)
+    $schema = Get-Content -LiteralPath $reportSchemaPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $saved = Get-Content -LiteralPath $reportPath -Raw -Encoding utf8 | ConvertFrom-Json
+    $required = @($schema.required | ForEach-Object { [string]$_ })
+    Assert-ExactProperties -Object $saved -Expected $required -Context 'Saved acceptance report'
+    if ($saved.status -ne $ExpectedStatus -or $saved.mode -ne $ExpectedMode) {
+        throw 'Saved acceptance report status or mode differs from the gate result'
+    }
+    $countSum = [int]$saved.counts.passed + [int]$saved.counts.failed +
+        [int]$saved.counts.errors + [int]$saved.counts.skipped
+    if ([int]$saved.counts.tests -ne $countSum) {
+        throw 'Saved acceptance report test counts do not add up'
+    }
+    if ($ExpectedStatus -eq 'AUTO_VERIFIED' -and
+            ($saved.finalAcceptance -ne $true -or $saved.manualStatus -ne 'MANUAL_PENDING' -or
+             @($saved.readinessMissing).Count -ne 0)) {
+        throw 'AUTO_VERIFIED report violates the final/manual/readiness status contract'
+    }
+    if ($ExpectedStatus -ne 'AUTO_VERIFIED' -and
+            ($saved.finalAcceptance -ne $false -or $saved.manualStatus -ne 'NOT_READY')) {
+        throw 'Non-final report claims final or manual acceptance'
+    }
 }
 
 $assetResult = $null
@@ -414,6 +465,7 @@ try {
     Save-Report -Status 'AUTO_VERIFIED' -Mode 'INTEGRATED' -AssetCounts $assetResult.Counts `
         -IntegratedCounts $integratedResult.Counts -Evidence $evidence -Missing @() -Unverified @()
     & $sensitiveCheck -RepositoryRoot $RepositoryRoot -ReportPath $reportPath `
+        -EvidencePath $evidencePath `
         -StaticScanRoots @($selector.staticScanRoots)
     if ($LASTEXITCODE -ne 0) { throw "Sensitive-data gate failed with exit code $LASTEXITCODE" }
     Write-Host "[AUTO_VERIFIED] Review M0 exact integrated targets and aggregate gates passed. Report: $reportPath"

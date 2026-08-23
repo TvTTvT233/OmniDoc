@@ -2,6 +2,7 @@
 param(
     [string]$RepositoryRoot,
     [string]$ReportPath,
+    [string]$EvidencePath,
     [string[]]$StaticScanRoots = @()
 )
 
@@ -21,6 +22,47 @@ $findings = [System.Collections.Generic.List[object]]::new()
 function Add-Finding {
     param([string]$File, [int]$Line, [string]$Rule)
     $findings.Add([pscustomobject]@{ File = $File; Line = $Line; Rule = $Rule })
+}
+
+function Test-ForbiddenJsonProperties {
+    param([object]$Node, [string]$FileLabel)
+    if ($null -eq $Node) { return }
+    if ($Node -is [System.Management.Automation.PSCustomObject]) {
+        foreach ($property in $Node.PSObject.Properties) {
+            if ($property.Name -in @(
+                    'original', 'objectKey', 'contentHash', 'ocrText', 'documentContent',
+                    'credential', 'previewText', 'payloadText', 'responseText', 'prompt')) {
+                Add-Finding -File $FileLabel -Line 0 -Rule "Forbidden JSON property: $($property.Name)"
+            }
+            Test-ForbiddenJsonProperties -Node $property.Value -FileLabel $FileLabel
+        }
+        return
+    }
+    if ($Node -is [System.Collections.IEnumerable] -and $Node -isnot [string]) {
+        foreach ($item in $Node) { Test-ForbiddenJsonProperties -Node $item -FileLabel $FileLabel }
+    }
+}
+
+function Test-JsonContentBoundary {
+    param([string]$Path, [string]$Label)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        Add-Finding -File $Label -Line 0 -Rule 'JSON evidence artifact missing'
+        return
+    }
+    $text = Get-Content -LiteralPath $Path -Raw -Encoding utf8
+    $parsed = $text | ConvertFrom-Json
+    Test-ForbiddenJsonProperties -Node $parsed -FileLabel $Label
+    foreach ($rule in $secretRules) {
+        if ([regex]::IsMatch($text, $rule.Pattern)) {
+            Add-Finding -File $Label -Line 0 -Rule "JSON $($rule.Name)"
+        }
+    }
+    foreach ($rule in $piiRules) {
+        if ([regex]::IsMatch($text, $rule.Pattern)) {
+            Add-Finding -File $Label -Line 0 -Rule "JSON $($rule.Name)"
+        }
+    }
 }
 
 function Resolve-SafeRelativeRoot {
@@ -49,6 +91,11 @@ $secretRules = @(
     [pscustomobject]@{ Name = 'Credential embedded in URL'; Pattern = '(?i)https?://[^/\s:@]+:[^/\s@]{8,}@' },
     [pscustomobject]@{ Name = 'Private key material'; Pattern = '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----' },
     [pscustomobject]@{ Name = 'AWS access key literal'; Pattern = '\bAKIA[0-9A-Z]{16}\b' }
+)
+$piiRules = @(
+    [pscustomobject]@{ Name = 'Email-like PII'; Pattern = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b' },
+    [pscustomobject]@{ Name = 'Mainland phone-like PII'; Pattern = '(?<!\d)1[3-9]\d{9}(?!\d)' },
+    [pscustomobject]@{ Name = 'Mainland ID-like PII'; Pattern = '(?<!\d)\d{17}[0-9Xx](?!\d)' }
 )
 
 $relativeFiles = @(& git -C $RepositoryRoot ls-files --cached --others --exclude-standard)
@@ -116,11 +163,6 @@ if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
     if ($fixture.synthetic -ne $true -or $fixture.containsRealUserData -ne $false) {
         Add-Finding -File 'review-m0-p0-fixtures.json' -Line 0 -Rule 'Fixture exceeds synthetic boundary'
     }
-    $piiRules = @(
-        [pscustomobject]@{ Name = 'Email-like PII'; Pattern = '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b' },
-        [pscustomobject]@{ Name = 'Mainland phone-like PII'; Pattern = '(?<!\d)1[3-9]\d{9}(?!\d)' },
-        [pscustomobject]@{ Name = 'Mainland ID-like PII'; Pattern = '(?<!\d)\d{17}[0-9Xx](?!\d)' }
-    )
     foreach ($rule in $piiRules) {
         if ([regex]::IsMatch($fixtureText, $rule.Pattern)) {
             Add-Finding -File 'review-m0-p0-fixtures.json' -Line 0 -Rule $rule.Name
@@ -128,24 +170,8 @@ if (-not (Test-Path -LiteralPath $fixturePath -PathType Leaf)) {
     }
 }
 
-if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
-    if (-not (Test-Path -LiteralPath $ReportPath -PathType Leaf)) {
-        Add-Finding -File $ReportPath -Line 0 -Rule 'Acceptance report missing'
-    } else {
-        $reportText = Get-Content -LiteralPath $ReportPath -Raw -Encoding utf8
-        $report = $reportText | ConvertFrom-Json
-        foreach ($field in @('original', 'objectKey', 'contentHash', 'ocrText', 'documentContent', 'credential')) {
-            if ($report.PSObject.Properties.Name -contains $field) {
-                Add-Finding -File $ReportPath -Line 0 -Rule "Forbidden top-level report field: $field"
-            }
-        }
-        foreach ($rule in $secretRules) {
-            if ([regex]::IsMatch($reportText, $rule.Pattern)) {
-                Add-Finding -File $ReportPath -Line 0 -Rule "Report $($rule.Name)"
-            }
-        }
-    }
-}
+Test-JsonContentBoundary -Path $ReportPath -Label 'review-m0-acceptance-report.json'
+Test-JsonContentBoundary -Path $EvidencePath -Label 'review-m0-integrated-evidence.json'
 
 if ($findings.Count -gt 0) {
     [Console]::Error.WriteLine("Review M0 sensitive-data check failed with $($findings.Count) redacted finding(s).")

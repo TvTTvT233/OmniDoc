@@ -29,7 +29,8 @@ class ReviewM0StaticGateContractTest {
                 "Email-like PII",
                 "Mainland phone-like PII",
                 "Mainland ID-like PII",
-                "Forbidden top-level report field",
+                "Forbidden JSON property",
+                "$EvidencePath",
                 "Sensitive Review M0 value in log statement",
                 "redacted finding(s)");
         assertThat(script).doesNotContain("$match.Value");

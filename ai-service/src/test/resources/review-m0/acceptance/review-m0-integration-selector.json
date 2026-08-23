@@ -2,14 +2,35 @@
   "schemaVersion": 1,
   "contractVersion": "REVIEW_M0_CONTRACT_V1",
   "state": "PENDING_INTEGRATION",
-  "adapterId": null,
-  "testClasses": [],
-  "targetSelectors": {},
-  "staticScanRoots": [],
+  "adapterId": "review-m0-r1-d-production-behavior-v1",
+  "testClasses": [
+    "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter"
+  ],
+  "targetSelectors": {
+    "M0-P0-001": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_001_candidateChecklistCannotEnterFormalReview"},
+    "M0-P0-002": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_002_lineageAndEvidenceAnchorsStayDistinct"},
+    "M0-P0-003": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_003_uploadConfirmationPrecedesMissing"},
+    "M0-P0-004": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_004_cannotConfirmAndSystemFailureRemainSeparateFromMissing"},
+    "M0-P0-005": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_005_namingRulesAreDeterministicAndEvidenceComplete"},
+    "M0-P0-006": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_006_logicalRenameAndDownloadNeverMutateOriginal"},
+    "M0-P0-007": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_007_ignoreIsAppendOnlyAndCannotCreateReady"},
+    "M0-P0-008": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_008_firstIdempotentResponseSurvivesMutationAndRestart"},
+    "M0-P0-009": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_009_checkpointRecoveryAndCancelRequestedConvergeAfterRestart"},
+    "M0-P0-010": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_010_outdatedAndIncrementalResultsMatchFullReview"},
+    "M0-P0-011": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_011_ownerAwareFileReadsAndHttpDownloadsHideCrossUserResources"},
+    "M0-P0-012": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_012_runtimeEvidenceAndErrorsContainNoSensitiveBodies"},
+    "M0-P0-013": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_013_outOfScopeContentNeverCreatesM0Findings"},
+    "M0-P0-014": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_014_sixTopLevelFormatsAndFiveZipLeavesUseProductionInspectors"},
+    "M0-P0-015": {"className": "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter", "methodName": "m0P0_015_zipSafetyBoundariesFailClosedInProductionInspector"}
+  },
+  "staticScanRoots": [
+    "ai-service/src/main/java/com/javaee/aiservice/review/m0",
+    "file-service/src/main/java/com/javaee/fileservice"
+  ],
   "evidenceSystemProperty": "review.m0.acceptance.evidence.path",
   "pendingReasons": [
-    "REVIEW_M0_PRODUCTION_ADAPTER_NOT_DECLARED",
-    "REVIEW_M0_EXACT_INTEGRATED_TEST_SELECTION_NOT_DECLARED",
-    "REVIEW_M0_STATIC_SCAN_ROOTS_NOT_DECLARED"
+    "R1_A_COMMIT_REQUIRED__feature/review-m0-r1-a-idempotency-01a02df0__IMMUTABLE_FIRST_RESPONSE_REPLAY_AFTER_RESOURCE_CHANGE_AND_RESTART",
+    "R1_B_COMMIT_REQUIRED__fix/review-m0-r1-cancel-recovery-01a02df1__CANCEL_REQUESTED_RESTART_CONVERGENCE",
+    "R1_C_COMMIT_REQUIRED__feature/review-m0-r1-c-owner-file-01a02df1__OWNER_AWARE_FILE_SERVICE_AND_MINIO_CHAIN"
   ]
 }
