@@ -40,9 +40,10 @@ class CurrentFileServiceBaselineTest {
     }
 
     @Test
-    void metadataContainsOriginalNameAndRecordedSizeButNoStableSha256() {
+    void ownerAwareMetadataAddsStableSha256WithoutRewritingTheLegacyUploadPath() {
         String entity = source("entity/FileMetadata.java");
-        String implementation = source("service/impl/FileServiceImpl.java");
+        String legacyImplementation = source("service/impl/FileServiceImpl.java");
+        String ownedImplementation = source("service/impl/OwnerAwareFileServiceImpl.java");
         String schema = RepositorySourceEvidence.read("file-service/src/main/resources/file.sql");
 
         assertThat(entity)
@@ -50,17 +51,26 @@ class CurrentFileServiceBaselineTest {
                 .contains("private long fileSize")
                 .contains("private String md5")
                 .contains("private String objectKey")
-                .doesNotContainIgnoringCase("sha256")
-                .doesNotContainIgnoringCase("sha-256");
-        assertThat(implementation)
+                .contains("private String ownerId")
+                .contains("private String sha256")
+                .contains("private String storageVersion")
+                .contains("private String contentSignature");
+        assertThat(legacyImplementation)
                 .contains("fileMetadata.setOriginalFileName(fileName)")
                 .contains("fileMetadata.setFileSize(file.getSize())")
                 .contains("fileMetadata.setObjectKey(storageFileName)")
                 .doesNotContain("setMd5(", "SHA-256", "SHA256");
+        assertThat(ownedImplementation)
+                .contains("metadata.setOwnerId(ownerId)")
+                .contains("metadata.setSha256(stored.sha256())")
+                .contains("metadata.setStorageVersion(stored.storageVersion())")
+                .contains("metadata.setContentSignature(signature)")
+                .contains("MessageDigest.getInstance(\"SHA-256\")");
         assertThat(schema)
                 .contains("`original_file_name`", "`file_size`", "`md5`", "`object_key`")
-                .doesNotContainIgnoringCase("sha256")
-                .doesNotContainIgnoringCase("sha-256");
+                .contains("`owner_id`", "`sha256`", "`storage_version`", "`content_signature`")
+                .contains("`owner_id` IS NULL OR (")
+                .contains("`sha256` REGEXP '^[0-9a-f]{64}$'");
     }
 
     @Test

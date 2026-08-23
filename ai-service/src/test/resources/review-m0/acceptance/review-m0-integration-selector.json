@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractVersion": "REVIEW_M0_CONTRACT_V1",
-  "state": "PENDING_INTEGRATION",
+  "state": "READY",
   "adapterId": "review-m0-r1-d-production-behavior-v1",
   "testClasses": [
     "com.javaee.aiservice.review.m0.acceptance.ReviewM0IntegratedEvidenceAdapter"
@@ -28,9 +28,5 @@
     "file-service/src/main/java/com/javaee/fileservice"
   ],
   "evidenceSystemProperty": "review.m0.acceptance.evidence.path",
-  "pendingReasons": [
-    "R1_A_COMMIT_REQUIRED__feature/review-m0-r1-a-idempotency-01a02df0__IMMUTABLE_FIRST_RESPONSE_REPLAY_AFTER_RESOURCE_CHANGE_AND_RESTART",
-    "R1_B_COMMIT_REQUIRED__fix/review-m0-r1-cancel-recovery-01a02df1__CANCEL_REQUESTED_RESTART_CONVERGENCE",
-    "R1_C_COMMIT_REQUIRED__feature/review-m0-r1-c-owner-file-01a02df1__OWNER_AWARE_FILE_SERVICE_AND_MINIO_CHAIN"
-  ]
+  "pendingReasons": []
 }

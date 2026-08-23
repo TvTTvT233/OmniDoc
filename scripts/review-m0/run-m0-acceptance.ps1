@@ -167,9 +167,9 @@ function Initialize-MavenDependencies {
 
 function Read-SurefireSuites {
     $suites = [ordered]@{}
-    $reports = if (Test-Path -LiteralPath $surefireRoot -PathType Container) {
-        @(Get-ChildItem -LiteralPath $surefireRoot -File -Filter 'TEST-*.xml' | Sort-Object Name)
-    } else { @() }
+    $reports = @(if (Test-Path -LiteralPath $surefireRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $surefireRoot -File -Filter 'TEST-*.xml' | Sort-Object Name
+    })
     if ($reports.Count -eq 0) { throw 'Exact Review M0 test selection produced no Surefire XML' }
 
     foreach ($file in $reports) {
@@ -217,7 +217,7 @@ function Invoke-ExactMavenTests {
     Assert-ExactTestClassesExist -Classes $Classes
     Remove-StaleSurefireXml
     $simpleNames = @($Classes | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) })
-    if (($simpleNames | Sort-Object -Unique).Count -ne $simpleNames.Count) {
+    if (@($simpleNames | Sort-Object -Unique).Count -ne $simpleNames.Count) {
         throw "$Name contains duplicate simple class names"
     }
     $arguments = @('-s', $settings, '-pl', 'ai-service', "-Dtest=$($simpleNames -join ',')")

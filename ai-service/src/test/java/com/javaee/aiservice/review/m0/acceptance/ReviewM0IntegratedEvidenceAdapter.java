@@ -167,19 +167,17 @@ class ReviewM0IntegratedEvidenceAdapter {
         ReviewM0ApiIdempotency firstProcess = new ReviewM0ApiIdempotency(
                 new JdbcReviewM0IdempotencyStore(fixture.jdbc(), fixture.transactions()), fixture.transactions());
         ReviewM0ApiIdempotency.Result<String> first = firstProcess.execute(
-                scope, digest, 201, "CASE",
-                () -> new ReviewM0ApiIdempotency.Resource<>("case-acceptance", mutableResource.get()),
-                ignored -> mutableResource.get());
+                scope, digest, 201, "CASE", String.class,
+                () -> new ReviewM0ApiIdempotency.Resource<>("case-acceptance", mutableResource.get()));
 
         mutableResource.set("response-version-2");
         ReviewM0ApiIdempotency restartedProcess = new ReviewM0ApiIdempotency(
                 new JdbcReviewM0IdempotencyStore(fixture.jdbc(), fixture.transactions()), fixture.transactions());
         ReviewM0ApiIdempotency.Result<String> replay = restartedProcess.execute(
-                scope, digest, 201, "CASE",
+                scope, digest, 201, "CASE", String.class,
                 () -> {
                     throw new AssertionError("Idempotent replay created a second resource");
-                },
-                ignored -> mutableResource.get());
+                });
 
         assertThat(first.value()).isEqualTo("response-version-1");
         assertThat(replay.replayed()).isTrue();
@@ -196,7 +194,9 @@ class ReviewM0IntegratedEvidenceAdapter {
                 test("com.javaee.aiservice.review.m0.job.JdbcReviewM0JobStoreTest",
                         "expiredLeaseIsRecoverableAndOldWorkerCannotAdvance"),
                 test("com.javaee.aiservice.review.m0.job.JdbcReviewM0JobStoreTest",
-                        "checkpointReplayIsIdempotentAndDifferentPayloadIsRejected"));
+                        "checkpointReplayIsIdempotentAndDifferentPayloadIsRejected"),
+                test("com.javaee.aiservice.review.m0.job.ReviewM0CancellationRecoveryTest",
+                        "persistedRunningCancellationConvergesAfterRestartWithoutCallingHandlerOrPublishing"));
         assertCancellationConvergesAfterRestart(false);
         assertCancellationConvergesAfterRestart(true);
         pass("M0-P0-009", delegated + 4);
@@ -302,7 +302,7 @@ class ReviewM0IntegratedEvidenceAdapter {
         JSON.writerWithDefaultPrettyPrinter().writeValue(output.toFile(), evidence);
     }
 
-    private static void assertCancellationConvergesAfterRestart(boolean running) {
+    private static void assertCancellationConvergesAfterRestart(boolean running) throws InterruptedException {
         ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
         String suffix = running ? "running" : "queued";
         String caseId = "case-cancel-" + suffix;
@@ -321,15 +321,37 @@ class ReviewM0IntegratedEvidenceAdapter {
         }
         store.requestCancelOwned(owner, caseId, jobId, now.plusSeconds(1));
 
-        ReviewM0JobDispatcher restarted = new ReviewM0JobDispatcher(
+        try (ReviewM0JobDispatcher restarted = new ReviewM0JobDispatcher(
                 new JdbcReviewM0JobStore(fixture.jdbc(), fixture.transactions()),
-                new ReviewM0JobHandlerRegistry(List.of()));
-        restarted.runNext("worker-after-restart", now.plusSeconds(10), Duration.ofSeconds(5), 1);
+                new ReviewM0JobHandlerRegistry(List.of()))) {
+            restarted.start();
+            awaitJobStatus(store, owner, caseId, jobId, ReviewJobStatus.CANCELLED);
+        }
 
         ReviewJob converged = store.findOwned(owner, caseId, jobId).orElseThrow();
         assertThat(converged.status()).as("CANCEL_REQUESTED must converge after a worker restart")
                 .isEqualTo(ReviewJobStatus.CANCELLED);
         assertThat(converged.result()).isNull();
+    }
+
+    private static void awaitJobStatus(
+            JdbcReviewM0JobStore store,
+            String owner,
+            String caseId,
+            String jobId,
+            ReviewJobStatus expected
+    ) throws InterruptedException {
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        ReviewJob current;
+        do {
+            current = store.findOwned(owner, caseId, jobId).orElseThrow();
+            if (current.status() == expected) {
+                return;
+            }
+            Thread.sleep(5);
+        } while (System.nanoTime() < deadline);
+        throw new AssertionError(
+                "Job did not reach expected status after dispatcher restart; actual=" + current.status());
     }
 
     private static int runProductionTests(ProductionTest... tests) throws Exception {
