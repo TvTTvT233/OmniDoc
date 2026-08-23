@@ -102,13 +102,13 @@ public final class ReviewM0ApiService {
         if (request.processingMode() == null) invalid("processingMode is required");
         Map<String, Object> body = map("title", request.title(), "processingMode", request.processingMode());
         IdempotencyScope scope = scope(owner, "POST", "/api/review-m0/cases", key);
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CASE", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CASE", CaseResponse.class, () -> {
             Instant now = clock.instant();
             ReviewCase created = cases.create(new ReviewCase(
                     ids.next("case_"), owner, request.title(), request.processingMode(),
                     0, 0, 0, 0, 0, 0, null, null, now, now));
             return resource(created.caseId(), mapper.reviewCase(created));
-        }, id -> mapper.reviewCase(requireCase(owner, id)));
+        });
     }
 
     public CaseResponse getCase(String owner, String caseId) {
@@ -123,7 +123,8 @@ public final class ReviewM0ApiService {
         if (request.role() == null) invalid("role is required");
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/official-bases"), key);
         Map<String, Object> body = map("fileId", request.fileId(), "role", request.role());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "OFFICIAL_BASIS", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "OFFICIAL_BASIS",
+                OfficialBasisResponse.class, () -> {
             ReviewCase reviewCase = requireCase(owner, caseId);
             FileArtifactSnapshot file = fileAccess.getOwnedFile(owner, request.fileId());
             if (!file.available()) {
@@ -140,7 +141,7 @@ public final class ReviewM0ApiService {
                             file.declaredContentType(), file.sizeBytes(), file.contentDigest(), file.storageVersion()));
             ReviewCase after = requireCase(owner, caseId);
             return resource(created.basisId(), mapper.basis(created, after.basisRevision(), basisDiagnostics(owner, caseId, created.basisId())));
-        }, id -> basisResponse(owner, caseId, id));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<OfficialBasisResponse> detachBasis(
@@ -149,12 +150,12 @@ public final class ReviewM0ApiService {
         long expected = expectedVersion(request == null ? null : request.expectedVersion());
         IdempotencyScope scope = scope(owner, "DELETE", path(caseId, "/official-bases/" + basisId), key);
         return idempotency.execute(scope, CanonicalJson.sha256(map("expectedVersion", expected)),
-                200, "OFFICIAL_BASIS", () -> {
+                200, "OFFICIAL_BASIS", OfficialBasisResponse.class, () -> {
                     ReviewCase reviewCase = requireCase(owner, caseId);
                     OfficialBasis value = basisService.detachOwned(
                             owner, caseId, basisId, reviewCase.version(), expected);
                     return resource(value.basisId(), basisResponse(owner, caseId, value.basisId()));
-                }, id -> basisResponse(owner, caseId, id));
+                });
     }
 
     public OfficialBasisListResponse listBases(String owner, String caseId) {
@@ -174,12 +175,13 @@ public final class ReviewM0ApiService {
         if (request.role() == null) invalid("role is required");
         IdempotencyScope scope = scope(owner, "PATCH", path(caseId, "/official-bases/" + basisId), key);
         Map<String, Object> body = map("expectedVersion", expected, "role", request.role());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "OFFICIAL_BASIS", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "OFFICIAL_BASIS",
+                OfficialBasisResponse.class, () -> {
             ReviewCase reviewCase = requireCase(owner, caseId);
             OfficialBasis value = basisService.reclassifyOwned(
                     owner, caseId, basisId, reviewCase.version(), expected, request.role());
             return resource(value.basisId(), basisResponse(owner, caseId, value.basisId()));
-        }, id -> basisResponse(owner, caseId, id));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<RemotePreviewResponse> createPreview(
@@ -189,13 +191,14 @@ public final class ReviewM0ApiService {
         if (request.operation() == null || request.basisRevision() == null) invalid("Preview request is incomplete");
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/remote-previews"), key);
         Map<String, Object> body = map("operation", request.operation(), "basisRevision", request.basisRevision());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "REMOTE_PREVIEW", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "REMOTE_PREVIEW",
+                RemotePreviewResponse.class, () -> {
             List<RemotePreviewSegment> redacted = previewAssembler.assembleOwned(
                     owner, caseId, request.basisRevision());
             RemotePreviewView value = previewService.createOwned(
                     owner, caseId, request.operation(), request.basisRevision(), redacted);
             return resource(value.preview().previewId(), mapper.preview(value));
-        }, id -> mapper.preview(previewService.requireOwned(owner, caseId, id)));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<RemotePreviewResponse> editPreview(
@@ -207,7 +210,8 @@ public final class ReviewM0ApiService {
         IdempotencyScope scope = scope(owner, "PATCH", path(caseId, "/remote-previews/" + previewId), key);
         Map<String, Object> body = map("expectedVersion", expected, "segments", request.segments().stream()
                 .map(item -> map("segmentId", item.segmentId(), "included", item.included(), "redactedText", item.redactedText())).toList());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "REMOTE_PREVIEW", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "REMOTE_PREVIEW",
+                RemotePreviewResponse.class, () -> {
             RemotePreviewView current = previewService.requireOwned(owner, caseId, previewId);
             Map<String, RemotePreviewSegment> byId = new HashMap<>();
             current.segments().forEach(segment -> byId.put(segment.segmentId(), segment));
@@ -224,7 +228,7 @@ public final class ReviewM0ApiService {
             }).toList();
             RemotePreviewView updated = previewService.editOwned(owner, caseId, previewId, expected, edits);
             return resource(updated.preview().previewId(), mapper.preview(updated));
-        }, id -> mapper.preview(previewService.requireOwned(owner, caseId, id)));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<RemoteConsentResponse> confirmPreview(
@@ -236,12 +240,12 @@ public final class ReviewM0ApiService {
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/remote-previews/" + previewId + "/confirm"), key);
         Map<String, Object> body = map("expectedVersion", expected,
                 "acknowledgedPayloadDigest", request.acknowledgedPayloadDigest());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "REMOTE_CONSENT", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "REMOTE_CONSENT",
+                RemoteConsentResponse.class, () -> {
             RemoteConsent value = previewService.confirmOwned(owner, caseId, previewId, expected,
                     request.acknowledgedPayloadDigest());
             return resource(value.consentId(), mapper.consent(value));
-        }, id -> mapper.consent(privacyStore.findConsentOwned(owner, caseId, id)
-                .orElseThrow(ReviewM0ApiService::resourceNotFound).consent()));
+        });
     }
 
     public JobSubmissionResponse submitExtraction(
@@ -249,12 +253,6 @@ public final class ReviewM0ApiService {
     ) {
         require(request, "request");
         if (request.basisRevision() == null || request.processingMode() == null) invalid("Extraction request is incomplete");
-        ReviewCase reviewCase = requireCase(owner, caseId);
-        if (reviewCase.basisRevision() != request.basisRevision()) {
-            throw new ReviewM0Exception(ReviewM0ErrorCode.REVIEW_M0_BASIS_REVISION_STALE,
-                    "Checklist extraction basis revision is stale");
-        }
-        if (reviewCase.processingMode() != request.processingMode()) invalid("processingMode does not match the case");
         ChecklistExtractionRequest value = new ChecklistExtractionRequest(
                 request.basisRevision(), request.processingMode(), request.consentId());
         String canonicalPath = path(caseId, "/checklist-extractions");
@@ -262,14 +260,30 @@ public final class ReviewM0ApiService {
         String clientDigest = CanonicalJson.sha256(map(
                 "basisRevision", request.basisRevision(), "processingMode", request.processingMode(),
                 "consentId", request.consentId()));
-        Instant now = clock.instant();
-        ReviewJob queued = new ReviewJob(
-                ReviewM0Ids.next("job-"), caseId, owner, ReviewJobType.CHECKLIST_EXTRACTION,
-                ReviewJobStatus.QUEUED, value.canonicalJson(), CanonicalJson.sha256(JSON_VALUE(value.canonicalJson())),
-                null, key, 0, Math.max(1, basisService.listOwned(owner, caseId).size()), 0,
-                null, null, null, null, null, 0, now, null, null, null);
-        ReviewM0JobSubmission result = jobSubmissionService.submit(scope, clientDigest, queued);
-        return new JobSubmissionResponse(mapper.job(result.job()), result.responseStatus(), result.replayed());
+        ReviewM0ApiIdempotency.Result<JobResponse> response = idempotency.executeDelegatedCompletion(
+                scope, clientDigest, "JOB", JobResponse.class, () -> {
+                    ReviewCase reviewCase = requireCase(owner, caseId);
+                    if (reviewCase.basisRevision() != request.basisRevision()) {
+                        throw new ReviewM0Exception(
+                                ReviewM0ErrorCode.REVIEW_M0_BASIS_REVISION_STALE,
+                                "Checklist extraction basis revision is stale");
+                    }
+                    if (reviewCase.processingMode() != request.processingMode()) {
+                        invalid("processingMode does not match the case");
+                    }
+                    Instant now = clock.instant();
+                    ReviewJob queued = new ReviewJob(
+                            ReviewM0Ids.next("job-"), caseId, owner,
+                            ReviewJobType.CHECKLIST_EXTRACTION, ReviewJobStatus.QUEUED,
+                            value.canonicalJson(), CanonicalJson.sha256(JSON_VALUE(value.canonicalJson())),
+                            null, key, 0, Math.max(1, basisService.listOwned(owner, caseId).size()), 0,
+                            null, null, null, null, null, 0, now, null, null, null);
+                    ReviewM0JobSubmission submitted = jobSubmissionService.submit(scope, clientDigest, queued);
+                    return new ReviewM0ApiIdempotency.DelegatedResource<>(
+                            submitted.job().jobId(), mapper.job(submitted.job()),
+                            submitted.responseStatus(), submitted.replayed());
+                });
+        return new JobSubmissionResponse(response.value(), response.status(), response.replayed());
     }
 
     public ChecklistDraftResponse getDraft(String owner, String caseId) {
@@ -286,12 +300,12 @@ public final class ReviewM0ApiService {
         }
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/checklist-draft/requirements"), key);
         Map<String, Object> body = requirementBody(request.displayName(), request.enabled(), request.applicability(), request.minimumCount(), request.fileNameRule());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CHECKLIST_REVISION", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CHECKLIST_REVISION",
+                ChecklistDraftResponse.class, () -> {
             ChecklistDraftView value = checklistService.addUserRequirementOwned(
                     owner, caseId, request.displayName(), request.enabled(), request.applicability(), request.minimumCount(), rule);
             return resource(value.checklistRevisionId(), mapper.draft(value));
-        }, id -> mapper.draft(checklistStore.findRevisionByIdOwned(owner, caseId, id)
-                .orElseThrow(ReviewM0ApiService::resourceNotFound)));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<ChecklistDraftResponse> editRequirement(
@@ -306,13 +320,13 @@ public final class ReviewM0ApiService {
         IdempotencyScope scope = scope(owner, "PATCH", path(caseId, "/checklist-draft/requirements/" + requirementId), key);
         Map<String, Object> body = requirementBody(request.displayName(), request.enabled(), request.applicability(), request.minimumCount(), request.fileNameRule());
         body.put("expectedVersion", expected);
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "CHECKLIST_REVISION", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "CHECKLIST_REVISION",
+                ChecklistDraftResponse.class, () -> {
             ChecklistDraftView value = checklistService.editRequirementOwned(owner, caseId, requirementId,
                     new ChecklistItemEdit(expected, request.displayName(), request.enabled(),
                             request.applicability(), request.minimumCount(), rule));
             return resource(value.checklistRevisionId(), mapper.draft(value));
-        }, id -> mapper.draft(checklistStore.findRevisionByIdOwned(owner, caseId, id)
-                .orElseThrow(ReviewM0ApiService::resourceNotFound)));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<ChecklistSnapshotSummaryResponse> publishChecklist(
@@ -327,12 +341,13 @@ public final class ReviewM0ApiService {
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/checklist-snapshots"), key);
         Map<String, Object> body = map("expectedChecklistRevision", request.expectedChecklistRevision(),
                 "acknowledgedRequirementIds", acknowledged);
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CHECKLIST_SNAPSHOT", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "CHECKLIST_SNAPSHOT",
+                ChecklistSnapshotSummaryResponse.class, () -> {
             ReviewCase reviewCase = requireCase(owner, caseId);
             ChecklistSnapshot value = checklistService.publishOwned(owner, caseId, reviewCase.version(),
                     request.expectedChecklistRevision(), Set.copyOf(acknowledged));
             return resource(value.checklistSnapshotId(), mapper.snapshotSummary(value));
-        }, id -> mapper.snapshotSummary(requireSnapshot(owner, caseId, id)));
+        });
     }
 
     public ChecklistSnapshotResponse getChecklistSnapshot(String owner, String caseId, String snapshotId) {
@@ -346,11 +361,12 @@ public final class ReviewM0ApiService {
         requireText(request.fileId(), "fileId");
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/submission-sources"), key);
         Map<String, Object> body = map("fileId", request.fileId(), "submissionFileName", request.submissionFileName());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "SUBMISSION_SOURCE", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "SUBMISSION_SOURCE",
+                SubmissionSourceResponse.class, () -> {
             MaterialAttachmentResult value = materialService.attachOwned(
                     owner, caseId, request.fileId(), request.submissionFileName());
             return resource(value.source().sourceId(), mapper.attached(value));
-        }, id -> sourceResponse(owner, caseId, id));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<SubmissionSourceResponse> removeSource(
@@ -359,10 +375,10 @@ public final class ReviewM0ApiService {
         long expected = expectedVersion(request == null ? null : request.expectedVersion());
         IdempotencyScope scope = scope(owner, "DELETE", path(caseId, "/submission-sources/" + sourceId), key);
         return idempotency.execute(scope, CanonicalJson.sha256(map("expectedVersion", expected)),
-                200, "SUBMISSION_SOURCE", () -> {
+                200, "SUBMISSION_SOURCE", SubmissionSourceResponse.class, () -> {
                     SubmissionSource value = materialService.removeSourceOwned(owner, caseId, sourceId, expected);
                     return resource(value.sourceId(), sourceResponse(owner, caseId, value.sourceId()));
-                }, id -> sourceResponse(owner, caseId, id));
+                });
     }
 
     public SubmissionSourceListResponse listSources(String owner, String caseId) {
@@ -384,12 +400,12 @@ public final class ReviewM0ApiService {
         long expected = expectedVersion(request.expectedVersion());
         IdempotencyScope scope = scope(owner, "PATCH", path(caseId, "/materials/" + materialId), key);
         Map<String, Object> body = map("expectedVersion", expected, "submissionFileName", request.submissionFileName());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "MATERIAL", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "MATERIAL",
+                RenamedMaterialResponse.class, () -> {
             SubmissionMaterial value = materialService.renameOwned(
                     owner, caseId, materialId, expected, request.submissionFileName());
             return resource(value.materialId(), mapper.renamed(value, requireCase(owner, caseId).nameRevision()));
-        }, id -> mapper.renamed(materialRepository.findMaterialOwned(owner, caseId, id)
-                .orElseThrow(ReviewM0ApiService::resourceNotFound), requireCase(owner, caseId).nameRevision()));
+        });
     }
 
     public ReviewM0ApiIdempotency.Result<AssignmentListResponse> replaceAssignments(
@@ -407,7 +423,8 @@ public final class ReviewM0ApiService {
                 "assignments", stable.stream().map(item -> map("materialId", item.materialId(),
                         "requirementId", item.requirementId(), "status", item.status())).toList());
         IdempotencyScope scope = scope(owner, "PUT", path(caseId, "/assignments"), key);
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "ASSIGNMENTS", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 200, "ASSIGNMENTS",
+                AssignmentListResponse.class, () -> {
             List<AssignmentChange> changes = stable.stream().map(item ->
                     new AssignmentChange(item.materialId(), item.requirementId(), item.status())).toList();
             List<MaterialAssignment> values = materialService.replaceAssignmentsOwned(
@@ -416,7 +433,7 @@ public final class ReviewM0ApiService {
             AssignmentListResponse response = new AssignmentListResponse(after.assignmentRevision(),
                     values.stream().map(mapper::assignment).toList());
             return resource(caseId, response);
-        }, ignored -> getAssignments(owner, caseId));
+        });
     }
 
     public AssignmentListResponse getAssignments(String owner, String caseId) {
@@ -436,12 +453,13 @@ public final class ReviewM0ApiService {
         Map<String, Object> body = map("checklistSnapshotId", request.checklistSnapshotId(),
                 "materialSetRevision", request.materialSetRevision(),
                 "acknowledgedUploadComplete", request.acknowledgedUploadComplete());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "UPLOAD_CONFIRMATION", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "UPLOAD_CONFIRMATION",
+                UploadConfirmationResponse.class, () -> {
             UploadConfirmation value = materialService.confirmUploadOwned(
                     owner, caseId, request.checklistSnapshotId(), request.materialSetRevision(),
                     request.acknowledgedUploadComplete());
             return resource(value.uploadConfirmationId(), mapper.upload(value));
-        }, id -> mapper.upload(requireUpload(owner, caseId, id)));
+        });
     }
 
     public DownloadPayload download(String owner, String caseId, String materialId) {
@@ -456,9 +474,16 @@ public final class ReviewM0ApiService {
         FormalReviewRequest value = new FormalReviewRequest(
                 request.mode(), request.checklistSnapshotId(), request.uploadConfirmationId(),
                 request.baseReportId(), request.changedMaterialIds());
-        ReviewM0JobSubmission result = reviewSubmissionService.submitOwned(
-                scope(owner, "POST", path(caseId, "/reviews"), key), caseId, value);
-        return new JobSubmissionResponse(mapper.job(result.job()), result.responseStatus(), result.replayed());
+        IdempotencyScope scope = scope(owner, "POST", path(caseId, "/reviews"), key);
+        String clientDigest = formalReviewClientDigest(scope, caseId, value);
+        ReviewM0ApiIdempotency.Result<JobResponse> response = idempotency.executeDelegatedCompletion(
+                scope, clientDigest, "JOB", JobResponse.class, () -> {
+                    ReviewM0JobSubmission submitted = reviewSubmissionService.submitOwned(scope, caseId, value);
+                    return new ReviewM0ApiIdempotency.DelegatedResource<>(
+                            submitted.job().jobId(), mapper.job(submitted.job()),
+                            submitted.responseStatus(), submitted.replayed());
+                });
+        return new JobSubmissionResponse(response.value(), response.status(), response.replayed());
     }
 
     public ReportResponse currentReport(String owner, String caseId) {
@@ -483,11 +508,11 @@ public final class ReviewM0ApiService {
         IdempotencyScope scope = scope(owner, "POST", path(caseId,
                 "/reports/" + reportId + "/findings/" + findingId + "/decisions"), key);
         Map<String, Object> body = map("decision", request.decision(), "reason", request.reason());
-        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "FINDING_DECISION", () -> {
+        return idempotency.execute(scope, CanonicalJson.sha256(body), 201, "FINDING_DECISION",
+                FindingDecisionResponse.class, () -> {
             FindingDecision value = decisionService.ignoreOwned(owner, caseId, reportId, findingId, request.reason());
             return resource(value.decisionId(), decisionResponse(owner, caseId, value));
-        }, ignored -> decisionResponse(owner, caseId,
-                decisionService.ignoreOwned(owner, caseId, reportId, findingId, request.reason())));
+        });
     }
 
     public JobResponse getJob(String owner, String caseId, String jobId) {
@@ -500,11 +525,12 @@ public final class ReviewM0ApiService {
     ) {
         requireCase(owner, caseId);
         IdempotencyScope scope = scope(owner, "POST", path(caseId, "/jobs/" + jobId + "/cancel"), key);
-        return idempotency.executeDynamic(scope, CanonicalJson.sha256(Map.of()), "JOB_CANCEL", () -> {
+        return idempotency.executeDynamic(scope, CanonicalJson.sha256(Map.of()), "JOB_CANCEL",
+                JobResponse.class, () -> {
             ReviewJob value = jobs.requestCancelOwned(owner, caseId, jobId, clock.instant());
             return new ReviewM0ApiIdempotency.DynamicResource<>(
                     value.jobId(), mapper.job(value), value.status().terminal() ? 200 : 202);
-        }, id -> getJob(owner, caseId, id));
+        });
     }
 
     private OfficialBasisResponse basisResponse(String owner, String caseId, String basisId) {
@@ -647,6 +673,26 @@ public final class ReviewM0ApiService {
 
     private static <T> ReviewM0ApiIdempotency.Resource<T> resource(String id, T value) {
         return new ReviewM0ApiIdempotency.Resource<>(id, value);
+    }
+
+    private static String formalReviewClientDigest(
+            IdempotencyScope scope,
+            String caseId,
+            FormalReviewRequest request
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("baseReportId", request.baseReportId());
+        body.put("changedMaterialIds", request.changedMaterialIds());
+        body.put("checklistSnapshotId", request.checklistSnapshotId());
+        body.put("mode", request.mode());
+        body.put("uploadConfirmationId", request.uploadConfirmationId());
+        Map<String, Object> canonicalRequest = new LinkedHashMap<>();
+        canonicalRequest.put("caseId", caseId);
+        canonicalRequest.put("canonicalPath", scope.canonicalPath());
+        canonicalRequest.put("httpMethod", scope.httpMethod());
+        canonicalRequest.put("ownerId", scope.ownerId());
+        canonicalRequest.put("payload", body);
+        return CanonicalJson.sha256(canonicalRequest);
     }
 
     public record JobSubmissionResponse(JobResponse value, int status, boolean replayed) {}

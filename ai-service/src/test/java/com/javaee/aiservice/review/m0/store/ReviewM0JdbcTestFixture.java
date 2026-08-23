@@ -1,6 +1,7 @@
 package com.javaee.aiservice.review.m0.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.javaee.aiservice.review.m0.idempotency.ReviewM0IdempotencySnapshotSchemaInitializer;
 import org.h2.jdbcx.JdbcDataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -24,6 +25,7 @@ public final class ReviewM0JdbcTestFixture {
         properties.setEnabled(true);
         properties.getSchema().getAutoMigration().setEnabled(true);
         new ReviewM0SchemaInitializer(dataSource, properties).afterPropertiesSet();
+        new ReviewM0IdempotencySnapshotSchemaInitializer(dataSource, properties).afterPropertiesSet();
     }
 
     public DataSource dataSource() {

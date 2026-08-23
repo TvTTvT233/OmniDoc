@@ -117,6 +117,10 @@ class ReviewM0ApiContractTest {
         MvcResult first = mvc.perform(post("/api/review-m0/cases")
                         .header("Idempotency-Key", "case-key").contentType("application/json").content(body))
                 .andExpect(status().isCreated()).andReturn();
+        context.getBean(JdbcTemplate.class).update("""
+                UPDATE review_m0_case SET title='mutated-after-first-response', version=version+1,
+                    updated_at=DATEADD('SECOND', 1, updated_at)
+                """);
         MvcResult replay = mvc.perform(post("/api/review-m0/cases")
                         .header("Idempotency-Key", "case-key").contentType("application/json").content(body))
                 .andExpect(status().isCreated()).andReturn();
@@ -126,8 +130,10 @@ class ReviewM0ApiContractTest {
                 "materialSetRevision", "assignmentRevision", "nameRevision", "version",
                 "currentChecklistSnapshotId", "currentReportId", "createdAt", "updatedAt");
         assertThat(response.has("userId")).isFalse();
-        assertThat(json.readTree(replay.getResponse().getContentAsString()).path("caseId").textValue())
-                .isEqualTo(response.path("caseId").textValue());
+        assertThat(json.readTree(replay.getResponse().getContentAsString())).isEqualTo(response);
+        mvc.perform(get("/api/review-m0/cases/{caseId}", response.path("caseId").textValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("mutated-after-first-response"));
         assertThat(context.getBean(JdbcTemplate.class).queryForObject(
                 "SELECT COUNT(*) FROM review_m0_case", Integer.class)).isEqualTo(1);
     }
@@ -259,11 +265,16 @@ class ReviewM0ApiContractTest {
                         .header("Idempotency-Key", "extract-cancel").contentType("application/json").content(extraction))
                 .andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("QUEUED")).andReturn();
         String jobId = json.readTree(submitted.getResponse().getContentAsString()).path("jobId").textValue();
-        mvc.perform(post("/api/review-m0/cases/{caseId}/checklist-extractions", caseId)
+        context.getBean(JdbcTemplate.class).update(
+                "UPDATE review_m0_job SET progress_total=9, version=version+1 WHERE job_id=?", jobId);
+        MvcResult replay = mvc.perform(post("/api/review-m0/cases/{caseId}/checklist-extractions", caseId)
                         .header("Idempotency-Key", "extract-cancel").contentType("application/json").content(extraction))
-                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(jobId));
+                .andExpect(status().isAccepted()).andExpect(jsonPath("$.jobId").value(jobId)).andReturn();
+        assertThat(json.readTree(replay.getResponse().getContentAsString()))
+                .isEqualTo(json.readTree(submitted.getResponse().getContentAsString()));
         mvc.perform(get("/api/review-m0/cases/{caseId}/jobs/{jobId}", caseId, jobId))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.type").value("CHECKLIST_EXTRACTION"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.type").value("CHECKLIST_EXTRACTION"))
+                .andExpect(jsonPath("$.progress.totalUnits").value(9));
         mvc.perform(post("/api/review-m0/cases/{caseId}/jobs/{jobId}/cancel", caseId, jobId)
                         .header("Idempotency-Key", "cancel"))
                 .andExpect(status().isAccepted()).andExpect(jsonPath("$.status").value("CANCEL_REQUESTED"));

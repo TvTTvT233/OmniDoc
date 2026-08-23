@@ -10,6 +10,7 @@ public record IdempotencyRecord(
         Integer responseStatus,
         String responseType,
         String responseId,
+        IdempotencyResponseSnapshot responseSnapshot,
         IdempotencyState state,
         Instant createdAt,
         Instant updatedAt
