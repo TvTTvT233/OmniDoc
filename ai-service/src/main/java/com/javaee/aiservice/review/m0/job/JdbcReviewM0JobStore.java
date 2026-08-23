@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -265,6 +266,39 @@ public class JdbcReviewM0JobStore implements ReviewM0JobStore {
                 throw stateConflict("Job changed concurrently while requesting cancellation");
             }
             return requireJob(jobId, false);
+        }));
+    }
+
+    @Override
+    public List<ReviewJob> recoverCancellations(Instant now, int maximumJobs) {
+        Objects.requireNonNull(now, "now");
+        if (maximumJobs < 1 || maximumJobs > 256) {
+            throw stateConflict("Cancellation recovery batch size must be between 1 and 256");
+        }
+        return Objects.requireNonNull(transactions.execute(status -> {
+            List<ReviewJob> candidates = jdbcTemplate.query(
+                    "SELECT " + JOB_COLUMNS + " FROM review_m0_job "
+                            + "WHERE status = 'CANCEL_REQUESTED' "
+                            + "AND (lease_owner IS NULL OR lease_expires_at <= ?) "
+                            + "ORDER BY cancel_requested_at, created_at, job_id LIMIT ?",
+                    jobMapper, timestamp(now), maximumJobs);
+            List<ReviewJob> recovered = new ArrayList<>(candidates.size());
+            for (ReviewJob candidate : candidates) {
+                ReviewM0StateMachines.requireJobTransition(
+                        candidate.status(), ReviewJobStatus.CANCELLED);
+                int updated = jdbcTemplate.update("""
+                                UPDATE review_m0_job
+                                SET status = 'CANCELLED', lease_owner = NULL, lease_expires_at = NULL,
+                                    finished_at = ?, version = version + 1
+                                WHERE job_id = ? AND version = ? AND status = 'CANCEL_REQUESTED'
+                                  AND (lease_owner IS NULL OR lease_expires_at <= ?)
+                                """,
+                        timestamp(now), candidate.jobId(), candidate.version(), timestamp(now));
+                if (updated == 1) {
+                    recovered.add(requireJob(candidate.jobId(), false));
+                }
+            }
+            return List.copyOf(recovered);
         }));
     }
 

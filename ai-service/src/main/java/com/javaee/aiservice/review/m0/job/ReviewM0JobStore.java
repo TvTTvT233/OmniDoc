@@ -38,6 +38,8 @@ public interface ReviewM0JobStore {
 
     ReviewJob requestCancelOwned(String ownerId, String caseId, String jobId, Instant now);
 
+    List<ReviewJob> recoverCancellations(Instant now, int maximumJobs);
+
     ReviewJob finalizeCancellation(String jobId, String workerId, Instant now);
 
     ReviewJob fail(String jobId, String workerId, ReviewJobError error, Instant now);
