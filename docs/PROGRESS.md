@@ -2,10 +2,10 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念边界已冻结，M01-M07 已集成且最终确定性门禁 `AUTO_VERIFIED`；真实浏览器与外部依赖处于 `MANUAL_PENDING`
+- **更新日期**：2026-08-23
+- **当前阶段**：Review M0 R3 独立最终自动门禁为 `AUTO_VERIFIED / MANUAL_PENDING`；Memory V1 最终确定性门禁保持 `AUTO_VERIFIED / MANUAL_PENDING`
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：由用户按 Memory V1 人工清单验证真实浏览器/JWT、MySQL、Redis 和模型；奖学金审查 Agent 仍保持独立规划，不纳入本轮 Memory 实现
+- **下一阶段**：由用户分别按 Review M0 与 Memory V1 人工清单验证真实浏览器/JWT、MySQL、MinIO、Redis、模型及外部链路；自动门通过不等同于 `HUMAN_ACCEPTED`
 
 ## 已确认
 
@@ -39,6 +39,7 @@
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
 - Memory V1 已完成最终确定性集成验收，但真实 MySQL/Redis/模型/浏览器联调和异步 job 提交后刷新恢复轮询仍未完成，最终状态不得写为 `HUMAN_ACCEPTED`。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
+- Review M0 的真实 MySQL 8 冷启动/升级、真实 MinIO、双服务进程、真实 JWT、document/OCR 网络链、远程模型、浏览器页面与真实 Qdrant 均未运行；P-08 保持 `LOCAL_ONLY`，P-09 保持 `NOT_RUN / PENDING`。
 
 ## 后续运行基线验证
 
@@ -432,6 +433,15 @@
 - 完整服务回归发现并修复 Summary JDBC Store 的 Spring 代理启动缺陷；随后 `AllModelsTest` 应用上下文 1/1 通过，完整本地 `ai-service` 291 项无失败/错误，3 项仅因真实 Qdrant 未启用而跳过；
 - 报告明确记录真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 未执行。详细交接见 `docs/memory/handoffs/M07-final.md`，人工清单见 `docs/memory/04-HUMAN_ACCEPTANCE.md`。
 
+## Review M0 R3 最终自动验收
+
+- 唯一候选 `a9c51c46687dd7800ee588a606eb31c6586800e6` 已在隔离 worktree 从零完成 R3 独立终验；候选 parent/tree、预期一父链、四项 stable patch-id 等价和 MCP/Qdrant/Memory 里程碑祖先关系均已核对。
+- 默认资产门为 `ASSET_VERIFIED`，26/26；Integrated 为 `AUTO_VERIFIED / MANUAL_PENDING`，41/41（资产 26 + 生产目标 15），Failures 0、Errors 0、Skipped 0、`readinessMissing=[]`，15 个冻结 P0 counter 全为 0；单独 adapter 15/15。
+- R1-A/R1-B/R1-C、M0-02..06、FIX1、Wave 2/3/recheck、file owner-aware、document mock 回归与双服务 compile 均通过；M0-01 精确冻结选择器为 100 discovered / 87 passed / 13 expected skipped，13 项均逐项记录为真实 OCR、真实 MySQL 或冻结 pending 边界。
+- Memory V1 187/187、MCP Search 80/80、QV04 asset 112/112 通过；QV04 只验证本地确定性资产，不代表真实 Qdrant。
+- 状态保持 `AUTO_VERIFIED / MANUAL_PENDING`。真实 MySQL 8、MinIO、双服务进程、JWT、document/OCR 网络链、远程模型、浏览器/页面、真实 Qdrant 和远程 Embedding 均为 `NOT_RUN`；P-08 为 `LOCAL_ONLY`，P-09 为 `NOT_RUN / PENDING`。
+- 未合并 `main`、未部署、未进行人工验收；详细命令、计数、expected skip 和外部边界见 `docs/review-m0/handoffs/M0-R3-FINAL-GATE.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -453,6 +463,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-23 | Review M0 R3 最终自动验收 | 独立核对唯一候选拓扑/patch 等价与全部自动门；默认 26/26、Integrated 41/41、adapter 15/15，Review/旧能力回归无失败错误；状态 `AUTO_VERIFIED / MANUAL_PENDING`，真实环境与人工验收保持 `NOT_RUN` |
 | 2026-08-11 | Memory M07 最终自动验收 | 独立门禁与前端验收合入主分支；统一入口 187/187、失败/错误/跳过均为 0，异步轮询 2/2、Web 构建通过，状态 `AUTO_VERIFIED / MANUAL_PENDING` |
 | 2026-08-11 | Memory M06-C 前端会话体验 | Global/Editor 接管结构化会话历史、新建、分页、归档/恢复/删除和 `clientRequestId`，移除临时/默认 ID 与伪回复；前端契约 25/25、翻转回归 6/6、独立验收 0/11→11/11、构建通过，真实浏览器与服务联调待验收 |
 | 2026-08-11 | Memory M05 Structured Summary | 实现 V002 Summary 存储、连续增量滚动摘要、规范 digest、严格来源/状态校验、CAS、独立超时和失败保留；相关组合回归 79/79，真实模型与最终验收仍待执行 |
