@@ -4,6 +4,7 @@ import com.javaee.aiservice.review.m0.model.IdempotencyState;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -18,11 +19,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.locks.LockSupport;
 
 @Repository
 public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
+    private static final int MAX_CLAIM_ATTEMPTS = 8;
     private static final String COLUMNS = """
-            idem.owner_id, idem.http_method, idem.canonical_path, idem.idempotency_key,
+            idem.scope_digest, idem.owner_id, idem.http_method, idem.canonical_path, idem.idempotency_key,
             idem.request_digest, idem.response_status, idem.response_type, idem.response_id,
             idem.state, idem.created_at, idem.updated_at,
             snapshot.scope_digest AS snapshot_scope_digest,
@@ -51,29 +54,41 @@ public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
     @Override
     public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
         requireDigest(requestDigest);
-        return Objects.requireNonNull(transactions.execute(status -> {
-            Instant now = Instant.now();
+        for (int attempt = 1; attempt <= MAX_CLAIM_ATTEMPTS; attempt++) {
             try {
-                jdbcTemplate.update("""
-                                INSERT INTO review_m0_idempotency(
-                                    owner_id, http_method, canonical_path, idempotency_key, request_digest,
-                                    response_status, response_type, response_id, state, created_at, updated_at
-                                ) VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 'IN_PROGRESS', ?, ?)
-                                """,
-                        scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey(),
-                        requestDigest, timestamp(now), timestamp(now));
-                return new IdempotencyClaim(IdempotencyClaimStatus.STARTED,
-                        require(scope, false));
-            } catch (DuplicateKeyException duplicate) {
-                IdempotencyRecord existing = require(scope, true);
-                requireSameDigest(existing, requestDigest);
-                return new IdempotencyClaim(
-                        existing.state() == IdempotencyState.COMPLETED
-                                ? IdempotencyClaimStatus.REPLAY_COMPLETED
-                                : IdempotencyClaimStatus.REPLAY_IN_PROGRESS,
-                        existing);
+                return Objects.requireNonNull(transactions.execute(status -> {
+                    Instant now = Instant.now();
+                    try {
+                        jdbcTemplate.update("""
+                                        INSERT INTO review_m0_idempotency(
+                                            scope_digest, owner_id, http_method, canonical_path, idempotency_key, request_digest,
+                                            response_status, response_type, response_id, state, created_at, updated_at
+                                        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 'IN_PROGRESS', ?, ?)
+                                        """,
+                                IdempotencyResponseSnapshot.scopeDigest(scope),
+                                scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey(),
+                                requestDigest, timestamp(now), timestamp(now));
+                        return new IdempotencyClaim(IdempotencyClaimStatus.STARTED,
+                                require(scope, false));
+                    } catch (DuplicateKeyException duplicate) {
+                        IdempotencyRecord existing = require(scope, true);
+                        requireSameDigest(existing, requestDigest);
+                        return new IdempotencyClaim(
+                                existing.state() == IdempotencyState.COMPLETED
+                                        ? IdempotencyClaimStatus.REPLAY_COMPLETED
+                                        : IdempotencyClaimStatus.REPLAY_IN_PROGRESS,
+                                existing);
+                    }
+                }));
+            } catch (TransientDataAccessException transientLockFailure) {
+                if (attempt == MAX_CLAIM_ATTEMPTS) {
+                    throw IdempotencyResponseSnapshot.unavailable(
+                            "Idempotency claim could not acquire its database lock", transientLockFailure);
+                }
+                LockSupport.parkNanos(1_000_000L << Math.min(attempt - 1, 6));
             }
-        }));
+        }
+        throw new IllegalStateException("Unreachable idempotency claim retry state");
     }
 
     @Override
@@ -186,11 +201,12 @@ public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
                             UPDATE review_m0_idempotency
                             SET response_status = ?, response_type = ?, response_id = ?,
                                 state = 'COMPLETED', updated_at = ?
-                            WHERE owner_id = ? AND http_method = ? AND canonical_path = ?
+                            WHERE scope_digest = ? AND owner_id = ? AND http_method = ? AND canonical_path = ?
                               AND idempotency_key = ? AND request_digest = ? AND state = 'IN_PROGRESS'
                             """,
                     responseStatus, responseType, responseId, timestamp(Instant.now()),
-                    scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey(), requestDigest);
+                    IdempotencyResponseSnapshot.scopeDigest(scope), scope.ownerId(), scope.httpMethod(),
+                    scope.canonicalPath(), scope.idempotencyKey(), requestDigest);
             if (updated != 1) {
                 throw conflict("Idempotency result changed concurrently");
             }
@@ -215,21 +231,29 @@ public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
     }
 
     private List<IdempotencyRecord> query(IdempotencyScope scope, boolean forUpdate) {
-        return jdbcTemplate.query(
+        List<IdempotencyRecord> rows = jdbcTemplate.query(
                 "SELECT " + COLUMNS + " FROM review_m0_idempotency idem "
                         + "LEFT JOIN review_m0_idempotency_response_snapshot snapshot "
                         + "ON snapshot.scope_digest = ? "
-                        + "WHERE idem.owner_id = ? AND idem.http_method = ? "
-                        + "AND idem.canonical_path = ? AND idem.idempotency_key = ?"
+                        + "WHERE idem.scope_digest = ?"
                         + (forUpdate ? " FOR UPDATE" : ""),
                 mapper, IdempotencyResponseSnapshot.scopeDigest(scope),
-                scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey());
+                IdempotencyResponseSnapshot.scopeDigest(scope));
+        if (!rows.isEmpty() && !rows.get(0).scope().equals(scope)) {
+            throw IdempotencyResponseSnapshot.unavailable(
+                    "Idempotency scope digest collision failed closed", null);
+        }
+        return rows;
     }
 
     private IdempotencyRecord map(ResultSet resultSet, int rowNumber) throws SQLException {
         IdempotencyScope scope = new IdempotencyScope(
                 resultSet.getString("owner_id"), resultSet.getString("http_method"),
                 resultSet.getString("canonical_path"), resultSet.getString("idempotency_key"));
+        if (!IdempotencyResponseSnapshot.scopeDigest(scope).equals(resultSet.getString("scope_digest"))) {
+            throw IdempotencyResponseSnapshot.unavailable(
+                    "Idempotency scope digest failed integrity validation", null);
+        }
         Integer status = resultSet.getObject("response_status", Integer.class);
         IdempotencyResponseSnapshot snapshot = mapSnapshot(resultSet, scope);
         return new IdempotencyRecord(

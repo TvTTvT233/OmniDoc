@@ -8,6 +8,7 @@ import com.javaee.aiservice.review.m0.model.InputDiagnostic;
 import com.javaee.aiservice.review.m0.model.MaterialAssignment;
 import com.javaee.aiservice.review.m0.model.MaterialKind;
 import com.javaee.aiservice.review.m0.model.MaterialStatus;
+import com.javaee.aiservice.review.m0.model.ReviewM0KeyDigests;
 import com.javaee.aiservice.review.m0.model.SubmissionMaterial;
 import com.javaee.aiservice.review.m0.model.SubmissionSource;
 import com.javaee.aiservice.review.m0.model.SubmissionSourceStatus;
@@ -166,21 +167,25 @@ public class JdbcReviewM0MaterialRepository implements ReviewM0MaterialRepositor
 
     @Override
     public SubmissionMaterial insertMaterialOwned(String ownerId, SubmissionMaterial material) {
+        String zipEntryScopeDigest = material.kind() == MaterialKind.ZIP_ENTRY
+                ? ReviewM0KeyDigests.zipEntryScope(material.sourceId(), material.normalizedEntryPath())
+                : null;
+        verifyZipEntryScopeDigest(material, zipEntryScopeDigest);
         try {
             int inserted = jdbc.update("""
                             INSERT INTO review_m0_material(
-                                material_id, case_id, source_id, kind, normalized_entry_path,
+                                material_id, case_id, source_id, kind, normalized_entry_path, zip_entry_scope_digest,
                                 original_entry_name, entry_index, content_digest, formal_file_type,
                                 submission_file_name, normalized_submission_file_name, status,
                                 cannot_confirm_reason, failure_stage, material_set_revision,
                                 name_revision, version, created_at, updated_at
                             )
-                            SELECT ?, s.case_id, s.source_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                            SELECT ?, s.case_id, s.source_id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                             FROM review_m0_submission_source s
                             JOIN review_m0_case c ON c.case_id=s.case_id
                             WHERE s.source_id=? AND s.case_id=? AND c.user_id=?
                             """,
-                    material.materialId(), material.kind().name(), material.normalizedEntryPath(),
+                    material.materialId(), material.kind().name(), material.normalizedEntryPath(), zipEntryScopeDigest,
                     material.originalEntryName(), material.entryIndex(), material.contentDigest(),
                     material.formalFileType().name(), material.submissionFileName(),
                     material.normalizedSubmissionFileName(), material.status().name(),
@@ -193,9 +198,28 @@ public class JdbcReviewM0MaterialRepository implements ReviewM0MaterialRepositor
             }
             return material;
         } catch (DataIntegrityViolationException error) {
+            verifyZipEntryScopeDigest(material, zipEntryScopeDigest);
             throw MaterialErrors.versionConflict("Submission material conflicts with an existing material");
         } catch (DataAccessException error) {
             throw MaterialErrors.storageUnavailable(error);
+        }
+    }
+
+    private void verifyZipEntryScopeDigest(SubmissionMaterial material, String scopeDigest) {
+        if (scopeDigest == null) {
+            return;
+        }
+        List<ZipEntryScope> existing = jdbc.query("""
+                        SELECT source_id, normalized_entry_path
+                        FROM review_m0_material
+                        WHERE zip_entry_scope_digest=?
+                        """, (row, rowNumber) -> new ZipEntryScope(
+                        row.getString("source_id"), row.getString("normalized_entry_path")), scopeDigest);
+        if (existing.size() > 1 || existing.stream().anyMatch(value ->
+                !value.sourceId().equals(material.sourceId())
+                        || !value.normalizedEntryPath().equals(material.normalizedEntryPath()))) {
+            throw MaterialErrors.storageUnavailable(
+                    new IllegalStateException("ZIP entry scope digest collision failed closed"));
         }
     }
 
@@ -499,5 +523,8 @@ public class JdbcReviewM0MaterialRepository implements ReviewM0MaterialRepositor
 
     private static <T extends Enum<T>> T enumValue(Class<T> type, String value) {
         return value == null ? null : Enum.valueOf(type, value);
+    }
+
+    private record ZipEntryScope(String sourceId, String normalizedEntryPath) {
     }
 }

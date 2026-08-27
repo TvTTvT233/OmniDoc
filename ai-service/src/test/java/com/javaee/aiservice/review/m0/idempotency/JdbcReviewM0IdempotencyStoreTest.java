@@ -100,4 +100,23 @@ class JdbcReviewM0IdempotencyStoreTest {
 
         assertThat(store.find(scope)).isEmpty();
     }
+
+    @Test
+    void simulatedScopeDigestCollisionFailsClosedAfterComparingEveryFullField() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        JdbcReviewM0IdempotencyStore store =
+                new JdbcReviewM0IdempotencyStore(fixture.jdbc(), fixture.transactions());
+        IdempotencyScope expected = new IdempotencyScope("owner-a", "POST", "/fixed", "key");
+        store.claim(expected, "a".repeat(64));
+        fixture.jdbc().update("""
+                        UPDATE review_m0_idempotency
+                        SET owner_id='owner-b', canonical_path='/different', idempotency_key='other'
+                        WHERE scope_digest=?
+                        """, IdempotencyResponseSnapshot.scopeDigest(expected));
+
+        assertThatThrownBy(() -> store.find(expected))
+                .isInstanceOf(ReviewM0Exception.class)
+                .extracting(error -> ((ReviewM0Exception) error).errorCode())
+                .isEqualTo(ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE);
+    }
 }

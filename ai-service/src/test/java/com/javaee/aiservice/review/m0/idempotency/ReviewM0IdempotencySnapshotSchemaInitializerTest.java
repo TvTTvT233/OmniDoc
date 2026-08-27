@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReviewM0IdempotencySnapshotSchemaInitializerTest {
     @Test
-    void additiveV3MigrationIsIdempotentAndLeavesFrozenCoreVersionsUntouched() {
+    void additiveV3MigrationIsIdempotentAndRecordsTheValidatedVersion() {
         JdbcDataSource dataSource = dataSource();
         ReviewM0PersistenceProperties properties = properties(true);
         new ReviewM0SchemaInitializer(dataSource, properties).afterPropertiesSet();
@@ -29,7 +29,7 @@ class ReviewM0IdempotencySnapshotSchemaInitializerTest {
                         + "WHERE LOWER(table_name)='review_m0_idempotency_response_snapshot'",
                 Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject(
-                "SELECT COUNT(*) FROM review_m0_schema_version", Integer.class)).isEqualTo(2);
+                "SELECT COUNT(*) FROM review_m0_schema_version", Integer.class)).isEqualTo(3);
     }
 
     @Test
@@ -37,6 +37,9 @@ class ReviewM0IdempotencySnapshotSchemaInitializerTest {
         JdbcDataSource dataSource = dataSource();
         ReviewM0PersistenceProperties core = properties(true);
         new ReviewM0SchemaInitializer(dataSource, core).afterPropertiesSet();
+        JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+        jdbc.execute("DROP TABLE review_m0_idempotency_response_snapshot");
+        jdbc.update("DELETE FROM review_m0_schema_version WHERE version=3");
 
         assertThatThrownBy(() -> new ReviewM0IdempotencySnapshotSchemaInitializer(
                 dataSource, properties(false)).afterPropertiesSet())

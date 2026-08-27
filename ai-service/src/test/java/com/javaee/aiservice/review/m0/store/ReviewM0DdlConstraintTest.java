@@ -1,5 +1,6 @@
 package com.javaee.aiservice.review.m0.store;
 
+import com.javaee.aiservice.review.m0.model.ReviewM0KeyDigests;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -117,13 +118,16 @@ class ReviewM0DdlConstraintTest {
     ) {
         fixture.jdbc().update("""
                         INSERT INTO review_m0_material(
-                            material_id, case_id, source_id, kind, normalized_entry_path, original_entry_name,
+                            material_id, case_id, source_id, kind, normalized_entry_path,
+                            zip_entry_scope_digest, original_entry_name,
                             entry_index, content_digest, formal_file_type, submission_file_name,
                             normalized_submission_file_name, status, cannot_confirm_reason, failure_stage,
                             material_set_revision, name_revision, version, created_at, updated_at
-                        ) VALUES (?, 'case-material', ?, ?, ?, ?, 0, ?, ?, ?, ?, 'AVAILABLE', NULL, NULL, 1, 0, 0, ?, ?)
+                        ) VALUES (?, 'case-material', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'AVAILABLE', NULL, NULL, 1, 0, 0, ?, ?)
                         """,
-                materialId, sourceId, kind, entryPath, entryPath, "b".repeat(64), type, name, name,
+                materialId, sourceId, kind, entryPath,
+                entryPath == null ? null : ReviewM0KeyDigests.zipEntryScope(sourceId, entryPath),
+                entryPath, "b".repeat(64), type, name, name,
                 Timestamp.from(T0), Timestamp.from(T0));
     }
 }

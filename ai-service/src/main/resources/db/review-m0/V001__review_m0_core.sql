@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS review_m0_material (
     source_id VARCHAR(64) NOT NULL,
     kind VARCHAR(32) NOT NULL,
     normalized_entry_path VARCHAR(2048) NULL,
+    zip_entry_scope_digest CHAR(64) NULL,
     original_entry_name VARCHAR(1024) NULL,
     entry_index INT NULL,
     content_digest CHAR(64) NOT NULL,
@@ -196,11 +197,11 @@ CREATE TABLE IF NOT EXISTS review_m0_material (
     CONSTRAINT fk_review_m0_material_case FOREIGN KEY (case_id) REFERENCES review_m0_case(case_id),
     CONSTRAINT fk_review_m0_material_source FOREIGN KEY (source_id) REFERENCES review_m0_submission_source(source_id),
     CONSTRAINT uk_review_m0_material_top_level UNIQUE (top_level_source_id),
-    CONSTRAINT uk_review_m0_material_zip_entry UNIQUE (source_id, normalized_entry_path),
+    CONSTRAINT uk_review_m0_material_zip_entry UNIQUE (zip_entry_scope_digest),
     CONSTRAINT ck_review_m0_material_kind CHECK (kind IN ('TOP_LEVEL_FILE', 'ZIP_ENTRY')),
     CONSTRAINT ck_review_m0_material_locator CHECK (
-        (kind = 'TOP_LEVEL_FILE' AND normalized_entry_path IS NULL)
-        OR (kind = 'ZIP_ENTRY' AND normalized_entry_path IS NOT NULL)
+        (kind = 'TOP_LEVEL_FILE' AND normalized_entry_path IS NULL AND zip_entry_scope_digest IS NULL)
+        OR (kind = 'ZIP_ENTRY' AND normalized_entry_path IS NOT NULL AND zip_entry_scope_digest IS NOT NULL)
     ),
     CONSTRAINT ck_review_m0_material_type CHECK (formal_file_type IN ('PDF', 'DOCX', 'XLSX', 'JPG', 'PNG')),
     CONSTRAINT ck_review_m0_material_status CHECK (status IN ('AVAILABLE', 'CANNOT_CONFIRM', 'REMOVED')),
@@ -322,6 +323,7 @@ CREATE TABLE IF NOT EXISTS review_m0_input_diagnostic (
 );
 
 CREATE TABLE IF NOT EXISTS review_m0_idempotency (
+    scope_digest CHAR(64) NOT NULL PRIMARY KEY,
     owner_id VARCHAR(128) NOT NULL,
     http_method VARCHAR(16) NOT NULL,
     canonical_path VARCHAR(1024) NOT NULL,
@@ -333,7 +335,6 @@ CREATE TABLE IF NOT EXISTS review_m0_idempotency (
     state VARCHAR(16) NOT NULL,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (owner_id, http_method, canonical_path, idempotency_key),
     CONSTRAINT ck_review_m0_idempotency_state CHECK (state IN ('IN_PROGRESS', 'COMPLETED')),
     CONSTRAINT ck_review_m0_idempotency_response CHECK (
         (state = 'IN_PROGRESS' AND response_status IS NULL AND response_type IS NULL AND response_id IS NULL)

@@ -1,6 +1,7 @@
 package com.javaee.aiservice.review.m0.idempotency;
 
 import com.javaee.aiservice.review.m0.model.CanonicalJson;
+import com.javaee.aiservice.review.m0.model.ReviewM0KeyDigests;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 
@@ -58,12 +59,8 @@ public record IdempotencyResponseSnapshot(
     }
 
     static String scopeDigest(IdempotencyScope scope) {
-        Map<String, Object> value = new LinkedHashMap<>();
-        value.put("canonicalPath", scope.canonicalPath());
-        value.put("httpMethod", scope.httpMethod());
-        value.put("idempotencyKey", scope.idempotencyKey());
-        value.put("ownerId", scope.ownerId());
-        return CanonicalJson.sha256(value);
+        return ReviewM0KeyDigests.idempotencyScope(
+                scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey());
     }
 
     private static String digest(
