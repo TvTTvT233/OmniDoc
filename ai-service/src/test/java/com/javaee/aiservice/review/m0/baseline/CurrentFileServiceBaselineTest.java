@@ -44,6 +44,7 @@ class CurrentFileServiceBaselineTest {
         String entity = source("entity/FileMetadata.java");
         String legacyImplementation = source("service/impl/FileServiceImpl.java");
         String ownedImplementation = source("service/impl/OwnerAwareFileServiceImpl.java");
+        String downloadStaging = source("service/impl/OwnedFileDownloadStaging.java");
         String schema = RepositorySourceEvidence.read("file-service/src/main/resources/file.sql");
 
         assertThat(entity)
@@ -64,7 +65,8 @@ class CurrentFileServiceBaselineTest {
                 .contains("metadata.setOwnerId(ownerId)")
                 .contains("metadata.setSha256(stored.sha256())")
                 .contains("metadata.setStorageVersion(stored.storageVersion())")
-                .contains("metadata.setContentSignature(signature)")
+                .contains("metadata.setContentSignature(signature)");
+        assertThat(downloadStaging)
                 .contains("MessageDigest.getInstance(\"SHA-256\")");
         assertThat(schema)
                 .contains("`original_file_name`", "`file_size`", "`md5`", "`object_key`")

@@ -11,13 +11,9 @@ import com.javaee.fileservice.service.OwnerAwareFileService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -26,15 +22,18 @@ public class OwnerAwareFileServiceImpl implements OwnerAwareFileService {
     private final FileMetadataMapper metadataMapper;
     private final OwnedFileObjectStore objectStore;
     private final FileStorageConfig storageConfig;
+    private final OwnedFileDownloadStaging downloadStaging;
 
     public OwnerAwareFileServiceImpl(
             FileMetadataMapper metadataMapper,
             OwnedFileObjectStore objectStore,
-            FileStorageConfig storageConfig
+            FileStorageConfig storageConfig,
+            OwnedFileDownloadStaging downloadStaging
     ) {
         this.metadataMapper = metadataMapper;
         this.objectStore = objectStore;
         this.storageConfig = storageConfig;
+        this.downloadStaging = downloadStaging;
     }
 
     @Override
@@ -100,7 +99,7 @@ public class OwnerAwareFileServiceImpl implements OwnerAwareFileService {
         if (input == null) {
             throw new OwnedFileUnavailableException("Owned file storage returned no stream");
         }
-        return new OwnedFileStream(snapshot(metadata), new VerifyingInputStream(
+        return new OwnedFileStream(snapshot(metadata), downloadStaging.stage(
                 input, metadata.getFileSize(), metadata.getSha256()));
     }
 
@@ -216,53 +215,4 @@ public class OwnerAwareFileServiceImpl implements OwnerAwareFileService {
         return "UNKNOWN";
     }
 
-    private static final class VerifyingInputStream extends FilterInputStream {
-        private final MessageDigest digest;
-        private final long expectedSize;
-        private final String expectedDigest;
-        private long count;
-        private boolean verified;
-
-        private VerifyingInputStream(InputStream input, long expectedSize, String expectedDigest) {
-            super(input);
-            this.expectedSize = expectedSize;
-            this.expectedDigest = expectedDigest;
-            try {
-                digest = MessageDigest.getInstance("SHA-256");
-            } catch (NoSuchAlgorithmException error) {
-                throw new IllegalStateException("SHA-256 is unavailable", error);
-            }
-        }
-
-        @Override
-        public int read() throws IOException {
-            int value = super.read();
-            if (value == -1) verify();
-            else {
-                digest.update((byte) value);
-                count++;
-            }
-            return value;
-        }
-
-        @Override
-        public int read(byte[] bytes, int offset, int length) throws IOException {
-            int read = super.read(bytes, offset, length);
-            if (read == -1) verify();
-            else if (read > 0) {
-                digest.update(bytes, offset, read);
-                count += read;
-            }
-            return read;
-        }
-
-        private void verify() throws IOException {
-            if (verified) return;
-            verified = true;
-            String actual = HexFormat.of().formatHex(digest.digest());
-            if (count != expectedSize || !actual.equals(expectedDigest)) {
-                throw new IOException("Owned file bytes failed integrity verification");
-            }
-        }
-    }
 }

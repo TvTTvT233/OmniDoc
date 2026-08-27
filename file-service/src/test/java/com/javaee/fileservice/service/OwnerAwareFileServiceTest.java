@@ -1,6 +1,7 @@
 package com.javaee.fileservice.service;
 
 import com.javaee.fileservice.config.FileStorageConfig;
+import com.javaee.fileservice.config.OwnedFileDownloadProperties;
 import com.javaee.fileservice.dto.OwnedFileMetadataDTO;
 import com.javaee.fileservice.entity.FileMetadata;
 import com.javaee.fileservice.exception.OwnedFileNotFoundException;
@@ -8,7 +9,11 @@ import com.javaee.fileservice.exception.OwnedFileUnavailableException;
 import com.javaee.fileservice.mapper.FileMetadataMapper;
 import com.javaee.fileservice.service.impl.OwnerAwareFileServiceImpl;
 import com.javaee.fileservice.service.impl.FileMetadataServiceImpl;
+import com.javaee.fileservice.service.impl.OwnedFileDownloadStaging;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -31,11 +36,31 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class OwnerAwareFileServiceTest {
-    private final FileMetadataMapper mapper = mock(FileMetadataMapper.class);
-    private final InMemoryObjectStore objects = new InMemoryObjectStore();
-    private final FileStorageConfig storage = storage();
-    private final AtomicReference<FileMetadata> inserted = new AtomicReference<>();
-    private final OwnerAwareFileService service = service();
+    @TempDir Path temporaryDirectory;
+    private FileMetadataMapper mapper;
+    private InMemoryObjectStore objects;
+    private FileStorageConfig storage;
+    private AtomicReference<FileMetadata> inserted;
+    private OwnedFileDownloadStaging staging;
+    private OwnerAwareFileService service;
+
+    @BeforeEach
+    void setUp() {
+        mapper = mock(FileMetadataMapper.class);
+        objects = new InMemoryObjectStore();
+        storage = storage();
+        inserted = new AtomicReference<>();
+        OwnedFileDownloadProperties properties = new OwnedFileDownloadProperties();
+        properties.setStagingDirectory(temporaryDirectory.resolve("staging"));
+        staging = new OwnedFileDownloadStaging(properties);
+        ReflectionTestUtils.invokeMethod(staging, "initialize");
+        service = service();
+    }
+
+    @AfterEach
+    void tearDown() {
+        staging.close();
+    }
 
     @Test
     void authenticatedUploadBindsOwnerAndStableMetadataToExactBytes() throws Exception {
@@ -84,11 +109,8 @@ class OwnerAwareFileServiceTest {
                 "file", "owned.pdf", "application/pdf", bytes));
         objects.replace(inserted.get().getObjectKey(), "changed".getBytes(StandardCharsets.UTF_8));
 
-        assertThatThrownBy(() -> {
-            try (InputStream input = service.open("42", uploaded.fileId()).input()) {
-                input.readAllBytes();
-            }
-        }).isInstanceOf(IOException.class)
+        assertThatThrownBy(() -> service.open("42", uploaded.fileId()))
+                .isInstanceOf(OwnedFileUnavailableException.class)
                 .hasMessageContaining("integrity verification");
     }
 
@@ -152,7 +174,7 @@ class OwnerAwareFileServiceTest {
             String fileId = invocation.getArgument(1);
             return owner.equals(value.getOwnerId()) && fileId.equals(value.getFileId()) ? value : null;
         });
-        return new OwnerAwareFileServiceImpl(mapper, objects, storage);
+        return new OwnerAwareFileServiceImpl(mapper, objects, storage, staging);
     }
 
     private static FileStorageConfig storage() {
