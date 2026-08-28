@@ -3,15 +3,20 @@ package com.javaee.aiservice.review.m0.api;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyResponseSnapshot;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyScope;
 import com.javaee.aiservice.review.m0.idempotency.JdbcReviewM0IdempotencyStore;
+import com.javaee.aiservice.review.m0.idempotency.ReviewM0IdempotencyStore;
+import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaim;
+import com.javaee.aiservice.review.m0.idempotency.IdempotencyRecord;
 import com.javaee.aiservice.review.m0.model.ProcessingMode;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import com.javaee.aiservice.review.m0.store.ReviewM0JdbcTestFixture;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -115,6 +120,110 @@ class ReviewM0ApiIdempotencySnapshotTest {
                 "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isEqualTo(1);
         assertThat(fixture.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM review_m0_idempotency_response_snapshot", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void transientFailureAfterCompletionRetriesTheWholeWriteInANewTransaction() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        fixture.jdbc().execute("CREATE TABLE retry_business_write(id VARCHAR(64) PRIMARY KEY)");
+        JdbcReviewM0IdempotencyStore delegate = store(fixture);
+        AtomicInteger completions = new AtomicInteger();
+        ReviewM0IdempotencyStore failFirstCompletion = new DelegatingStore(delegate) {
+            @Override
+            public IdempotencyRecord completeWithSnapshot(
+                    IdempotencyScope scope, String requestDigest, int responseStatus,
+                    String responseType, String responseId, IdempotencyResponseSnapshot snapshot
+            ) {
+                IdempotencyRecord completed = super.completeWithSnapshot(
+                        scope, requestDigest, responseStatus, responseType, responseId, snapshot);
+                if (completions.incrementAndGet() == 1) {
+                    throw new CannotAcquireLockException("synthetic transient contention");
+                }
+                return completed;
+            }
+        };
+        AtomicInteger operations = new AtomicInteger();
+
+        ReviewM0ApiIdempotency.Result<CaseResponse> result = new ReviewM0ApiIdempotency(
+                failFirstCompletion, fixture.transactions()).execute(
+                scope("whole-transaction-retry"), DIGEST, 201, "CASE", CaseResponse.class, () -> {
+                    operations.incrementAndGet();
+                    fixture.jdbc().update(
+                            "INSERT INTO retry_business_write(id) VALUES ('case-1')");
+                    return new ReviewM0ApiIdempotency.Resource<>(
+                            "case-1", response("first", 0));
+                });
+
+        assertThat(result.status()).isEqualTo(201);
+        assertThat(result.replayed()).isFalse();
+        assertThat(operations).hasValue(2);
+        assertThat(completions).hasValue(2);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM retry_business_write", Integer.class)).isEqualTo(1);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isEqualTo(1);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency_response_snapshot", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void followerWaitsAcrossTransactionsUntilWinnerCompletesAndNeverRunsBusinessOperation()
+            throws Exception {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        JdbcReviewM0IdempotencyStore store = store(fixture);
+        IdempotencyScope scope = scope("bounded-follower");
+        assertThat(store.claim(scope, DIGEST).status())
+                .isEqualTo(com.javaee.aiservice.review.m0.idempotency.IdempotencyClaimStatus.STARTED);
+        String body = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                .writeValueAsString(response("winner", 0));
+        IdempotencyResponseSnapshot snapshot = IdempotencyResponseSnapshot.capture(
+                201, "CASE", "case-1", body);
+        AtomicInteger operations = new AtomicInteger();
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            var winner = executor.submit(() -> {
+                Thread.sleep(75);
+                store.completeWithSnapshot(scope, DIGEST, 201, "CASE", "case-1", snapshot);
+                return null;
+            });
+            ReviewM0ApiIdempotency.Result<CaseResponse> replay = wrapper(fixture).execute(
+                    scope, DIGEST, 201, "CASE", CaseResponse.class, () -> {
+                        operations.incrementAndGet();
+                        return new ReviewM0ApiIdempotency.Resource<>(
+                                "case-2", response("must-not-run", 1));
+                    });
+            winner.get();
+
+            assertThat(replay.replayed()).isTrue();
+            assertThat(replay.status()).isEqualTo(201);
+            assertThat(replay.value().title()).isEqualTo("winner");
+            assertThat(operations).hasValue(0);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void exhaustedTransientCompetitionUsesStableStorageUnavailableContract() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        JdbcReviewM0IdempotencyStore delegate = store(fixture);
+        AtomicInteger attempts = new AtomicInteger();
+        ReviewM0IdempotencyStore unavailable = new DelegatingStore(delegate) {
+            @Override
+            public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
+                attempts.incrementAndGet();
+                throw new CannotAcquireLockException("synthetic transient contention");
+            }
+        };
+
+        assertStorageUnavailable(() -> new ReviewM0ApiIdempotency(
+                unavailable, fixture.transactions()).execute(
+                scope("exhausted"), DIGEST, 201, "CASE", CaseResponse.class,
+                () -> new ReviewM0ApiIdempotency.Resource<>(
+                        "case-1", response("must-not-run", 0))));
+        assertThat(attempts).hasValue(24);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isZero();
     }
 
     @Test
@@ -229,6 +338,50 @@ class ReviewM0ApiIdempotencySnapshotTest {
 
     private static JdbcReviewM0IdempotencyStore store(ReviewM0JdbcTestFixture fixture) {
         return new JdbcReviewM0IdempotencyStore(fixture.jdbc(), fixture.transactions());
+    }
+
+    private static class DelegatingStore implements ReviewM0IdempotencyStore {
+        private final ReviewM0IdempotencyStore delegate;
+
+        private DelegatingStore(ReviewM0IdempotencyStore delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
+            return delegate.claim(scope, requestDigest);
+        }
+
+        @Override
+        public IdempotencyRecord complete(
+                IdempotencyScope scope, String requestDigest, int responseStatus,
+                String responseType, String responseId
+        ) {
+            return delegate.complete(scope, requestDigest, responseStatus, responseType, responseId);
+        }
+
+        @Override
+        public IdempotencyRecord completeWithSnapshot(
+                IdempotencyScope scope, String requestDigest, int responseStatus,
+                String responseType, String responseId, IdempotencyResponseSnapshot snapshot
+        ) {
+            return delegate.completeWithSnapshot(
+                    scope, requestDigest, responseStatus, responseType, responseId, snapshot);
+        }
+
+        @Override
+        public IdempotencyRecord attachSnapshotToCompletedInCallerTransaction(
+                IdempotencyScope scope, String requestDigest, int responseStatus,
+                String responseType, String responseId, IdempotencyResponseSnapshot snapshot
+        ) {
+            return delegate.attachSnapshotToCompletedInCallerTransaction(
+                    scope, requestDigest, responseStatus, responseType, responseId, snapshot);
+        }
+
+        @Override
+        public Optional<IdempotencyRecord> find(IdempotencyScope scope) {
+            return delegate.find(scope);
+        }
     }
 
     private static IdempotencyScope scope(String key) {

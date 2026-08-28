@@ -4,23 +4,33 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaim;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaimStatus;
+import com.javaee.aiservice.review.m0.idempotency.IdempotencyInProgressException;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyResponseSnapshot;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyScope;
 import com.javaee.aiservice.review.m0.idempotency.ReviewM0IdempotencyStore;
 import com.javaee.aiservice.review.m0.model.IdempotencyState;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.sql.SQLTransientException;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
 /** Transactional idempotency wrapper for synchronous Review M0 writes. */
 public final class ReviewM0ApiIdempotency {
+    private static final int MAX_TRANSACTION_ATTEMPTS = 24;
+    private static final long BASE_BACKOFF_NANOS = 2_000_000L;
+    private static final long MAX_BACKOFF_NANOS = 100_000_000L;
+
     private final ReviewM0IdempotencyStore store;
     private final TransactionTemplate transactions;
     private final ObjectMapper responseJson;
@@ -37,6 +47,7 @@ public final class ReviewM0ApiIdempotency {
     ) {
         this.store = Objects.requireNonNull(store);
         this.transactions = new TransactionTemplate(Objects.requireNonNull(transactionManager));
+        this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.responseJson = new ObjectMapper().findAndRegisterModules();
     }
 
@@ -48,12 +59,11 @@ public final class ReviewM0ApiIdempotency {
             Class<T> responseClass,
             Supplier<Resource<T>> operation
     ) {
-        return Objects.requireNonNull(transactions.execute(status -> {
+        return executeWithRetry(() -> Objects.requireNonNull(transactions.execute(status -> {
             IdempotencyClaim claim = store.claim(scope, requestDigest);
             if (claim.status() == IdempotencyClaimStatus.REPLAY_IN_PROGRESS) {
-                throw new ReviewM0Exception(
-                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE,
-                        "The same write is still in progress");
+                throw new IdempotencyInProgressException(
+                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE);
             }
             if (claim.status() == IdempotencyClaimStatus.REPLAY_COMPLETED) {
                 T replay = replay(claim, responseType, responseClass);
@@ -65,7 +75,7 @@ public final class ReviewM0ApiIdempotency {
             store.completeWithSnapshot(
                     scope, requestDigest, responseStatus, responseType, created.resourceId(), snapshot);
             return new Result<>(created.value(), responseStatus, false);
-        }));
+        })));
     }
 
     public <T> Result<T> executeDynamic(
@@ -75,12 +85,11 @@ public final class ReviewM0ApiIdempotency {
             Class<T> responseClass,
             Supplier<DynamicResource<T>> operation
     ) {
-        return Objects.requireNonNull(transactions.execute(status -> {
+        return executeWithRetry(() -> Objects.requireNonNull(transactions.execute(status -> {
             IdempotencyClaim claim = store.claim(scope, requestDigest);
             if (claim.status() == IdempotencyClaimStatus.REPLAY_IN_PROGRESS) {
-                throw new ReviewM0Exception(
-                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE,
-                        "The same write is still in progress");
+                throw new IdempotencyInProgressException(
+                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE);
             }
             if (claim.status() == IdempotencyClaimStatus.REPLAY_COMPLETED) {
                 return new Result<>(replay(claim, responseType, responseClass),
@@ -93,7 +102,7 @@ public final class ReviewM0ApiIdempotency {
                     scope, requestDigest, created.responseStatus(), responseType,
                     created.resourceId(), snapshot);
             return new Result<>(created.value(), created.responseStatus(), false);
-        }));
+        })));
     }
 
     /**
@@ -107,7 +116,7 @@ public final class ReviewM0ApiIdempotency {
             Class<T> responseClass,
             Supplier<DelegatedResource<T>> operation
     ) {
-        return Objects.requireNonNull(transactions.execute(status -> {
+        return executeWithRetry(() -> Objects.requireNonNull(transactions.execute(status -> {
             var before = store.find(scope);
             if (before.isPresent()) {
                 requireSameRequest(before.get().requestDigest(), requestDigest);
@@ -116,9 +125,8 @@ public final class ReviewM0ApiIdempotency {
                             new IdempotencyClaim(IdempotencyClaimStatus.REPLAY_COMPLETED, before.get()),
                             responseType, responseClass), before.get().responseStatus(), true);
                 }
-                throw new ReviewM0Exception(
-                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE,
-                        "The same write is still in progress");
+                throw new IdempotencyInProgressException(
+                        ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE);
             }
 
             DelegatedResource<T> created = Objects.requireNonNull(operation.get());
@@ -137,7 +145,54 @@ public final class ReviewM0ApiIdempotency {
                     scope, requestDigest, created.responseStatus(), responseType,
                     created.resourceId(), snapshot);
             return new Result<>(created.value(), created.responseStatus(), false);
-        }));
+        })));
+    }
+
+    private <T> T executeWithRetry(Supplier<T> transactionAttempt) {
+        RuntimeException lastContention = null;
+        for (int attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt++) {
+            try {
+                return transactionAttempt.get();
+            } catch (IdempotencyInProgressException inProgress) {
+                lastContention = inProgress;
+            } catch (RuntimeException failure) {
+                if (!isTransientContention(failure)) {
+                    throw failure;
+                }
+                lastContention = failure;
+            }
+            if (attempt == MAX_TRANSACTION_ATTEMPTS) {
+                break;
+            }
+            backoff(attempt);
+        }
+        throw IdempotencyResponseSnapshot.unavailable(
+                "Idempotency transaction retry budget was exhausted", lastContention);
+    }
+
+    private static boolean isTransientContention(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof TransientDataAccessException
+                    || current instanceof SQLTransientException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void backoff(int attempt) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw IdempotencyResponseSnapshot.unavailable(
+                    "Idempotency transaction retry was interrupted", null);
+        }
+        long exponential = BASE_BACKOFF_NANOS << Math.min(attempt - 1, 6);
+        long ceiling = Math.min(exponential, MAX_BACKOFF_NANOS);
+        long jitter = ThreadLocalRandom.current().nextLong((ceiling / 2) + 1);
+        LockSupport.parkNanos(ceiling / 2 + jitter);
+        if (Thread.currentThread().isInterrupted()) {
+            throw IdempotencyResponseSnapshot.unavailable(
+                    "Idempotency transaction retry was interrupted", null);
+        }
     }
 
     private <T> T replay(IdempotencyClaim claim, String responseType, Class<T> responseClass) {

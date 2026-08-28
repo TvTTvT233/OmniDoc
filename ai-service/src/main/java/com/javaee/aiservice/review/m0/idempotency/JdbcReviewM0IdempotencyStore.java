@@ -4,7 +4,6 @@ import com.javaee.aiservice.review.m0.model.IdempotencyState;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -19,11 +18,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.locks.LockSupport;
 
 @Repository
 public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
-    private static final int MAX_CLAIM_ATTEMPTS = 8;
     private static final String COLUMNS = """
             idem.scope_digest, idem.owner_id, idem.http_method, idem.canonical_path, idem.idempotency_key,
             idem.request_digest, idem.response_status, idem.response_type, idem.response_id,
@@ -54,41 +51,30 @@ public class JdbcReviewM0IdempotencyStore implements ReviewM0IdempotencyStore {
     @Override
     public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
         requireDigest(requestDigest);
-        for (int attempt = 1; attempt <= MAX_CLAIM_ATTEMPTS; attempt++) {
+        return Objects.requireNonNull(transactions.execute(status -> {
+            Instant now = Instant.now();
             try {
-                return Objects.requireNonNull(transactions.execute(status -> {
-                    Instant now = Instant.now();
-                    try {
-                        jdbcTemplate.update("""
-                                        INSERT INTO review_m0_idempotency(
-                                            scope_digest, owner_id, http_method, canonical_path, idempotency_key, request_digest,
-                                            response_status, response_type, response_id, state, created_at, updated_at
-                                        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 'IN_PROGRESS', ?, ?)
-                                        """,
-                                IdempotencyResponseSnapshot.scopeDigest(scope),
-                                scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey(),
-                                requestDigest, timestamp(now), timestamp(now));
-                        return new IdempotencyClaim(IdempotencyClaimStatus.STARTED,
-                                require(scope, false));
-                    } catch (DuplicateKeyException duplicate) {
-                        IdempotencyRecord existing = require(scope, true);
-                        requireSameDigest(existing, requestDigest);
-                        return new IdempotencyClaim(
-                                existing.state() == IdempotencyState.COMPLETED
-                                        ? IdempotencyClaimStatus.REPLAY_COMPLETED
-                                        : IdempotencyClaimStatus.REPLAY_IN_PROGRESS,
-                                existing);
-                    }
-                }));
-            } catch (TransientDataAccessException transientLockFailure) {
-                if (attempt == MAX_CLAIM_ATTEMPTS) {
-                    throw IdempotencyResponseSnapshot.unavailable(
-                            "Idempotency claim could not acquire its database lock", transientLockFailure);
-                }
-                LockSupport.parkNanos(1_000_000L << Math.min(attempt - 1, 6));
+                jdbcTemplate.update("""
+                                INSERT INTO review_m0_idempotency(
+                                    scope_digest, owner_id, http_method, canonical_path, idempotency_key, request_digest,
+                                    response_status, response_type, response_id, state, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 'IN_PROGRESS', ?, ?)
+                                """,
+                        IdempotencyResponseSnapshot.scopeDigest(scope),
+                        scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey(),
+                        requestDigest, timestamp(now), timestamp(now));
+                return new IdempotencyClaim(IdempotencyClaimStatus.STARTED,
+                        require(scope, false));
+            } catch (DuplicateKeyException duplicate) {
+                IdempotencyRecord existing = require(scope, true);
+                requireSameDigest(existing, requestDigest);
+                return new IdempotencyClaim(
+                        existing.state() == IdempotencyState.COMPLETED
+                                ? IdempotencyClaimStatus.REPLAY_COMPLETED
+                                : IdempotencyClaimStatus.REPLAY_IN_PROGRESS,
+                        existing);
             }
-        }
-        throw new IllegalStateException("Unreachable idempotency claim retry state");
+        }));
     }
 
     @Override

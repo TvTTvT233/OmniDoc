@@ -2,6 +2,7 @@ package com.javaee.aiservice.review.m0.job;
 
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaim;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaimStatus;
+import com.javaee.aiservice.review.m0.idempotency.IdempotencyInProgressException;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyScope;
 import com.javaee.aiservice.review.m0.idempotency.ReviewM0IdempotencyStore;
 import com.javaee.aiservice.review.m0.model.ReviewJob;
@@ -57,9 +58,8 @@ public class ReviewM0JobSubmissionService {
                 return new ReviewM0JobSubmission(original, claim.record().responseStatus(), true);
             }
             if (claim.status() == IdempotencyClaimStatus.REPLAY_IN_PROGRESS) {
-                throw new ReviewM0Exception(
-                        ReviewM0ErrorCode.REVIEW_M0_JOB_QUEUE_UNAVAILABLE,
-                        "The same Job submission is still in progress");
+                throw new IdempotencyInProgressException(
+                        ReviewM0ErrorCode.REVIEW_M0_JOB_QUEUE_UNAVAILABLE);
             }
             ReviewJob created = jobStore.create(queuedJob);
             idempotencyStore.complete(scope, requestDigest, ACCEPTED, "JOB", created.jobId());
