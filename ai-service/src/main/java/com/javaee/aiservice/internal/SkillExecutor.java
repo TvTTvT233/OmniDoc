@@ -40,7 +40,7 @@ public class SkillExecutor {
      * @return 执行结果
      */
     public Map<String, Object> execute(String skillName, Map<String, Object> params) {
-        log.info("执行技能: skillName={}, params={}", skillName, params);
+        log.info("执行技能: skillName={}", skillName);
 
         try {
             Map<String, Object> result;
@@ -64,7 +64,7 @@ public class SkillExecutor {
             return result;
 
         } catch (Exception e) {
-            log.error("技能执行失败", e);
+            log.error("技能执行失败");
             Map<String, Object> errorResult = Map.of(
                 "status", "error",
                 "message", e.getMessage()

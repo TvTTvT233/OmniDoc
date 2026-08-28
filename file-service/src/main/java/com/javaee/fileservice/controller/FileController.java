@@ -49,11 +49,10 @@ public class FileController {
     public Result<Map<String, String>> upload(@RequestParam("file") MultipartFile file,
                                               @RequestHeader(value = "X-User-Id", required = false) String userId) {
         log.info("=== 收到文件上传请求 ===");
-        log.info("文件名: {}, 文件大小: {}, 文件类型: {}", 
-            file.getOriginalFilename(), file.getSize(), file.getContentType());
+        log.info("文件上传请求: size={} bytes", file.getSize());
         try {
             String fileId = fileService.upload(file);
-            log.info("文件上传成功，文件ID: {}", fileId);
+            log.info("文件上传成功");
             
             Map<String, Object> message = new HashMap<>();
             message.put("fileId", fileId);
@@ -66,13 +65,12 @@ public class FileController {
                 log.info("发送文件上传消息到 RabbitMQ");
                 rabbitMQUtil.send(RabbitMQConfig.FILE_EXCHANGE, RabbitMQConfig.FILE_UPLOAD_ROUTING_KEY, message);
             } catch (Exception mqException) {
-                log.warn("文件已保存，但上传事件发送 RabbitMQ 失败: fileId={}, error={}",
-                        fileId, mqException.getMessage(), mqException);
+                log.warn("文件已保存，但上传事件发送 RabbitMQ 失败");
             }
             
             return Result.success(Map.of("fileId", fileId, "message", "文件上传成功"));
         } catch (Exception e) {
-            log.error("文件上传失败: {}", e.getMessage(), e);
+            log.error("文件上传失败");
             return Result.fail("文件上传失败: " + e.getMessage());
         }
     }
@@ -83,16 +81,15 @@ public class FileController {
     @PostMapping(value = "/upload-multiple", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "多文件上传", description = "上传多个文件到服务器")
     public Result<Map<String, Object>> uploadMultiple(@RequestParam("files") MultipartFile[] files) {
-        System.out.println("=== 收到多文件上传请求 ===");
-        System.out.println("文件数量: " + files.length);
+        log.info("=== 收到多文件上传请求 ===");
+        log.info("文件数量: {}", files.length);
         try {
-            System.out.println("调用fileService.uploadMultiple方法");
+            log.info("调用fileService.uploadMultiple方法");
             String[] fileIds = fileService.uploadMultiple(files);
-            System.out.println("多文件上传成功，文件ID数量: " + fileIds.length);
+            log.info("多文件上传成功，文件ID数量: {}", fileIds.length);
             return Result.success(Map.of("fileIds", fileIds, "message", "文件上传成功", "count", fileIds.length));
         } catch (Exception e) {
-            System.out.println("多文件上传失败: " + e.getMessage());
-            e.printStackTrace();
+            log.error("多文件上传失败");
             return Result.fail("文件上传失败: " + e.getMessage());
         }
     }
@@ -153,15 +150,14 @@ public class FileController {
                 log.info("发送文件下载消息到 RabbitMQ");
                 rabbitMQUtil.send(RabbitMQConfig.FILE_EXCHANGE, RabbitMQConfig.FILE_DOWNLOAD_ROUTING_KEY, message);
             } catch (Exception mqException) {
-                log.warn("文件下载成功，但下载事件发送 RabbitMQ 失败: fileId={}, error={}",
-                        fileId, mqException.getMessage(), mqException);
+                log.warn("文件下载成功，但下载事件发送 RabbitMQ 失败");
             }
             
             return ResponseEntity.ok()
                     .headers(headers)
                     .body(fileBytes);
         } catch (Exception e) {
-            log.error("文件下载失败: {}", e.getMessage(), e);
+            log.error("文件下载失败");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(("文件下载失败: " + e.getMessage()).getBytes());
         }
@@ -200,7 +196,7 @@ public class FileController {
                     .orElse(fileId);
             return ResponseEntity.ok(fileName);
         } catch (Exception e) {
-            log.warn("获取文件名失败，返回 fileId 作为降级值: fileId={}, error={}", fileId, e.getMessage(), e);
+            log.warn("获取文件名失败，返回 fileId 作为降级值");
             return ResponseEntity.ok(fileId);
         }
     }
@@ -217,7 +213,7 @@ public class FileController {
                     .orElse(MediaType.APPLICATION_OCTET_STREAM_VALUE);
             return ResponseEntity.ok(fileType);
         } catch (Exception e) {
-            log.warn("获取文件类型失败，返回默认类型: fileId={}, error={}", fileId, e.getMessage(), e);
+            log.warn("获取文件类型失败，返回默认类型");
             return ResponseEntity.ok(MediaType.APPLICATION_OCTET_STREAM_VALUE);
         }
     }
@@ -241,13 +237,12 @@ public class FileController {
                 log.info("发送文件删除消息到 RabbitMQ");
                 rabbitMQUtil.send(RabbitMQConfig.FILE_EXCHANGE, RabbitMQConfig.FILE_DELETE_ROUTING_KEY, message);
             } catch (Exception mqException) {
-                log.warn("文件删除成功，但删除事件发送 RabbitMQ 失败: fileId={}, error={}",
-                        fileId, mqException.getMessage(), mqException);
+                log.warn("文件删除成功，但删除事件发送 RabbitMQ 失败");
             }
             
             return ResponseEntity.ok(Map.of("message", "文件删除成功"));
         } catch (Exception e) {
-            log.error("文件删除失败: {}", e.getMessage(), e);
+            log.error("文件删除失败");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "文件删除失败: " + e.getMessage()));
         }

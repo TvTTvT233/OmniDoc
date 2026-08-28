@@ -44,17 +44,16 @@ public class InternalService {
         }
 
         if (!requestUserContext.isAdmin() && !authenticatedUserId.equals(contextUserId)) {
-            log.warn("权限检查失败，用户上下文不匹配: authenticated={}, context={}, skillName={}",
-                    authenticatedUserId, contextUserId, skillName);
+            log.warn("权限检查失败，用户上下文不匹配: skillName={}", skillName);
             return false;
         }
 
         if (DESTRUCTIVE_SKILLS.contains(skillName) && !Boolean.TRUE.equals(context.get("confirmedAction"))) {
-            log.warn("权限检查失败，危险操作缺少服务端确认: userId={}, skillName={}", contextUserId, skillName);
+            log.warn("权限检查失败，危险操作缺少服务端确认: skillName={}", skillName);
             return false;
         }
 
-        log.info("用户权限检查通过: userId={}, role={}, skillName={}", contextUserId, role, skillName);
+        log.info("用户权限检查通过: skillName={}", skillName);
         return true;
     }
 
@@ -65,7 +64,7 @@ public class InternalService {
      * @param result 结果
      */
     public void logAudit(String skillName, Map<String, Object> params, Map<String, Object> result) {
-        log.info("审计记录: skillName={}, params={}, result={}", skillName, params, result);
+        log.info("审计记录: skillName={}", skillName);
     }
 
     /**
@@ -73,7 +72,7 @@ public class InternalService {
      * @param alertData 告警数据
      */
     public void sendAlert(Map<String, Object> alertData) {
-        log.warn("发送告警: {}", alertData);
+        log.warn("发送告警");
     }
 
     /**

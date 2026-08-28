@@ -46,7 +46,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @PostConstruct
     public void init() {
-        log.info("初始化MinIO客户端: endpoint={}, accessKey={}", endpoint, accessKey);
+        log.info("初始化MinIO客户端");
         try {
             minioClient = MinioClient.builder()
                     .endpoint(endpoint)
@@ -55,7 +55,7 @@ public class MinIOServiceImpl implements MinIOService {
             
             log.info("MinIO客户端初始化成功");
         } catch (Exception e) {
-            log.error("MinIO客户端初始化失败: {}", e.getMessage(), e);
+            log.error("MinIO客户端初始化失败");
             throw new RuntimeException("MinIO客户端初始化失败: " + e.getMessage(), e);
         }
     }
@@ -71,8 +71,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public String uploadFile(MultipartFile file, String bucketName, String objectName) throws Exception {
-        log.info("上传文件到MinIO: bucket={}, object={}, filename={}", 
-            bucketName, objectName, file.getOriginalFilename());
+        log.info("上传文件到MinIO");
         
         // 检查存储桶是否存在，不存在则创建
         if (!bucketExists(bucketName)) {
@@ -105,8 +104,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public String uploadBytes(byte[] bytes, String bucketName, String objectName, String contentType) throws Exception {
-        log.info("上传字节数组到MinIO: bucket={}, object={}, size={}, contentType={}", 
-            bucketName, objectName, bytes.length, contentType);
+        log.info("上传字节数组到MinIO: size={}", bytes.length);
         
         // 检查存储桶是否存在，不存在则创建
         if (!bucketExists(bucketName)) {
@@ -137,7 +135,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public InputStream downloadFile(String bucketName, String objectName) throws Exception {
-        log.info("从MinIO下载文件: bucket={}, object={}", bucketName, objectName);
+        log.info("从MinIO下载文件");
         
         return minioClient.getObject(
             io.minio.GetObjectArgs.builder()
@@ -156,7 +154,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public void deleteFile(String bucketName, String objectName) throws Exception {
-        log.info("从MinIO删除文件: bucket={}, object={}", bucketName, objectName);
+        log.info("从MinIO删除文件");
         
         minioClient.removeObject(
             RemoveObjectArgs.builder()
@@ -177,8 +175,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public String getFileUrl(String bucketName, String objectName, int expirySeconds) throws Exception {
-        log.info("获取文件访问URL: bucket={}, object={}, expiry={}s", 
-            bucketName, objectName, expirySeconds);
+        log.info("获取文件访问地址: expiry={}s", expirySeconds);
         
         return minioClient.getPresignedObjectUrl(
             GetPresignedObjectUrlArgs.builder()
@@ -199,7 +196,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public boolean bucketExists(String bucketName) throws Exception {
-        log.info("检查存储桶是否存在: bucket={}", bucketName);
+        log.info("检查存储桶是否存在");
         
         return minioClient.bucketExists(
             BucketExistsArgs.builder()
@@ -216,7 +213,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public void createBucket(String bucketName) throws Exception {
-        log.info("创建存储桶: bucket={}", bucketName);
+        log.info("创建存储桶");
         
         if (!bucketExists(bucketName)) {
             minioClient.makeBucket(
@@ -237,7 +234,7 @@ public class MinIOServiceImpl implements MinIOService {
      */
     @Override
     public io.minio.StatObjectResponse getFileMetadata(String bucketName, String objectName) throws Exception {
-        log.info("获取文件元数据: bucket={}, object={}", bucketName, objectName);
+        log.info("获取文件元数据");
         
         return minioClient.statObject(
             io.minio.StatObjectArgs.builder()

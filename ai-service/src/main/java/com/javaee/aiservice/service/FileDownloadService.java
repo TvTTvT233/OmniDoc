@@ -43,7 +43,7 @@ public class FileDownloadService {
      * @return 文件输入流
      */
     public InputStream downloadFile(FileDownloadDTO dto) {
-        log.info("开始下载文件: bucket={}, object={}", dto.getBucketName(), dto.getObjectName());
+        log.info("开始下载文件");
 
         try {
             // 确定存储桶名称
@@ -57,14 +57,14 @@ public class FileDownloadService {
             }
 
             // 调用MinIOService下载文件
-            log.info("调用MinIO下载文件: bucket={}, object={}", bucketName, objectName);
+            log.info("调用MinIO下载文件");
             InputStream inputStream = minIOService.downloadFile(bucketName, objectName);
 
-            log.info("文件下载成功: bucket={}, object={}", bucketName, objectName);
+            log.info("文件下载成功");
             return inputStream;
 
         } catch (Exception e) {
-            log.error("文件下载失败", e);
+            log.error("文件下载失败");
             throw new RuntimeException("文件下载失败: " + e.getMessage(), e);
         }
     }
@@ -78,7 +78,7 @@ public class FileDownloadService {
      * @return 文件下载结果
      */
     public FileDownloadVO getFileUrl(FileDownloadDTO dto) {
-        log.info("开始获取文件URL: bucket={}, object={}", dto.getBucketName(), dto.getObjectName());
+        log.info("开始获取文件访问地址");
 
         try {
             // 确定存储桶名称
@@ -95,8 +95,7 @@ public class FileDownloadService {
             int expirySeconds = defaultExpiry;
 
             // 调用MinIOService获取文件URL
-            log.info("调用MinIO获取文件URL: bucket={}, object={}, expiry={}s", 
-                bucketName, objectName, expirySeconds);
+            log.info("调用MinIO获取文件访问地址: expiry={}s", expirySeconds);
             String fileUrl = minIOService.getFileUrl(bucketName, objectName, expirySeconds);
 
             // 构建返回结果
@@ -106,11 +105,11 @@ public class FileDownloadService {
             vo.setObjectName(objectName);
             vo.setExpirySeconds(expirySeconds);
 
-            log.info("获取文件URL成功: url={}", fileUrl);
+            log.info("获取文件访问地址成功");
             return vo;
 
         } catch (Exception e) {
-            log.error("获取文件URL失败", e);
+            log.error("获取文件访问地址失败");
             throw new RuntimeException("获取文件URL失败: " + e.getMessage(), e);
         }
     }

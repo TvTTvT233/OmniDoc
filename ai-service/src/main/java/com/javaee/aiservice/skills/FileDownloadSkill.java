@@ -43,13 +43,10 @@ public class FileDownloadSkill implements Skill {
         String bucketName = requestedBucketName;
         String bucketMessage = null;
 
-        System.out.println("开始下载文件: bucket=" + requestedBucketName + ", object=" + objectName);
-
         try {
             // 检查请求的桶是否存在
             if (!minIOService.bucketExists(requestedBucketName)) {
                 bucketMessage = "桶不存在: " + requestedBucketName;
-                System.out.println(bucketMessage);
             }
             if (bucketMessage != null) {
                 throw new IllegalArgumentException(bucketMessage);
@@ -57,25 +54,17 @@ public class FileDownloadSkill implements Skill {
             bucketPermissionService.assertCanAccess(bucketName);
 
             // 获取文件元数据
-            System.out.println("从桶 " + bucketName + " 获取文件元数据...");
             io.minio.StatObjectResponse metadata = minIOService.getFileMetadata(bucketName, objectName);
-            System.out.println("获取文件元数据成功");
             
             // 获取文件内容类型
             String contentType = metadata.contentType();
-            System.out.println("文件内容类型: " + contentType);
             
             // 获取文件输入流
-            System.out.println("从桶 " + bucketName + " 获取文件输入流...");
             InputStream inputStream = minIOService.downloadFile(bucketName, objectName);
-            System.out.println("获取文件输入流成功");
             
             // 返回包含文件流、元数据、桶消息和实际桶名称的数组
-            System.out.println("返回文件流和元数据");
             return new Object[] { inputStream, contentType, objectName, bucketMessage, bucketName };
         } catch (Exception e) {
-            System.out.println("下载文件失败: " + e.getMessage());
-            e.printStackTrace();
             throw new RuntimeException("下载文件失败: " + e.getMessage(), e);
         }
     }

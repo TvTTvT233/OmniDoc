@@ -58,7 +58,7 @@ public class RecycleBinService {
     }
 
     private String moveToRecycleBin(String bucketName, String objectName, String deleter, boolean checkBucketPermission) {
-        log.info("将文件移动到回收站: bucket={}, object={}", bucketName, objectName);
+        log.info("将文件移动到回收站");
 
         try {
             if (checkBucketPermission) {
@@ -88,11 +88,11 @@ public class RecycleBinService {
             redisTemplate.opsForValue().set(RECYCLE_PREFIX + recycleId, recycleFile,
                     Duration.ofDays(recycleExpiryDays));
 
-            log.info("文件已移动到回收站: recycleId={}", recycleId);
+            log.info("文件已移动到回收站");
             return recycleId;
 
         } catch (Exception e) {
-            log.error("移动文件到回收站失败", e);
+            log.error("移动文件到回收站失败");
             throw new RuntimeException("移动文件到回收站失败: " + e.getMessage(), e);
         }
     }
@@ -109,7 +109,7 @@ public class RecycleBinService {
     }
 
     public String restoreFromRecycleBin(String recycleId, String newObjectName, String requester) {
-        log.info("从回收站恢复文件: recycleId={}", recycleId);
+        log.info("从回收站恢复文件");
 
         try {
             RecycleBinVO.RecycleFile recycleFile = getRecycleFile(recycleId);
@@ -129,8 +129,7 @@ public class RecycleBinService {
             String targetObjectName = newObjectName != null ? newObjectName : recycleFile.getOriginalObjectName();
             String recycleObjectName = recycleObjectName(recycleId, recycleFile.getOriginalObjectName());
 
-            log.info("从回收站恢复文件: original={}, target={}", 
-                recycleFile.getOriginalObjectName(), targetObjectName);
+            log.info("从回收站恢复文件");
 
             try (InputStream inputStream = minIOService.downloadFile(recycleFile.getBucketName(), recycleObjectName)) {
                 byte[] bytes = inputStream.readAllBytes();
@@ -143,7 +142,7 @@ public class RecycleBinService {
             return targetObjectName;
 
         } catch (Exception e) {
-            log.error("从回收站恢复文件失败", e);
+            log.error("从回收站恢复文件失败");
             throw new RuntimeException("从回收站恢复文件失败: " + e.getMessage(), e);
         }
     }
@@ -159,7 +158,7 @@ public class RecycleBinService {
     }
 
     public RecycleBinVO listRecycleBin(String bucketName, String deleter) {
-        log.info("获取回收站文件列表: bucket={}", bucketName);
+        log.info("获取回收站文件列表");
 
         try {
             if (bucketName != null) {
@@ -193,7 +192,7 @@ public class RecycleBinService {
             return vo;
 
         } catch (Exception e) {
-            log.error("获取回收站文件列表失败", e);
+            log.error("获取回收站文件列表失败");
             throw new RuntimeException("获取回收站文件列表失败: " + e.getMessage(), e);
         }
     }
@@ -204,7 +203,7 @@ public class RecycleBinService {
      * @param recycleId 回收站记录ID
      */
     public void permanentDelete(String recycleId) {
-        log.info("永久删除回收站中的文件: recycleId={}", recycleId);
+        log.info("永久删除回收站中的文件");
 
         try {
             RecycleBinVO.RecycleFile recycleFile = getRecycleFile(recycleId);
@@ -214,11 +213,10 @@ public class RecycleBinService {
             minIOService.deleteFile(recycleFile.getBucketName(), recycleObjectName(recycleId, recycleFile.getOriginalObjectName()));
             redisTemplate.delete(RECYCLE_PREFIX + recycleId);
 
-            log.info("文件已永久删除: bucket={}, object={}", 
-                recycleFile.getBucketName(), recycleFile.getOriginalObjectName());
+            log.info("文件已永久删除");
 
         } catch (Exception e) {
-            log.error("永久删除文件失败", e);
+            log.error("永久删除文件失败");
             throw new RuntimeException("永久删除文件失败: " + e.getMessage(), e);
         }
     }
@@ -246,7 +244,7 @@ public class RecycleBinService {
             log.info("清理完成，删除了 {} 个过期文件", removedCount);
 
         } catch (Exception e) {
-            log.error("清理过期文件失败", e);
+            log.error("清理过期文件失败");
         }
     }
 
