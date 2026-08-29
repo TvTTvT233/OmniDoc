@@ -1,5 +1,6 @@
 package com.javaee.aiservice.rag;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.javaee.aiservice.rag.vector.contract.VectorScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,8 @@ public class KnowledgeBase {
 
             log.info("文档添加成功: documentId={}, 分段数={}", documentId, segments.size());
         } catch (Exception e) {
-            log.error("添加文档失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_DOCUMENT_ADD_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("添加文档失败: " + e.getMessage(), e);
         }
     }
@@ -118,7 +120,8 @@ public class KnowledgeBase {
 
             log.info("文档移除成功: documentId={}, 删除了{}个分段", documentId, segmentIds.size());
         } catch (Exception e) {
-            log.error("移除文档失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_DOCUMENT_REMOVE_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("移除文档失败: " + e.getMessage(), e);
         }
     }
@@ -127,7 +130,8 @@ public class KnowledgeBase {
         try {
             return (String) redisTemplate.opsForValue().get(CONTENT_PREFIX + documentId);
         } catch (Exception e) {
-            log.warn("获取文档内容失败", e);
+            SafeDiagnosticLogger.warn(log, "KNOWLEDGE_DOCUMENT_READ_DEGRADED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1);
             return null;
         }
     }
@@ -136,7 +140,8 @@ public class KnowledgeBase {
         try {
             return (String) redisTemplate.opsForValue().get(SEGMENT_PREFIX + segmentId);
         } catch (Exception e) {
-            log.warn("获取分段内容失败", e);
+            SafeDiagnosticLogger.warn(log, "KNOWLEDGE_SEGMENT_READ_DEGRADED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1);
             return null;
         }
     }
@@ -154,7 +159,8 @@ public class KnowledgeBase {
             }
             return Collections.emptyList();
         } catch (Exception e) {
-            log.warn("获取文档分段ID列表失败", e);
+            SafeDiagnosticLogger.warn(log, "KNOWLEDGE_SEGMENT_LIST_DEGRADED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1);
             return Collections.emptyList();
         }
     }
@@ -168,7 +174,8 @@ public class KnowledgeBase {
             }
             return metadata;
         } catch (Exception e) {
-            log.warn("获取文档元数据失败", e);
+            SafeDiagnosticLogger.warn(log, "KNOWLEDGE_METADATA_READ_DEGRADED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1);
             return Collections.emptyMap();
         }
     }
@@ -189,7 +196,8 @@ public class KnowledgeBase {
 
             return segments;
         } catch (Exception e) {
-            log.error("获取文档分段失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_SEGMENTS_READ_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("获取文档分段失败: " + e.getMessage(), e);
         }
     }
@@ -206,7 +214,8 @@ public class KnowledgeBase {
     public List<Map<String, Object>> search(String query, int topK,
                                             DocumentSegmenter.StrategyType strategyType,
                                             Map<String, Object> filters) {
-        log.info("搜索知识库: query={}, topK={}, strategy={}", query, topK, strategyType);
+        log.info("搜索知识库: queryChars={}, topK={}, strategy={}",
+                query == null ? 0 : query.length(), topK, strategyType);
 
         try {
             float[] queryVector = vectorizer.vectorize(query);
@@ -223,7 +232,8 @@ public class KnowledgeBase {
 
             return results;
         } catch (Exception e) {
-            log.error("知识库搜索失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_SEARCH_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("知识库搜索失败: " + e.getMessage(), e);
         }
     }
@@ -240,7 +250,8 @@ public class KnowledgeBase {
     public List<Map<String, Object>> hybridSearch(String query, int topK,
                                                    DocumentSegmenter.StrategyType strategyType,
                                                    Map<String, Object> filters) {
-        log.info("混合检索: query={}, topK={}, strategy={}", query, topK, strategyType);
+        log.info("混合检索: queryChars={}, topK={}, strategy={}",
+                query == null ? 0 : query.length(), topK, strategyType);
 
         try {
             float[] queryVector = vectorizer.vectorize(query);
@@ -282,7 +293,8 @@ public class KnowledgeBase {
             return combinedResults.subList(0, Math.min(topK, combinedResults.size()));
 
         } catch (Exception e) {
-            log.error("混合检索失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_HYBRID_SEARCH_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("混合检索失败: " + e.getMessage(), e);
         }
     }
@@ -297,8 +309,8 @@ public class KnowledgeBase {
                                                             Reranker.RerankStrategy rerankStrategy,
                                                             DocumentSegmenter.StrategyType strategyType,
                                                             Map<String, Object> filters) {
-        log.info("混合检索加重排序: query={}, topK={}, strategy={}, rerankStrategy={}",
-                query, topK, strategyType, rerankStrategy);
+        log.info("混合检索加重排序: queryChars={}, topK={}, strategy={}, rerankStrategy={}",
+                query == null ? 0 : query.length(), topK, strategyType, rerankStrategy);
 
         try {
             List<Map<String, Object>> candidates = hybridSearch(query, topK * 3, strategyType, filters);
@@ -307,7 +319,8 @@ public class KnowledgeBase {
 
             return results;
         } catch (Exception e) {
-            log.error("混合检索加重排序失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_RERANK_SEARCH_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("混合检索加重排序失败: " + e.getMessage(), e);
         }
     }
@@ -413,7 +426,8 @@ public class KnowledgeBase {
                 .map(key -> key.substring(DOCUMENT_PREFIX.length()))
                 .toList();
         } catch (Exception e) {
-            log.warn("获取文档ID列表失败", e);
+            SafeDiagnosticLogger.warn(log, "KNOWLEDGE_DOCUMENT_LIST_DEGRADED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1);
             return Collections.emptyList();
         }
     }

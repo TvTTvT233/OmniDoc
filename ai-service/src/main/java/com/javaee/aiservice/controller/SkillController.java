@@ -13,6 +13,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +27,8 @@ import com.javaee.aiservice.service.MinIOService;
 @RequestMapping("/api/skills")
 @Tag(name = "技能管理", description = "AI技能执行接口")
 public class SkillController {
+
+    private static final Logger log = LoggerFactory.getLogger(SkillController.class);
 
     private final SkillExecutorService skillExecutorService;
     private final MinIOService minIOService;
@@ -89,7 +93,7 @@ public class SkillController {
             String actualBucketName = resultArray.length > 4 ? (String) resultArray[4] : bucketName;
 
             if (bucketMessage != null) {
-                System.out.println("桶信息已返回");
+                log.debug("event=FILE_DOWNLOAD_BUCKET_METADATA_AVAILABLE");
             }
             
             // 提取文件名

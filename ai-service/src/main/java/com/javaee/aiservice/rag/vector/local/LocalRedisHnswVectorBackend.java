@@ -1,5 +1,6 @@
 package com.javaee.aiservice.rag.vector.local;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.github.jelmerk.knn.DistanceFunctions;
 import com.github.jelmerk.knn.Item;
 import com.github.jelmerk.knn.SearchResult;
@@ -94,7 +95,8 @@ public class LocalRedisHnswVectorBackend
         } catch (Exception e) {
             index = null;
             activeEmbedding = null;
-            log.warn("HNSW 索引初始化失败，将在首次写入时构建: {}", e.getMessage());
+            SafeDiagnosticLogger.warn(log, "LOCAL_VECTOR_INDEX_DEGRADED", "REDIS_UNAVAILABLE",
+                    e, true, 0, 1);
         } finally {
             lock.writeLock().unlock();
         }
@@ -390,7 +392,8 @@ public class LocalRedisHnswVectorBackend
                 throw new IllegalStateException("HNSW rejected replacement for id=" + id);
             }
         } catch (Exception firstFailure) {
-            log.info("HNSW 索引需要重建以回收历史版本容量: {}", firstFailure.getMessage());
+            SafeDiagnosticLogger.warn(log, "LOCAL_VECTOR_INDEX_REBUILD_REQUIRED",
+                    "VECTOR_INDEX_CAPACITY_REBUILD", firstFailure, true, 0, 1);
             rebuildIndexFromRedis();
             if (index == null || index.get(id).isEmpty()) {
                 throw firstFailure;
@@ -489,7 +492,8 @@ public class LocalRedisHnswVectorBackend
                     loaded++;
                 }
             } catch (Exception e) {
-                log.warn("HNSW 索引重建时跳过向量 id={}: {}", id, e.getMessage());
+                SafeDiagnosticLogger.warn(log, "LOCAL_VECTOR_RECORD_SKIPPED",
+                        "VECTOR_RECORD_REBUILD_FAILED", e, false, 0, 1);
             }
         }
         index = rebuilt;

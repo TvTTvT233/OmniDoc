@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -161,11 +160,10 @@ public class FaultDetector {
         if (record != null) {
             record.resolve(System.currentTimeMillis());
             alertService.clearCooldown(fingerprint);
-            log.info("故障已自动恢复: faultId={}, fingerprint={}", record.getFaultId(), fingerprint);
+            log.info("故障已自动恢复: faultId={}", record.getFaultId());
         }
     }
 
-    @Scheduled(fixedDelayString = "${ai.aiops.detection.interval-ms:60000}")
     public void scheduledDetection() {
         detectFaults();
     }

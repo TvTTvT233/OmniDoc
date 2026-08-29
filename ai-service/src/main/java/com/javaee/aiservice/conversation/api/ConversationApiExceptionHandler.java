@@ -3,6 +3,7 @@ package com.javaee.aiservice.conversation.api;
 import com.javaee.aiservice.conversation.service.ConversationErrorCode;
 import com.javaee.aiservice.conversation.service.ConversationMemoryException;
 import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -10,6 +11,9 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -56,10 +60,22 @@ public final class ConversationApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ConversationApiErrorResponse> handleUnexpected(Exception error) {
-        log.error("Unexpected structured conversation API failure", error);
+        SafeDiagnosticLogger.error(log, "CONVERSATION_API_FAILED", "CONVERSATION_INTERNAL_ERROR",
+                error, false, 0, 1, currentRequestId(), null);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ConversationApiErrorResponse(
                 "CONVERSATION_REQUEST_FAILED",
                 "Conversation request failed"));
+    }
+
+    private static String currentRequestId() {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        if (!(attributes instanceof ServletRequestAttributes servletAttributes)) {
+            return null;
+        }
+        Object requestId = servletAttributes.getRequest().getAttribute("requestId");
+        return requestId == null
+                ? servletAttributes.getRequest().getHeader("X-Request-Id")
+                : requestId.toString();
     }
 
     private static HttpStatus statusFor(ConversationErrorCode code) {

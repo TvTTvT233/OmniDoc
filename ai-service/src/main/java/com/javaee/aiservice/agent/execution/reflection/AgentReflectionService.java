@@ -1,5 +1,6 @@
 package com.javaee.aiservice.agent.execution.reflection;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.agent.ChatService;
@@ -65,7 +66,8 @@ public class AgentReflectionService {
             normalizeDecision(reflection, request, results, iteration, maxIterations);
             return reflection;
         } catch (Exception e) {
-            log.warn("Agent反思调用失败，使用启发式反思: {}", e.getMessage());
+            SafeDiagnosticLogger.warn(log, "AGENT_REFLECTION_DEGRADED", "REMOTE_MODEL_CALL_FAILED",
+                    e, true, 0, 1);
             return heuristicReflection(iteration, maxIterations, results.get(results.size() - 1), e.getMessage());
         }
     }

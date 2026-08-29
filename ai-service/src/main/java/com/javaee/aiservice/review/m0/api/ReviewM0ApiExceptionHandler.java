@@ -1,9 +1,12 @@
 package com.javaee.aiservice.review.m0.api;
 
 import com.javaee.aiservice.review.m0.file.OwnedFileAccessException;
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.javaee.aiservice.review.m0.model.ReviewM0ErrorCode;
 import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataAccessException;
@@ -26,6 +29,8 @@ import static com.javaee.aiservice.review.m0.api.ReviewM0ApiDtos.ErrorResponse;
 @RestControllerAdvice(assignableTypes = ReviewM0Controller.class)
 public final class ReviewM0ApiExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(ReviewM0ApiExceptionHandler.class);
+
     @ExceptionHandler(ReviewM0ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> resource(
             ReviewM0ResourceNotFoundException error, HttpServletRequest request
@@ -35,6 +40,10 @@ public final class ReviewM0ApiExceptionHandler {
 
     @ExceptionHandler(ReviewM0Exception.class)
     public ResponseEntity<ErrorResponse> review(ReviewM0Exception error, HttpServletRequest request) {
+        if (status(error.errorCode()).is5xxServerError()) {
+            SafeDiagnosticLogger.error(log, "REVIEW_M0_API_FAILED", error.errorCode().name(),
+                    error, retryable(error.errorCode()), 0, 1, requestId(request), null);
+        }
         return error(error.errorCode(), safeDetails(error.errorCode(), request), request);
     }
 
@@ -43,6 +52,10 @@ public final class ReviewM0ApiExceptionHandler {
         ReviewM0ErrorCode code = error.kind() == OwnedFileAccessException.Kind.NOT_FOUND
                 ? ReviewM0ErrorCode.REVIEW_M0_RESOURCE_NOT_FOUND
                 : ReviewM0ErrorCode.REVIEW_M0_FILE_SERVICE_UNAVAILABLE;
+        if (status(code).is5xxServerError()) {
+            SafeDiagnosticLogger.error(log, "REVIEW_M0_FILE_ACCESS_FAILED", code.name(),
+                    error, true, 0, 1, requestId(request), null);
+        }
         return error(code, safeDetails(code, request), request);
     }
 
@@ -67,11 +80,15 @@ public final class ReviewM0ApiExceptionHandler {
 
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ErrorResponse> storage(DataAccessException error, HttpServletRequest request) {
+        SafeDiagnosticLogger.error(log, "REVIEW_M0_STORAGE_FAILED", "REVIEW_M0_STORAGE_UNAVAILABLE",
+                error, true, 0, 1, requestId(request), null);
         return error(ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE, Map.of(), request);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> internal(Exception error, HttpServletRequest request) {
+        SafeDiagnosticLogger.error(log, "REVIEW_M0_API_FAILED", "REVIEW_M0_INTERNAL_ERROR",
+                error, false, 0, 1, requestId(request), null);
         return error(ReviewM0ErrorCode.REVIEW_M0_INTERNAL_ERROR, Map.of(), request);
     }
 
@@ -159,7 +176,18 @@ public final class ReviewM0ApiExceptionHandler {
 
     private static String requestId(HttpServletRequest request) {
         Object value = request.getAttribute(ReviewM0RequestIdFilter.ATTRIBUTE);
-        return value instanceof String text && !text.isBlank()
-                ? text : "req_" + UUID.randomUUID().toString().replace("-", "");
+        if (value instanceof String text && !text.isBlank()) {
+            return text;
+        }
+        String generated = "req_" + UUID.randomUUID().toString().replace("-", "");
+        request.setAttribute(ReviewM0RequestIdFilter.ATTRIBUTE, generated);
+        return generated;
+    }
+
+    private static boolean retryable(ReviewM0ErrorCode code) {
+        return code == ReviewM0ErrorCode.REVIEW_M0_FILE_SERVICE_UNAVAILABLE
+                || code == ReviewM0ErrorCode.REVIEW_M0_REMOTE_MODEL_FAILED
+                || code == ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE
+                || code == ReviewM0ErrorCode.REVIEW_M0_JOB_QUEUE_UNAVAILABLE;
     }
 }

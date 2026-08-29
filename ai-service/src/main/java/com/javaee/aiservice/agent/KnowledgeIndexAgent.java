@@ -1,5 +1,6 @@
 package com.javaee.aiservice.agent;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.javaee.aiservice.rag.DocumentVectorizer;
 import com.javaee.aiservice.rag.KnowledgeBase;
 import com.javaee.aiservice.rag.VectorStore;
@@ -179,7 +180,8 @@ public class KnowledgeIndexAgent {
                 try {
                     knowledgeBase.removeDocument(job.getDocumentId());
                 } catch (Exception removalError) {
-                    log.warn("清理旧文档失败，继续重新索引: {}", removalError.getMessage());
+                    SafeDiagnosticLogger.warn(log, "KNOWLEDGE_INDEX_CLEANUP_DEGRADED",
+                            "KNOWLEDGE_INDEX_CLEANUP_FAILED", removalError, true, 0, 1);
                 }
             }
             knowledgeBase.addDocument(job.getDocumentId(), content, enriched);
@@ -192,7 +194,8 @@ public class KnowledgeIndexAgent {
             saveAndPublish(job, "knowledge_indexed", "文档索引完成");
             log.info("文档索引完成: documentId={}, jobId={}", job.getDocumentId(), job.getJobId());
         } catch (Exception e) {
-            log.error("文档索引失败: jobId={}", job.getJobId(), e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_INDEX_JOB_FAILED",
+                    "KNOWLEDGE_INDEX_BUILD_FAILED", e, true, 0, 1, null, job.getJobId());
             job.setStatus(KnowledgeIndexStatus.FAILED);
             job.setErrorMessage(e.getMessage());
             saveAndPublish(job, "knowledge_failed", "文档索引失败: " + e.getMessage());
@@ -372,7 +375,7 @@ public class KnowledgeIndexAgent {
     }
 
     public List<Map<String, Object>> searchKnowledge(String query, int topK, String userId, String knowledgeBaseId) {
-        log.info("搜索知识库: query={}, userId={}", query, userId);
+        log.info("搜索知识库: queryChars={}, topK={}", query == null ? 0 : query.length(), topK);
         try {
             float[] queryVector = documentVectorizer.vectorize(query);
             Map<String, Object> filters = Map.of(
@@ -388,7 +391,8 @@ public class KnowledgeIndexAgent {
                     .filter(item -> matchesOwner(item, userId, knowledgeBaseId))
                     .toList();
         } catch (Exception e) {
-            log.error("知识库搜索失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_SEARCH_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             throw new RuntimeException("知识库搜索失败: " + e.getMessage(), e);
         }
     }
@@ -403,7 +407,8 @@ public class KnowledgeIndexAgent {
                 "message", "索引删除成功"
             );
         } catch (Exception e) {
-            log.error("删除索引失败", e);
+            SafeDiagnosticLogger.error(log, "KNOWLEDGE_INDEX_DELETE_FAILED",
+                    "KNOWLEDGE_BACKEND_UNAVAILABLE", e, true, 0, 1, null, null);
             return Map.of(
                 "status", "error",
                 "documentId", documentId,

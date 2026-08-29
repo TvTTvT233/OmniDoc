@@ -78,8 +78,8 @@ public class SemanticSegmentStrategy implements SegmentStrategy {
                         group.getTheme()
                 );
                 segments.add(segment);
-                log.debug("生成分段: segmentId={}, theme={}, charCount={}",
-                        segment.getSegmentId(), group.getTheme(), segmentContent.length());
+                log.debug("生成分段: segmentId={}, themeChars={}, charCount={}",
+                        segment.getSegmentId(), group.getTheme().length(), segmentContent.length());
                 segmentIndex++;
             }
         }

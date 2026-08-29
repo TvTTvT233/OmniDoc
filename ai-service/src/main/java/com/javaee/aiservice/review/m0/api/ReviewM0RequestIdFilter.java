@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -23,7 +24,11 @@ public final class ReviewM0RequestIdFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        request.setAttribute(ATTRIBUTE, "req_" + UUID.randomUUID().toString().replace("-", ""));
-        filterChain.doFilter(request, response);
+        String requestId = "req_" + UUID.randomUUID().toString().replace("-", "");
+        request.setAttribute(ATTRIBUTE, requestId);
+        try (MDC.MDCCloseable ignoredRequest = MDC.putCloseable("requestId", requestId);
+             MDC.MDCCloseable ignoredCorrelation = MDC.putCloseable("correlationId", requestId)) {
+            filterChain.doFilter(request, response);
+        }
     }
 }
