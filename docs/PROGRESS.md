@@ -2,8 +2,8 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-23
-- **当前阶段**：Review M0 R3 独立最终自动门禁为 `AUTO_VERIFIED / MANUAL_PENDING`；Memory V1 最终确定性门禁保持 `AUTO_VERIFIED / MANUAL_PENDING`
+- **更新日期**：2026-08-29
+- **当前阶段**：Review M0 A-FIX2 运行时安全日志为 `TARGETED_VERIFIED / INTEGRATION_PENDING`；Review M0 R3 与 Memory V1 原最终门禁状态保持不变
 - **首个专业场景**：奖学金申报材料审查 V1
 - **下一阶段**：由用户分别按 Review M0 与 Memory V1 人工清单验证真实浏览器/JWT、MySQL、MinIO、Redis、模型及外部链路；自动门通过不等同于 `HUMAN_ACCEPTED`
 
@@ -442,6 +442,15 @@
 - 状态保持 `AUTO_VERIFIED / MANUAL_PENDING`。真实 MySQL 8、MinIO、双服务进程、JWT、document/OCR 网络链、远程模型、浏览器/页面、真实 Qdrant 和远程 Embedding 均为 `NOT_RUN`；P-08 为 `LOCAL_ONLY`，P-09 为 `NOT_RUN / PENDING`。
 - 未合并 `main`、未部署、未进行人工验收；详细命令、计数、expected skip 和外部边界见 `docs/review-m0/handoffs/M0-R3-FINAL-GATE.md`。
 
+## Review M0 A-FIX2 运行时安全日志
+
+- 从固定基线 `741a73bd2370a271c0386f3128a48077e55c95fc` 在独立 worktree 完成，不以失败证据提交作为代码起点；实现提交为 `eb57b799fbc8558f392bc0f6cdb67deef2b340c0`。
+- 默认/local 日志收紧至 INFO 并显式约束 SQL/事务/连接池，禁用异常展开；新增固定 reason code、request/correlation ID、白名单类别、retry/count 的安全事件，不记录 Throwable/message/body/远程响应。
+- AIOps 调度改为显式启用；Redis/调度失败被安全计数并限制在后台任务内。公共全局异常 handler 只改变日志，不改变返回 code/message 或 HTTP/API envelope。
+- 最终两组 fat Jar 覆盖 HTTP ready、请求失败、Redis 不可用、调度异常、MySQL 8 schema、4 路 DB 并发和停库；127 行日志中 SQL、Java stack、异常头、连接 URL、凭据/JWT/objectKey/hash/body/generated password 全为 0，安全 diagnostic 16。
+- 新增及相关合同最终 40/40；M0-01 为 100/87/13 expected skipped；默认 Review 门 26/26、`ASSET_VERIFIED`。未运行完整 A、Integrated、B/C/D、真实 MinIO/OCR/远程模型/MCP/浏览器。
+- A-FIX1 仍独占幂等算法；建议 A-FIX1 先集成，再解决本任务在 Review handler/filter 与公共 YAML 的日志冲突。详细交接见 `docs/review-m0/handoffs/A-FIX2-RUNTIME-SAFE-LOGGING-R1.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -463,6 +472,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-29 | Review M0 A-FIX2 运行时安全日志 | 默认 INFO/SQL guards/无堆栈，AIOps 显式启用和安全后台诊断；fat Jar Redis/MySQL/DB 并发与停库日志 127 行禁项全 0；专项 40/40、M0-01 100/87/13、默认门 26/26；待 A-FIX1 后集成 |
 | 2026-08-23 | Review M0 R3 最终自动验收 | 独立核对唯一候选拓扑/patch 等价与全部自动门；默认 26/26、Integrated 41/41、adapter 15/15，Review/旧能力回归无失败错误；状态 `AUTO_VERIFIED / MANUAL_PENDING`，真实环境与人工验收保持 `NOT_RUN` |
 | 2026-08-11 | Memory M07 最终自动验收 | 独立门禁与前端验收合入主分支；统一入口 187/187、失败/错误/跳过均为 0，异步轮询 2/2、Web 构建通过，状态 `AUTO_VERIFIED / MANUAL_PENDING` |
 | 2026-08-11 | Memory M06-C 前端会话体验 | Global/Editor 接管结构化会话历史、新建、分页、归档/恢复/删除和 `clientRequestId`，移除临时/默认 ID 与伪回复；前端契约 25/25、翻转回归 6/6、独立验收 0/11→11/11、构建通过，真实浏览器与服务联调待验收 |
