@@ -3,9 +3,9 @@
 ## 状态快照
 
 - **更新日期**：2026-08-30
-- **当前阶段**：Review M0 A-FIX3 store 并发合同为 `HANDOFF_READY`，A-FIX2 运行时安全日志为 `TARGETED_VERIFIED / INTEGRATION_PENDING`；Review M0 R3 与 Memory V1 原最终门禁状态保持不变
+- **当前阶段**：Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2 为 `FIX_INTEGRATION_R2_READY`；尚未执行完整 A，也未启动 B/C/D
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：由用户分别按 Review M0 与 Memory V1 人工清单验证真实浏览器/JWT、MySQL、MinIO、Redis、模型及外部链路；自动门通过不等同于 `HUMAN_ACCEPTED`
+- **下一阶段**：以 `integration/review-m0-a-fixes-r2` 最终唯一 HEAD 执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
 
 ## 已确认
 
@@ -459,6 +459,14 @@
 - 修复后的既有 MySQL 门连续 3 轮均 2/2；新 concurrent runner 的 seed/verify 均 1/1，继续覆盖双实例、8/16/48、回滚接管、异载荷 409、owner 隔离和重启重放；A-FIX1 直接相关 60/60、默认门 26/26、Integrated 41/41。
 - A-FIX4 与本任务直接冲突 `ReviewM0ApiIdempotencySnapshotTest.java`，且语义上会修改生产重试策略；集成须同时保留 A-FIX4 的 DB-unavailable 分类/预算和本任务完整事务回滚证明。详细交接见 `docs/review-m0/handoffs/A-FIX3-STORE-CONCURRENCY-CONTRACT-R1.md`。
 
+## Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2
+
+- 从失败候选 `cb1ded9b9dfcf762e28a1c1064bd58f85e40b957` 新建隔离分支/worktree，按 A-FIX3 实现与 handoff、A-FIX4 实现与 handoff 的固定顺序集成；四个输入 ancestry 和清洁状态均已核对。
+- 唯一冲突 `ReviewM0ApiIdempotencySnapshotTest.java` 由独立提交语义合并，同时保留 A-FIX3 完整事务回滚证明和 A-FIX4 contention/storage-unavailable 分类、预算与 envelope 合同；未删除测试、降低断言或改变 skip。
+- 合并专项 63/63、安全/API 40/40；旧 MySQL 8 runner 连续三轮各 2/2，新并发 runner seed/verify 各 1/1；原生 ai fat Jar 在 8/16/48 同键并发下全部 201 且 body 唯一，停库三次均在 5.02-5.04 秒返回 503 / `REVIEW_M0_STORAGE_UNAVAILABLE`，500 为 0，敏感日志禁项全为 0。
+- Review 全量门通过：M0-01 100/87/13 frozen expected skip、默认 26/26、Integrated 41/41、adapter 15/15、M0-02..06、Wave 2/3/recheck、FIX1、R1-C 和 file F3/F4 均无失败/错误。
+- 旧能力通过：Memory 187/187、MCP 80/80、QV04 112/112、Document 4/4、AllModels 1/1；远程模型/MCP 保持 disabled/LOCAL_ONLY。未执行完整 A，未启动 B/C/D；详细交接见 `docs/review-m0/handoffs/A-FIX34-INTEGRATION-FULL-REGRESSION-R2.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -480,6 +488,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-30 | Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2 | 唯一冲突语义合并；组合 63/63、安全 40/40、旧 MySQL 三轮各 2/2、新并发 seed/verify 各 1/1；原生并发/停库/日志门、Review 全量及 Memory 187/MCP 80/QV04 112 全过，状态 `FIX_INTEGRATION_R2_READY`，仅授权完整重跑 A |
 | 2026-08-30 | Review M0 A-FIX3 store 并发合同 | 生产 claim 调用全部归属完整 `REQUIRES_NEW` 重试事务；旧 MySQL 直调 store 门迁移到正式入口并保留全部强度/断言；旧门连续 3 轮 2/2、新 runner seed/verify 全过、直接相关 60/60、默认 26/26、Integrated 41/41 |
 | 2026-08-29 | Review M0 A-FIX2 运行时安全日志 | 默认 INFO/SQL guards/无堆栈，AIOps 显式启用和安全后台诊断；fat Jar Redis/MySQL/DB 并发与停库日志 127 行禁项全 0；专项 40/40、M0-01 100/87/13、默认门 26/26；待 A-FIX1 后集成 |
 | 2026-08-23 | Review M0 R3 最终自动验收 | 独立核对唯一候选拓扑/patch 等价与全部自动门；默认 26/26、Integrated 41/41、adapter 15/15，Review/旧能力回归无失败错误；状态 `AUTO_VERIFIED / MANUAL_PENDING`，真实环境与人工验收保持 `NOT_RUN` |
