@@ -80,6 +80,14 @@ class ReviewM0ConfigurationTest {
         properties.setFileServiceRequestTimeout(java.time.Duration.ofSeconds(31));
         assertThatThrownBy(properties::validatedFileServiceRequestTimeout)
                 .isInstanceOf(IllegalStateException.class);
+        properties = new ReviewM0RuntimeProperties();
+        properties.setIdempotencyTotalWaitBudget(java.time.Duration.ofSeconds(11));
+        assertThatThrownBy(properties::idempotencyRetryPolicy)
+                .isInstanceOf(IllegalArgumentException.class);
+        properties = new ReviewM0RuntimeProperties();
+        properties.setIdempotencyTransactionTimeout(java.time.Duration.ofSeconds(9));
+        assertThatThrownBy(properties::idempotencyRetryPolicy)
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     static AnnotationConfigApplicationContext context() {

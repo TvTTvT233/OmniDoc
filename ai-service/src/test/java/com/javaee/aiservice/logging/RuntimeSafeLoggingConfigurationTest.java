@@ -23,6 +23,8 @@ class RuntimeSafeLoggingConfigurationTest {
                     .contains("org.springframework.jdbc.datasource.init.ScriptUtils: warn")
                     .contains("org.springframework.transaction: warn")
                     .contains("org.hibernate.SQL: off")
+                    .contains("connection-timeout: ${AI_DB_CONNECTION_TIMEOUT_MS:5000}")
+                    .contains("idempotency-total-wait-budget: ${AI_REVIEW_M0_IDEMPOTENCY_TOTAL_WAIT_BUDGET:8s}")
                     .contains("enabled: ${AI_AIOPS_SCHEDULING_ENABLED:false}")
                     .doesNotContain("com.javaee.aiservice: debug");
         }

@@ -87,6 +87,12 @@ public final class ReviewM0ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> internal(Exception error, HttpServletRequest request) {
+        if (ReviewM0DataAccessFailureClassifier.classify(error)
+                == ReviewM0DataAccessFailureClassifier.FailureKind.STORAGE_UNAVAILABLE) {
+            SafeDiagnosticLogger.error(log, "REVIEW_M0_STORAGE_FAILED", "REVIEW_M0_STORAGE_UNAVAILABLE",
+                    error, true, 0, 1, requestId(request), null);
+            return error(ReviewM0ErrorCode.REVIEW_M0_STORAGE_UNAVAILABLE, Map.of(), request);
+        }
         SafeDiagnosticLogger.error(log, "REVIEW_M0_API_FAILED", "REVIEW_M0_INTERNAL_ERROR",
                 error, false, 0, 1, requestId(request), null);
         return error(ReviewM0ErrorCode.REVIEW_M0_INTERNAL_ERROR, Map.of(), request);

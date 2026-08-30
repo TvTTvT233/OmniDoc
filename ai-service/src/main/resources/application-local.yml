@@ -23,7 +23,7 @@ spring:
       minimum-idle: 0
       idle-timeout: 30000
       max-lifetime: 300000
-      connection-timeout: 10000
+      connection-timeout: ${AI_DB_CONNECTION_TIMEOUT_MS:5000}
 
   cloud:
     compatibility-verifier:
@@ -80,6 +80,11 @@ spring:
 
 # AI配置
 ai:
+  review-m0:
+    runtime:
+      idempotency-maximum-transaction-attempts: ${AI_REVIEW_M0_IDEMPOTENCY_MAX_ATTEMPTS:24}
+      idempotency-total-wait-budget: ${AI_REVIEW_M0_IDEMPOTENCY_TOTAL_WAIT_BUDGET:8s}
+      idempotency-transaction-timeout: ${AI_REVIEW_M0_IDEMPOTENCY_TRANSACTION_TIMEOUT:8s}
   memory:
     enabled: ${AI_MEMORY_ENABLED:true}
     api:

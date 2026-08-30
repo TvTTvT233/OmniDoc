@@ -285,6 +285,77 @@ class ReviewM0ApiIdempotencySnapshotTest {
     }
 
     @Test
+    void connectionAcquisitionFailureNeverEntersContentionRetryLoop() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        AtomicInteger attempts = new AtomicInteger();
+        ReviewM0IdempotencyStore unavailable = new DelegatingStore(store(fixture)) {
+            @Override
+            public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
+                attempts.incrementAndGet();
+                throw new CannotGetJdbcConnectionException(
+                        "synthetic", new SQLTransientConnectionException("synthetic"));
+            }
+        };
+
+        assertStorageUnavailable(() -> new ReviewM0ApiIdempotency(
+                unavailable, fixture.transactions()).execute(
+                scope("connection-unavailable"), DIGEST, 201, "CASE", CaseResponse.class,
+                () -> new ReviewM0ApiIdempotency.Resource<>(
+                        "case-1", response("must-not-run", 0))));
+
+        assertThat(attempts).hasValue(1);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isZero();
+    }
+
+    @Test
+    void totalWaitBudgetBoundsPersistentContentionIndependentlyOfAttemptLimit() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        AtomicInteger attempts = new AtomicInteger();
+        ReviewM0IdempotencyStore contention = new DelegatingStore(store(fixture)) {
+            @Override
+            public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
+                attempts.incrementAndGet();
+                throw new CannotAcquireLockException("synthetic");
+            }
+        };
+        ReviewM0IdempotencyRetryPolicy policy = new ReviewM0IdempotencyRetryPolicy(
+                64, Duration.ofMillis(40), Duration.ofMillis(40));
+
+        long started = System.nanoTime();
+        assertStorageUnavailable(() -> new ReviewM0ApiIdempotency(
+                contention, fixture.transactions(), policy).execute(
+                scope("total-budget"), DIGEST, 201, "CASE", CaseResponse.class,
+                () -> new ReviewM0ApiIdempotency.Resource<>(
+                        "case-1", response("must-not-run", 0))));
+        long elapsedMillis = Duration.ofNanos(System.nanoTime() - started).toMillis();
+
+        assertThat(attempts.get()).isBetween(1, 63);
+        assertThat(elapsedMillis).isLessThan(1000);
+    }
+
+    @Test
+    void integrityFailureIsPropagatedWithoutRetry() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        AtomicInteger attempts = new AtomicInteger();
+        ReviewM0IdempotencyStore integrityFailure = new DelegatingStore(store(fixture)) {
+            @Override
+            public IdempotencyClaim claim(IdempotencyScope scope, String requestDigest) {
+                attempts.incrementAndGet();
+                throw new DataIntegrityViolationException("synthetic");
+            }
+        };
+
+        assertThatThrownBy(() -> new ReviewM0ApiIdempotency(
+                integrityFailure, fixture.transactions()).execute(
+                scope("integrity"), DIGEST, 201, "CASE", CaseResponse.class,
+                () -> new ReviewM0ApiIdempotency.Resource<>(
+                        "case-1", response("must-not-run", 0))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(attempts).hasValue(1);
+    }
+
+    @Test
     void operationFailureAndSnapshotLimitFailureRollBackBusinessClaimAndSnapshot() {
         ReviewM0JdbcTestFixture operationFixture = new ReviewM0JdbcTestFixture();
         operationFixture.jdbc().execute("CREATE TABLE rollback_business_write(id VARCHAR(64) PRIMARY KEY)");

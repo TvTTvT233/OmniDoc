@@ -308,9 +308,11 @@ public class ReviewM0Configuration {
 
     @Bean
     ReviewM0ApiIdempotency reviewM0ApiIdempotency(
-            ReviewM0IdempotencyStore store, PlatformTransactionManager transactions
+            ReviewM0IdempotencyStore store, PlatformTransactionManager transactions,
+            ReviewM0RuntimeProperties properties
     ) {
-        return new ReviewM0ApiIdempotency(store, transactions);
+        return new ReviewM0ApiIdempotency(
+                store, transactions, properties.idempotencyRetryPolicy());
     }
 
     @Bean

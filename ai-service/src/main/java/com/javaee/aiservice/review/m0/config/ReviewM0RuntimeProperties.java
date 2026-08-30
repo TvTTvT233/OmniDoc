@@ -1,12 +1,13 @@
 package com.javaee.aiservice.review.m0.config;
 
 import com.javaee.aiservice.review.m0.archive.ArchiveSafetyLimits;
+import com.javaee.aiservice.review.m0.api.ReviewM0IdempotencyRetryPolicy;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
 import java.net.URI;
 
-/** Review-only typed limits. No common application YAML is required or modified. */
+/** Review-only typed operational limits. */
 @ConfigurationProperties(prefix = "ai.review-m0.runtime")
 public final class ReviewM0RuntimeProperties {
     private int maximumArchiveEntries = ArchiveSafetyLimits.DEFAULT_MAXIMUM_ENTRIES;
@@ -20,6 +21,12 @@ public final class ReviewM0RuntimeProperties {
     private URI fileServiceBaseUri = URI.create("http://file:8082");
     private Duration fileServiceConnectTimeout = Duration.ofSeconds(2);
     private Duration fileServiceRequestTimeout = Duration.ofSeconds(10);
+    private int idempotencyMaximumTransactionAttempts =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_MAXIMUM_TRANSACTION_ATTEMPTS;
+    private Duration idempotencyTotalWaitBudget =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_TOTAL_WAIT_BUDGET;
+    private Duration idempotencyTransactionTimeout =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_TRANSACTION_TIMEOUT;
 
     public ArchiveSafetyLimits archiveSafetyLimits() {
         return new ArchiveSafetyLimits(
@@ -55,6 +62,13 @@ public final class ReviewM0RuntimeProperties {
         return validateFileServiceTimeout(fileServiceRequestTimeout, "request");
     }
 
+    public ReviewM0IdempotencyRetryPolicy idempotencyRetryPolicy() {
+        return new ReviewM0IdempotencyRetryPolicy(
+                idempotencyMaximumTransactionAttempts,
+                idempotencyTotalWaitBudget,
+                idempotencyTransactionTimeout);
+    }
+
     private static Duration validateFileServiceTimeout(Duration value, String name) {
         if (value == null || value.isZero() || value.isNegative()
                 || value.compareTo(Duration.ofSeconds(30)) > 0) {
@@ -85,4 +99,12 @@ public final class ReviewM0RuntimeProperties {
     public void setFileServiceConnectTimeout(Duration value) { fileServiceConnectTimeout = value; }
     public Duration getFileServiceRequestTimeout() { return fileServiceRequestTimeout; }
     public void setFileServiceRequestTimeout(Duration value) { fileServiceRequestTimeout = value; }
+    public int getIdempotencyMaximumTransactionAttempts() { return idempotencyMaximumTransactionAttempts; }
+    public void setIdempotencyMaximumTransactionAttempts(int value) {
+        idempotencyMaximumTransactionAttempts = value;
+    }
+    public Duration getIdempotencyTotalWaitBudget() { return idempotencyTotalWaitBudget; }
+    public void setIdempotencyTotalWaitBudget(Duration value) { idempotencyTotalWaitBudget = value; }
+    public Duration getIdempotencyTransactionTimeout() { return idempotencyTransactionTimeout; }
+    public void setIdempotencyTransactionTimeout(Duration value) { idempotencyTransactionTimeout = value; }
 }
