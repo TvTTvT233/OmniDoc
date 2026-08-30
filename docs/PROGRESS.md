@@ -2,8 +2,8 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-29
-- **当前阶段**：Review M0 A-FIX2 运行时安全日志为 `TARGETED_VERIFIED / INTEGRATION_PENDING`；Review M0 R3 与 Memory V1 原最终门禁状态保持不变
+- **更新日期**：2026-08-30
+- **当前阶段**：Review M0 A-FIX3 store 并发合同为 `HANDOFF_READY`，A-FIX2 运行时安全日志为 `TARGETED_VERIFIED / INTEGRATION_PENDING`；Review M0 R3 与 Memory V1 原最终门禁状态保持不变
 - **首个专业场景**：奖学金申报材料审查 V1
 - **下一阶段**：由用户分别按 Review M0 与 Memory V1 人工清单验证真实浏览器/JWT、MySQL、MinIO、Redis、模型及外部链路；自动门通过不等同于 `HUMAN_ACCEPTED`
 
@@ -451,6 +451,14 @@
 - 新增及相关合同最终 40/40；M0-01 为 100/87/13 expected skipped；默认 Review 门 26/26、`ASSET_VERIFIED`。未运行完整 A、Integrated、B/C/D、真实 MinIO/OCR/远程模型/MCP/浏览器。
 - A-FIX1 仍独占幂等算法；建议 A-FIX1 先集成，再解决本任务在 Review handler/filter 与公共 YAML 的日志冲突。详细交接见 `docs/review-m0/handoffs/A-FIX2-RUNTIME-SAFE-LOGGING-R1.md`。
 
+## Review M0 A-FIX3 store 并发合同
+
+- 从失败集成候选 `cb1ded9b9dfcf762e28a1c1064bd58f85e40b957` 在独立 worktree 审计全部生产 `ReviewM0IdempotencyStore.claim` 调用；所有生产路径均由 `ReviewM0ApiIdempotency` 的完整 `REQUIRES_NEW` 重试事务拥有，没有直接依赖 store 内层并发重试的生产调用。
+- 真实 MySQL 8 复现旧门 2 项中 1 error：旧验收并发直调 store，在 `SELECT ... FOR UPDATE` 发生 deadlock。冻结意图是长 scope、并发唯一性、完整碰撞和 V003/check，而直接 store 是偶然实现绑定。
+- 旧真实 MySQL 验收迁移到正式事务入口，保留 8 路并发、长字段和全部碰撞/约束断言，并在同一事务加入真实业务行；新增确定性测试证明瞬态失败为完整 `ROLLED_BACK`，下一尝试为全新 `COMMITTED`，失败不留 claim、业务行或快照。生产代码未改。
+- 修复后的既有 MySQL 门连续 3 轮均 2/2；新 concurrent runner 的 seed/verify 均 1/1，继续覆盖双实例、8/16/48、回滚接管、异载荷 409、owner 隔离和重启重放；A-FIX1 直接相关 60/60、默认门 26/26、Integrated 41/41。
+- A-FIX4 与本任务直接冲突 `ReviewM0ApiIdempotencySnapshotTest.java`，且语义上会修改生产重试策略；集成须同时保留 A-FIX4 的 DB-unavailable 分类/预算和本任务完整事务回滚证明。详细交接见 `docs/review-m0/handoffs/A-FIX3-STORE-CONCURRENCY-CONTRACT-R1.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -472,6 +480,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-30 | Review M0 A-FIX3 store 并发合同 | 生产 claim 调用全部归属完整 `REQUIRES_NEW` 重试事务；旧 MySQL 直调 store 门迁移到正式入口并保留全部强度/断言；旧门连续 3 轮 2/2、新 runner seed/verify 全过、直接相关 60/60、默认 26/26、Integrated 41/41 |
 | 2026-08-29 | Review M0 A-FIX2 运行时安全日志 | 默认 INFO/SQL guards/无堆栈，AIOps 显式启用和安全后台诊断；fat Jar Redis/MySQL/DB 并发与停库日志 127 行禁项全 0；专项 40/40、M0-01 100/87/13、默认门 26/26；待 A-FIX1 后集成 |
 | 2026-08-23 | Review M0 R3 最终自动验收 | 独立核对唯一候选拓扑/patch 等价与全部自动门；默认 26/26、Integrated 41/41、adapter 15/15，Review/旧能力回归无失败错误；状态 `AUTO_VERIFIED / MANUAL_PENDING`，真实环境与人工验收保持 `NOT_RUN` |
 | 2026-08-11 | Memory M07 最终自动验收 | 独立门禁与前端验收合入主分支；统一入口 187/187、失败/错误/跳过均为 0，异步轮询 2/2、Web 构建通过，状态 `AUTO_VERIFIED / MANUAL_PENDING` |
