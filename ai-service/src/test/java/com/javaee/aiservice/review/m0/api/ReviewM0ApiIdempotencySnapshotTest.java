@@ -12,9 +12,13 @@ import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import com.javaee.aiservice.review.m0.store.ReviewM0JdbcTestFixture;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.sql.SQLTransientConnectionException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
