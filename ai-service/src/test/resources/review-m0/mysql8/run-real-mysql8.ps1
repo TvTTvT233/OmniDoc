@@ -16,11 +16,28 @@ try {
 
     $ready = $false
     for ($attempt = 0; $attempt -lt 90; $attempt++) {
-        & docker exec --env "MYSQL_PWD=$runtimePassword" $containerName `
-            mysqladmin ping --user=root --silent 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            $ready = $true
-            break
+        $logPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $containerLogs = (& docker logs $containerName 2>&1 | Out-String)
+        } finally {
+            $ErrorActionPreference = $logPreference
+        }
+        if ($containerLogs -match 'MySQL init process done\. Ready for start up\.') {
+            $probePreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $probe = (& docker exec --env "MYSQL_PWD=$runtimePassword" $containerName `
+                    mysql --user=root --batch --skip-column-names --execute 'SELECT 1' 2>&1 `
+                    | Out-String).Trim()
+                $probeExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $probePreference
+            }
+            if ($probeExitCode -eq 0 -and $probe -eq '1') {
+                $ready = $true
+                break
+            }
         }
         Start-Sleep -Seconds 1
     }

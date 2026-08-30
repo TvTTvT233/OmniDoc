@@ -12,6 +12,8 @@ import com.javaee.aiservice.review.m0.model.ReviewM0Exception;
 import com.javaee.aiservice.review.m0.store.ReviewM0JdbcTestFixture;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -160,6 +162,62 @@ class ReviewM0ApiIdempotencySnapshotTest {
         assertThat(completions).hasValue(2);
         assertThat(fixture.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM retry_business_write", Integer.class)).isEqualTo(1);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isEqualTo(1);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency_response_snapshot", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void transientRetryEndsTheFailedWholeTransactionBeforeStartingTheNextAttempt() {
+        ReviewM0JdbcTestFixture fixture = new ReviewM0JdbcTestFixture();
+        fixture.jdbc().execute("CREATE TABLE retry_transaction_proof(id VARCHAR(64) PRIMARY KEY)");
+        JdbcReviewM0IdempotencyStore delegate = store(fixture);
+        AtomicInteger completions = new AtomicInteger();
+        ReviewM0IdempotencyStore failFirstCompletion = new DelegatingStore(delegate) {
+            @Override
+            public IdempotencyRecord completeWithSnapshot(
+                    IdempotencyScope scope, String requestDigest, int responseStatus,
+                    String responseType, String responseId, IdempotencyResponseSnapshot snapshot
+            ) {
+                IdempotencyRecord completed = super.completeWithSnapshot(
+                        scope, requestDigest, responseStatus, responseType, responseId, snapshot);
+                if (completions.incrementAndGet() == 1) {
+                    throw new CannotAcquireLockException("synthetic transient contention");
+                }
+                return completed;
+            }
+        };
+        List<Integer> transactionCompletions = new ArrayList<>();
+        AtomicInteger operations = new AtomicInteger();
+
+        ReviewM0ApiIdempotency.Result<CaseResponse> result = new ReviewM0ApiIdempotency(
+                failFirstCompletion, fixture.transactions()).execute(
+                scope("transaction-boundary-proof"), DIGEST, 201, "CASE", CaseResponse.class, () -> {
+                    assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+                    TransactionSynchronizationManager.registerSynchronization(
+                            new TransactionSynchronization() {
+                                @Override
+                                public void afterCompletion(int status) {
+                                    transactionCompletions.add(status);
+                                }
+                            });
+                    operations.incrementAndGet();
+                    fixture.jdbc().update(
+                            "INSERT INTO retry_transaction_proof(id) VALUES ('case-1')");
+                    return new ReviewM0ApiIdempotency.Resource<>(
+                            "case-1", response("first", 0));
+                });
+
+        assertThat(result.status()).isEqualTo(201);
+        assertThat(result.replayed()).isFalse();
+        assertThat(operations).hasValue(2);
+        assertThat(completions).hasValue(2);
+        assertThat(transactionCompletions).containsExactly(
+                TransactionSynchronization.STATUS_ROLLED_BACK,
+                TransactionSynchronization.STATUS_COMMITTED);
+        assertThat(fixture.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM retry_transaction_proof", Integer.class)).isEqualTo(1);
         assertThat(fixture.jdbc().queryForObject(
                 "SELECT COUNT(*) FROM review_m0_idempotency", Integer.class)).isEqualTo(1);
         assertThat(fixture.jdbc().queryForObject(

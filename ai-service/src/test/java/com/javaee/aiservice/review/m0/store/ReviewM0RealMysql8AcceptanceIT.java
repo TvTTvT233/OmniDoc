@@ -1,6 +1,6 @@
 package com.javaee.aiservice.review.m0.store;
 
-import com.javaee.aiservice.review.m0.idempotency.IdempotencyClaimStatus;
+import com.javaee.aiservice.review.m0.api.ReviewM0ApiIdempotency;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyResponseSnapshot;
 import com.javaee.aiservice.review.m0.idempotency.IdempotencyScope;
 import com.javaee.aiservice.review.m0.idempotency.JdbcReviewM0IdempotencyStore;
@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -130,31 +131,66 @@ class ReviewM0RealMysql8AcceptanceIT {
         }
         IdempotencyScope scope = new IdempotencyScope(
                 "户".repeat(128), "POST", "/" + "径".repeat(1023), "幂".repeat(255));
-        JdbcReviewM0IdempotencyStore store = store();
+        DataSourceTransactionManager transactionManager = new DataSourceTransactionManager(dataSource);
+        JdbcReviewM0IdempotencyStore store = new JdbcReviewM0IdempotencyStore(jdbc, transactionManager);
+        // Production concurrency is owned by the full API transaction, not by direct store retries.
+        ReviewM0ApiIdempotency idempotency = new ReviewM0ApiIdempotency(store, transactionManager);
+        AtomicInteger businessAttempts = new AtomicInteger();
         CountDownLatch start = new CountDownLatch(1);
         var executor = Executors.newFixedThreadPool(8);
         try {
-            List<java.util.concurrent.Future<IdempotencyClaimStatus>> futures = new ArrayList<>();
+            List<java.util.concurrent.Future<ReviewM0ApiIdempotency.Result<String>>> futures =
+                    new ArrayList<>();
             for (int index = 0; index < 8; index++) {
                 futures.add(executor.submit(() -> {
                     start.await();
-                    return store.claim(scope, "b".repeat(64)).status();
+                    return idempotency.execute(
+                            scope, "b".repeat(64), 201, "REAL_MYSQL_LONG_SCOPE", String.class,
+                            () -> {
+                                businessAttempts.incrementAndGet();
+                                jdbc.update("""
+                                        INSERT INTO review_m0_case(
+                                            case_id, user_id, title, processing_mode, basis_revision,
+                                            checklist_revision, material_set_revision, assignment_revision,
+                                            name_revision, version, current_checklist_snapshot_id, current_report_id,
+                                            created_at, updated_at)
+                                        VALUES ('case-long-scope', ?, 'stable-result', 'LOCAL_ONLY',
+                                                0, 0, 0, 0, 0, 0, NULL, NULL, ?, ?)
+                                        """, scope.ownerId(), now(), now());
+                                return new ReviewM0ApiIdempotency.Resource<>(
+                                        "case-long-scope", "stable-result");
+                            });
                 }));
             }
             start.countDown();
-            List<IdempotencyClaimStatus> statuses = new ArrayList<>();
+            List<ReviewM0ApiIdempotency.Result<String>> results = new ArrayList<>();
             for (var future : futures) {
-                statuses.add(future.get());
+                results.add(future.get());
             }
-            assertThat(statuses).filteredOn(value -> value == IdempotencyClaimStatus.STARTED).hasSize(1);
-            assertThat(statuses).filteredOn(value -> value == IdempotencyClaimStatus.REPLAY_IN_PROGRESS).hasSize(7);
+            assertThat(results).hasSize(8).allSatisfy(result -> {
+                assertThat(result.status()).isEqualTo(201);
+                assertThat(result.value()).isEqualTo("stable-result");
+            });
+            assertThat(results).filteredOn(result -> !result.replayed()).hasSize(1);
+            assertThat(results).filteredOn(ReviewM0ApiIdempotency.Result::replayed).hasSize(7);
         } finally {
             executor.shutdownNow();
         }
+        String scopeDigest = ReviewM0KeyDigests.idempotencyScope(
+                scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey());
+        assertThat(businessAttempts).hasValue(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM review_m0_case WHERE case_id='case-long-scope'",
+                Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency WHERE scope_digest=? AND state='COMPLETED'",
+                Integer.class, scopeDigest)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT COUNT(*) FROM review_m0_idempotency_response_snapshot WHERE scope_digest=?",
+                Integer.class, scopeDigest)).isEqualTo(1);
 
         jdbc.update("UPDATE review_m0_idempotency SET canonical_path='/collision' WHERE scope_digest=?",
-                ReviewM0KeyDigests.idempotencyScope(
-                        scope.ownerId(), scope.httpMethod(), scope.canonicalPath(), scope.idempotencyKey()));
+                scopeDigest);
         assertThatThrownBy(() -> store.find(scope))
                 .isInstanceOf(ReviewM0Exception.class)
                 .extracting(error -> ((ReviewM0Exception) error).errorCode())
