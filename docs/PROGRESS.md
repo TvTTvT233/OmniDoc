@@ -3,9 +3,20 @@
 ## 状态快照
 
 - **更新日期**：2026-08-31
-- **当前阶段**：Review M0 A-FIX5 JWT 认证入口定向修复已在独立分支达到 `HANDOFF_READY`；尚未集成、未执行完整 A，也未启动 B/C/D
+- **当前阶段**：Review M0 A-FIX5 已在独立分支完成集成及同一最终 HEAD 全量自动回归，达到 `FIX5_INTEGRATION_READY`；尚未执行完整 A，也未启动 B/C/D
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：将 A-FIX5 按 handoff 集成到新的唯一候选后执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
+- **下一阶段**：以 `integration/review-m0-a-fix5-r1` 的最终唯一 HEAD 为输入执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
+
+## Review M0 A-FIX5 集成及全量自动回归 R1
+
+- 状态：`FIX5_INTEGRATION_READY / A_AUTHORIZED`；只授权下一任务“完整重跑 A”，本任务不是完整 R4-A，未运行 B/C/D。
+- 固定基线 `84228b09cae2d3c0bfd5ae65c85d8af32422b23f`；依次无冲突集成 A-FIX5 实现 `d2bee5a6` 与 handoff `b81e4441`；已验证产品 HEAD `9c9731eac09eaf1564c1c5790c6ac609995c99e9`。
+- A-FIX5 完整生产 SecurityFilterChain/认证基线 56/56；A-FIX1～4 核心 64/64；M0-01 为 100 discovered / 87 passed / 13 frozen expected skip；默认/Integrated/adapter 分别 26/26、41/41、15/15。
+- 真实 MySQL 8 旧 runner 连续三轮各 2/2，新 concurrent runner seed/verify 各 1/1；原生 8/16/48 同键并发全部 201 且 body 唯一，500/503 为 0。
+- 七类缺失/无效认证均为冻结 401 envelope；owner 创建/读取 201/200，跨 owner/不存在 404/404，异载荷 409；停库三次均在约 5.0 秒返回 503，重启重放 201/body 不变。
+- ai/file fat Jar 均 HTTP ready，schema v3；最终日志扫描 SQL、stack-frame、Throwable、连接串、credential、JWT、objectKey、hash/body、generated password 全为 0，安全诊断 10。
+- Memory 187/187、MCP 80/80、QV04 112/112、Document 4/4、AllModels 1/1；四个远程模型 disabled，MCP 未创建远程客户端，保持 `LOCAL_ONLY`。
+- 交付：`docs/review-m0/handoffs/A-FIX5-INTEGRATION-FULL-REGRESSION-R1.md`。
 
 ## 已确认
 
