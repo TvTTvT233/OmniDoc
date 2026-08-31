@@ -24,11 +24,20 @@ public final class ReviewM0RequestIdFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        String requestId = "req_" + UUID.randomUUID().toString().replace("-", "");
-        request.setAttribute(ATTRIBUTE, requestId);
+        String requestId = getOrCreateRequestId(request);
         try (MDC.MDCCloseable ignoredRequest = MDC.putCloseable("requestId", requestId);
              MDC.MDCCloseable ignoredCorrelation = MDC.putCloseable("correlationId", requestId)) {
             filterChain.doFilter(request, response);
         }
+    }
+
+    public static String getOrCreateRequestId(HttpServletRequest request) {
+        Object value = request.getAttribute(ATTRIBUTE);
+        if (value instanceof String text && !text.isBlank()) {
+            return text;
+        }
+        String generated = "req_" + UUID.randomUUID().toString().replace("-", "");
+        request.setAttribute(ATTRIBUTE, generated);
+        return generated;
     }
 }

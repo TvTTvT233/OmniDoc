@@ -28,10 +28,8 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -343,12 +341,4 @@ public class ReviewM0Configuration {
                 idempotency, mapper, ids, jdbc, clock);
     }
 
-    @Bean
-    FilterRegistrationBean<ReviewM0RequestIdFilter> reviewM0RequestIdFilter() {
-        FilterRegistrationBean<ReviewM0RequestIdFilter> registration =
-                new FilterRegistrationBean<>(new ReviewM0RequestIdFilter());
-        registration.addUrlPatterns("/api/review-m0/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 20);
-        return registration;
-    }
 }

@@ -21,7 +21,6 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 
 import static com.javaee.aiservice.review.m0.api.ReviewM0ApiDtos.ErrorResponse;
 
@@ -181,13 +180,7 @@ public final class ReviewM0ApiExceptionHandler {
     }
 
     private static String requestId(HttpServletRequest request) {
-        Object value = request.getAttribute(ReviewM0RequestIdFilter.ATTRIBUTE);
-        if (value instanceof String text && !text.isBlank()) {
-            return text;
-        }
-        String generated = "req_" + UUID.randomUUID().toString().replace("-", "");
-        request.setAttribute(ReviewM0RequestIdFilter.ATTRIBUTE, generated);
-        return generated;
+        return ReviewM0RequestIdFilter.getOrCreateRequestId(request);
     }
 
     private static boolean retryable(ReviewM0ErrorCode code) {
