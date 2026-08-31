@@ -2,10 +2,10 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-30
-- **当前阶段**：Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2 为 `FIX_INTEGRATION_R2_READY`；尚未执行完整 A，也未启动 B/C/D
+- **更新日期**：2026-08-31
+- **当前阶段**：Review M0 A-FIX5 JWT 认证入口定向修复已在独立分支达到 `HANDOFF_READY`；尚未集成、未执行完整 A，也未启动 B/C/D
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：以 `integration/review-m0-a-fixes-r2` 最终唯一 HEAD 执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
+- **下一阶段**：将 A-FIX5 按 handoff 集成到新的唯一候选后执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
 
 ## 已确认
 
@@ -467,6 +467,15 @@
 - Review 全量门通过：M0-01 100/87/13 frozen expected skip、默认 26/26、Integrated 41/41、adapter 15/15、M0-02..06、Wave 2/3/recheck、FIX1、R1-C 和 file F3/F4 均无失败/错误。
 - 旧能力通过：Memory 187/187、MCP 80/80、QV04 112/112、Document 4/4、AllModels 1/1；远程模型/MCP 保持 disabled/LOCAL_ONLY。未执行完整 A，未启动 B/C/D；详细交接见 `docs/review-m0/handoffs/A-FIX34-INTEGRATION-FULL-REGRESSION-R2.md`。
 
+## Review M0 A-FIX5 JWT 401 认证入口
+
+- 从固定产品基线 `84228b09cae2d3c0bfd5ae65c85d8af32422b23f` 创建独立分支/worktree；失败证据提交 `291c0e1249b9a245e0c7063626ec4ffd701def40` 仅用于读取 A 的失败记录，未作为代码基线。实现提交为 `d2bee5a6c6e9f99e85e339bc19275bab2b06cf8b`。
+- ai-service 生产 `SecurityFilterChain` 现在只为 `/api/review-m0/**` 显式委派冻结认证入口：缺失或任意无效 JWT 统一返回 401、`AUTHENTICATION_REQUIRED`、四字段 JSON envelope 和稳定 requestId；异常原因、token 与敏感 details 不进入响应或日志。common `JwtAuthenticationFilter` 未修改。
+- 非 Review 受保护路由保持原有 403，授权成功后的权限不足处理器未改；合法 JWT 跨 owner 和不存在资源均保持 404，合法 JWT 下存储不可用保持 503。permitAll matcher 清单与公开面均未修改。
+- 完整生产安全链测试 12/12；与 Review API/Conversation/认证基线、A-FIX2 安全日志及 503 envelope 的组合门 56/56；默认 acceptance 26/26、Integrated 41/41（adapter 15/15）、M0-01 100 discovered / 87 passed / 13 frozen expected skipped、A-FIX1～4 核心选择器 64/64。
+- 结果源码构建的 ai-service fat Jar 在隔离 MySQL 8、真实 `JwtUtils`/JWT secret/生产安全链下完成原生 HTTP 门：7 类缺失/无效认证均为 401，同一冻结错误码/envelope；owner 成功 201/200，跨 owner 与不存在资源均 404，停库为 503；静态/API docs 为 200，非 Review 受保护路由为 403。正式日志 46 行，JWT/token、SQL、Java stack-frame、Throwable header、credential/body/connection URL/generated password 均为 0，白名单 diagnostic 为 2。
+- 全程 `LOCAL_ONLY`，远程模型和 MCP disabled；未做修复集成、完整 A 或 B/C/D。详细交接见 `docs/review-m0/handoffs/A-FIX5-JWT-401-ENTRYPOINT-R1.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -488,6 +497,7 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-31 | Review M0 A-FIX5 JWT 401 认证入口 | Review 路由缺失/无效 JWT 由原生 403 修复为冻结 401 envelope；生产链 12/12、组合门 56/56、默认 26/26、Integrated 41/41、M0-01 100/87/13、A-FIX1～4 核心 64/64；真实 fat Jar + MySQL 8 HTTP/日志门通过，状态 `HANDOFF_READY`，未集成或运行完整 A/B/C/D |
 | 2026-08-30 | Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2 | 唯一冲突语义合并；组合 63/63、安全 40/40、旧 MySQL 三轮各 2/2、新并发 seed/verify 各 1/1；原生并发/停库/日志门、Review 全量及 Memory 187/MCP 80/QV04 112 全过，状态 `FIX_INTEGRATION_R2_READY`，仅授权完整重跑 A |
 | 2026-08-30 | Review M0 A-FIX3 store 并发合同 | 生产 claim 调用全部归属完整 `REQUIRES_NEW` 重试事务；旧 MySQL 直调 store 门迁移到正式入口并保留全部强度/断言；旧门连续 3 轮 2/2、新 runner seed/verify 全过、直接相关 60/60、默认 26/26、Integrated 41/41 |
 | 2026-08-29 | Review M0 A-FIX2 运行时安全日志 | 默认 INFO/SQL guards/无堆栈，AIOps 显式启用和安全后台诊断；fat Jar Redis/MySQL/DB 并发与停库日志 127 行禁项全 0；专项 40/40、M0-01 100/87/13、默认门 26/26；待 A-FIX1 后集成 |
