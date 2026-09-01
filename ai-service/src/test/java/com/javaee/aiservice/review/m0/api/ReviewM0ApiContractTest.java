@@ -444,6 +444,7 @@ class ReviewM0ApiContractTest {
                 .andExpect(request().asyncStarted()).andReturn();
         MvcResult downloaded = mvc.perform(asyncDispatch(initial)).andExpect(status().isOk()).andReturn();
         assertThat(downloaded.getResponse().getContentAsByteArray()).isEqualTo(leaf).isNotEqualTo(zip);
+        assertThat(downloaded.getResponse().getContentLengthLong()).isEqualTo(leaf.length);
         assertError(mvc.perform(post("/api/review-m0/cases/{caseId}/submission-sources", caseId)
                         .header("Idempotency-Key", "attach-txt").contentType("application/json")
                         .content("{\"fileId\":\"file-txt\",\"submissionFileName\":\"bad.txt\"}")),

@@ -3,8 +3,10 @@ package com.javaee.aiservice.review.m0.material;
 import com.javaee.aiservice.review.m0.archive.ArchiveSafetyLimits;
 import com.javaee.aiservice.review.m0.archive.ZipArchiveEntryOpener;
 import com.javaee.aiservice.review.m0.archive.ZipArchiveInspector;
+import com.javaee.aiservice.review.m0.file.FileArtifactSnapshot;
 import com.javaee.aiservice.review.m0.file.FormalContentInspector;
 import com.javaee.aiservice.review.m0.file.InMemoryOwnedFileByteSource;
+import com.javaee.aiservice.review.m0.file.ReviewM0FileAccess;
 import com.javaee.aiservice.review.m0.file.SyntheticFileFixtures;
 import com.javaee.aiservice.review.m0.file.VerifiedReviewM0FileAccess;
 import com.javaee.aiservice.review.m0.job.JdbcReviewM0JobStore;
@@ -43,6 +45,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -479,33 +482,96 @@ class MaterialLifecycleServiceTest {
     @Test
     void ordinaryAndZipDownloadsReturnOnlyTargetBytesWithCurrentUnicodeName() throws Exception {
         byte[] ordinary = SyntheticFileFixtures.pdf("ordinary-download");
-        byte[] target = SyntheticFileFixtures.png((byte) 4);
-        byte[] other = SyntheticFileFixtures.pdf("other-entry");
+        byte[] target = SyntheticFileFixtures.pdf("selected-second-pdf");
+        byte[] other = SyntheticFileFixtures.pdf("first-pdf");
         put("ordinary", "opaque.pdf", "application/pdf", ordinary);
         put("zip", "bundle.zip", "application/zip", SyntheticFileFixtures.zip(List.of(
-                entry("other.pdf", other), entry("target.png", target))));
+                entry("first.pdf", other),
+                entry("image.png", SyntheticFileFixtures.png((byte) 4)),
+                entry("selected.pdf", target))));
         SubmissionMaterial ordinaryMaterial = service.attachOwned(
                 OWNER, CASE_ID, "ordinary", "old.pdf").materials().get(0);
         ordinaryMaterial = service.renameOwned(
                 OWNER, CASE_ID, ordinaryMaterial.materialId(), ordinaryMaterial.version(), "申请表 2026.pdf");
         SubmissionMaterial zipMaterial = service.attachOwned(
                         OWNER, CASE_ID, "zip", null).materials().stream()
-                .filter(item -> item.normalizedEntryPath().equals("target.png")).findFirst().orElseThrow();
+                .filter(item -> item.normalizedEntryPath().equals("selected.pdf")).findFirst().orElseThrow();
 
         DownloadPayload ordinaryPayload = downloads.openOwned(OWNER, CASE_ID, ordinaryMaterial.materialId());
-        DownloadPayload zipPayload = downloads.openOwned(OWNER, CASE_ID, zipMaterial.materialId());
         try (InputStream input = ordinaryPayload.stream()) {
             assertArrayEquals(ordinary, input.readAllBytes());
         }
+        DownloadPayload zipPayload = downloads.openOwned(OWNER, CASE_ID, zipMaterial.materialId());
+        int metadataReadsAfterZipOpen = byteSource.metadataReads();
         try (InputStream input = zipPayload.stream()) {
             assertArrayEquals(target, input.readAllBytes());
         }
+        assertFalse(Arrays.equals(other, target));
+        assertEquals(metadataReadsAfterZipOpen, byteSource.metadataReads(),
+                "ZIP source verification must finish before the response stream is exposed");
         assertEquals(ordinary.length, ordinaryPayload.contentLength());
-        assertEquals(-1, zipPayload.contentLength());
+        assertEquals(target.length, zipPayload.contentLength());
         assertTrue(ordinaryPayload.contentDisposition().contains("filename*=UTF-8''"));
         assertTrue(ordinaryPayload.contentDisposition().contains("%E7%94%B3%E8%AF%B7%E8%A1%A8"));
         assertFalse(ordinaryPayload.contentDisposition().contains("\r"));
         assertFalse(ordinaryPayload.contentDisposition().contains("\n"));
+    }
+
+    @Test
+    void zipDownloadValidationFailureIsRejectedAndClosedBeforePayloadIsExposed() {
+        byte[] target = SyntheticFileFixtures.pdf("late-validation-target");
+        put("zip-late", "late.zip", "application/zip", SyntheticFileFixtures.zip(List.of(
+                entry("selected.pdf", target),
+                entry("after.png", SyntheticFileFixtures.png((byte) 8)))));
+        SubmissionMaterial material = service.attachOwned(
+                        OWNER, CASE_ID, "zip-late", null).materials().stream()
+                .filter(item -> item.normalizedEntryPath().equals("selected.pdf"))
+                .findFirst().orElseThrow();
+        AtomicBoolean closed = new AtomicBoolean();
+        ReviewM0FileAccess lateFailingAccess = new ReviewM0FileAccess() {
+            @Override
+            public FileArtifactSnapshot getOwnedFile(String ownerId, String fileId) {
+                return fileAccess.getOwnedFile(ownerId, fileId);
+            }
+
+            @Override
+            public InputStream openFile(String ownerId, String fileId) {
+                return fileAccess.openFile(ownerId, fileId);
+            }
+
+            @Override
+            public InputStream openZipEntry(
+                    String ownerId,
+                    String fileId,
+                    String normalizedEntryPath,
+                    String expectedEntryDigest
+            ) {
+                assertEquals("selected.pdf", normalizedEntryPath);
+                assertEquals(SyntheticFileFixtures.sha256(target), expectedEntryDigest);
+                return new InputStream() {
+                    private int offset;
+
+                    @Override
+                    public int read() throws IOException {
+                        if (offset < target.length) {
+                            return target[offset++] & 0xff;
+                        }
+                        throw new IOException("late container validation failed");
+                    }
+
+                    @Override
+                    public void close() {
+                        closed.set(true);
+                    }
+                };
+            }
+        };
+
+        ReviewM0Exception error = assertThrows(ReviewM0Exception.class,
+                () -> new MaterialDownloadService(repository, lateFailingAccess)
+                        .openOwned(OWNER, CASE_ID, material.materialId()));
+        assertEquals(ReviewM0ErrorCode.REVIEW_M0_FILE_SERVICE_UNAVAILABLE, error.errorCode());
+        assertTrue(closed.get());
     }
 
     @Test

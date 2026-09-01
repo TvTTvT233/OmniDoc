@@ -9,6 +9,8 @@ import com.javaee.aiservice.review.m0.model.MaterialKind;
 import com.javaee.aiservice.review.m0.model.SubmissionMaterial;
 import com.javaee.aiservice.review.m0.model.SubmissionSource;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 
@@ -48,12 +50,9 @@ public final class MaterialDownloadService {
             stream = fileAccess.openFile(ownerId, source.fileId());
             contentLength = source.fileSizeBytes();
         } else {
-            stream = fileAccess.openZipEntry(
-                    ownerId,
-                    source.fileId(),
-                    material.normalizedEntryPath(),
-                    material.contentDigest());
-            contentLength = -1;
+            byte[] entryBytes = readVerifiedZipEntry(ownerId, source.fileId(), material);
+            stream = new ByteArrayInputStream(entryBytes);
+            contentLength = entryBytes.length;
         }
         return new DownloadPayload(
                 material.materialId(),
@@ -61,6 +60,24 @@ public final class MaterialDownloadService {
                 contentLength,
                 ContentDisposition.attachment(logicalName.normalized()),
                 stream);
+    }
+
+    private byte[] readVerifiedZipEntry(
+            String ownerId,
+            String fileId,
+            SubmissionMaterial material
+    ) {
+        try (InputStream input = fileAccess.openZipEntry(
+                ownerId, fileId, material.normalizedEntryPath(), material.contentDigest())) {
+            /*
+             * Consume the bounded, digest-bound entry before the controller commits HTTP 200.
+             * The opener validates the selected locator and digest, then scans the remainder of
+             * the container so a later dangerous or ambiguous entry still fails closed.
+             */
+            return input.readAllBytes();
+        } catch (IOException error) {
+            throw MaterialErrors.fileUnavailable(error);
+        }
     }
 
     private static boolean sameSourceFacts(SubmissionSource source, FileArtifactSnapshot current) {

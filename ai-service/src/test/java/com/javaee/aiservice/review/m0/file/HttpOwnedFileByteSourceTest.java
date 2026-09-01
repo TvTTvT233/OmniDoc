@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,12 +31,18 @@ class HttpOwnedFileByteSourceTest {
     private final AtomicInteger requests = new AtomicInteger();
     private byte[] bytes;
     private String digest;
+    private String originalFileName;
+    private String declaredContentType;
+    private String contentSignature;
     private boolean malformedDigest;
 
     @BeforeEach
     void start() throws Exception {
         bytes = "%PDF-1.7\nowner-aware".getBytes(StandardCharsets.UTF_8);
         digest = sha256(bytes);
+        originalFileName = "原件.pdf";
+        declaredContentType = "application/pdf";
+        contentSignature = "PDF";
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/files/owned/file-1/metadata", this::metadata);
         server.createContext("/api/files/owned/file-1/content", this::content);
@@ -63,6 +70,27 @@ class HttpOwnedFileByteSourceTest {
         }
         // Explicit metadata, pre-read snapshot, content, and post-read immutable-facts check.
         assertThat(requests).hasValue(4);
+    }
+
+    @Test
+    void productionAdapterReturnsTheExactDigestBoundZipLeaf() throws Exception {
+        byte[] target = SyntheticFileFixtures.pdf("selected-second-pdf");
+        byte[] firstPdf = SyntheticFileFixtures.pdf("first-pdf");
+        bytes = SyntheticFileFixtures.zip(List.of(
+                SyntheticFileFixtures.entry("leaf/first.pdf", firstPdf),
+                SyntheticFileFixtures.entry("leaf/image.png", SyntheticFileFixtures.png((byte) 7)),
+                SyntheticFileFixtures.entry("leaf/selected.pdf", target)));
+        digest = sha256(bytes);
+        originalFileName = "原件.zip";
+        declaredContentType = "application/zip";
+        contentSignature = "ZIP_CONTAINER";
+
+        VerifiedReviewM0FileAccess access = access(baseUri());
+        try (var input = access.openZipEntry(
+                "42", "file-1", "leaf/selected.pdf", sha256(target))) {
+            assertThat(input.readAllBytes()).isEqualTo(target).isNotEqualTo(firstPdf).isNotEqualTo(bytes);
+        }
+        assertThat(requests).hasValue(3);
     }
 
     @Test
@@ -130,11 +158,12 @@ class HttpOwnedFileByteSourceTest {
         }
         String responseDigest = malformedDigest ? "not-a-digest" : digest;
         String json = """
-                {"fileId":"file-1","originalFileName":"原件.pdf",
-                 "declaredContentType":"application/pdf","sizeBytes":%d,
+                {"fileId":"file-1","originalFileName":"%s",
+                 "declaredContentType":"%s","sizeBytes":%d,
                  "contentDigest":"%s","storageVersion":"sha256:%s",
-                 "contentSignature":"PDF","available":true}
-                """.formatted(bytes.length, responseDigest, digest);
+                 "contentSignature":"%s","available":true}
+                """.formatted(originalFileName, declaredContentType, bytes.length,
+                responseDigest, digest, contentSignature);
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, body.length);
@@ -145,7 +174,7 @@ class HttpOwnedFileByteSourceTest {
     private void content(HttpExchange exchange) throws IOException {
         requests.incrementAndGet();
         exchange.getResponseHeaders().set("X-Content-SHA256", digest);
-        exchange.getResponseHeaders().set("X-Content-Type-Signature", "PDF");
+        exchange.getResponseHeaders().set("X-Content-Type-Signature", contentSignature);
         exchange.sendResponseHeaders(200, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
