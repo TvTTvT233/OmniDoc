@@ -76,6 +76,20 @@ class VerifiedReviewM0FileAccessTest {
     }
 
     @Test
+    void expectedSnapshotPreventsDigestAndStreamFromDriftingBeforeOpen() {
+        InMemoryOwnedFileByteSource source = new InMemoryOwnedFileByteSource();
+        source.put("owner", "file", "form.pdf", "application/pdf",
+                SyntheticFileFixtures.pdf("before-open"), "v1", "opaque/key");
+        VerifiedReviewM0FileAccess access = access(source);
+        FileArtifactSnapshot expected = access.getOwnedFile("owner", "file");
+        source.replaceBytes("file", SyntheticFileFixtures.pdf("after-open"), "v2");
+
+        OwnedFileAccessException error = assertThrows(OwnedFileAccessException.class,
+                () -> access.openFile("owner", "file", expected));
+        assertEquals(OwnedFileAccessException.Kind.INTEGRITY_MISMATCH, error.kind());
+    }
+
+    @Test
     void zipEntryPortReturnsOnlyTheDigestBoundTarget() throws Exception {
         InMemoryOwnedFileByteSource source = new InMemoryOwnedFileByteSource();
         byte[] first = SyntheticFileFixtures.pdf("first");

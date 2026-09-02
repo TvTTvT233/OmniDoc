@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.InputStream;
+import java.util.Base64;
+import java.util.HexFormat;
 
 import static com.javaee.aiservice.review.m0.api.ReviewM0ApiDtos.*;
 
@@ -209,7 +211,11 @@ public final class ReviewM0Controller {
         };
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(payload.contentType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, payload.contentDisposition());
+                .header(HttpHeaders.CONTENT_DISPOSITION, payload.contentDisposition())
+                .header(HttpHeaders.ETAG, '"' + payload.contentDigest() + '"')
+                .header("Digest", "sha-256=" + Base64.getEncoder().encodeToString(
+                        HexFormat.of().parseHex(payload.contentDigest())))
+                .header("X-Content-SHA256", payload.contentDigest());
         if (payload.contentLength() >= 0) response.contentLength(payload.contentLength());
         return response.body(body);
     }

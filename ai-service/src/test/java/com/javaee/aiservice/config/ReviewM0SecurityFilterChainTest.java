@@ -66,6 +66,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReviewM0SecurityFilterChainTest {
 
     private static final String REVIEW_CASE = "/api/review-m0/security-probe/cases/case-owned";
+    private static final String REVIEW_DOWNLOAD =
+            "/api/review-m0/cases/case-owned/materials/material-owned/download";
 
     @Autowired
     private MockMvc mvc;
@@ -114,6 +116,18 @@ class ReviewM0SecurityFilterChainTest {
         if (authorization != null && authorization.length() > 16) {
             assertThat(result.getResponse().getContentAsString()).doesNotContain(authorization.substring(7));
         }
+
+        MockHttpServletRequestBuilder download = get(REVIEW_DOWNLOAD);
+        if (authorization != null) {
+            download.header("Authorization", authorization);
+        }
+        MvcResult downloadResult = mvc.perform(download)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"))
+                .andReturn();
+        assertThat(downloadResult.getResponse().getHeader("ETag")).isNull();
+        assertThat(downloadResult.getResponse().getHeader("Digest")).isNull();
+        assertThat(downloadResult.getResponse().getHeader("X-Content-SHA256")).isNull();
     }
 
     @Test

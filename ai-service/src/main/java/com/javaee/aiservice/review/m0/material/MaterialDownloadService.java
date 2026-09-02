@@ -46,19 +46,28 @@ public final class MaterialDownloadService {
 
         InputStream stream;
         long contentLength;
+        String contentDigest;
         if (material.kind() == MaterialKind.TOP_LEVEL_FILE) {
-            stream = fileAccess.openFile(ownerId, source.fileId());
+            if (!material.contentDigest().equals(source.fileDigest())) {
+                throw new OwnedFileAccessException(
+                        OwnedFileAccessException.Kind.INTEGRITY_MISMATCH,
+                        "Top-level material digest no longer matches its source snapshot");
+            }
+            stream = fileAccess.openFile(ownerId, source.fileId(), current);
             contentLength = source.fileSizeBytes();
+            contentDigest = current.contentDigest();
         } else {
             byte[] entryBytes = readVerifiedZipEntry(ownerId, source.fileId(), material);
             stream = new ByteArrayInputStream(entryBytes);
             contentLength = entryBytes.length;
+            contentDigest = material.contentDigest();
         }
         return new DownloadPayload(
                 material.materialId(),
                 FormalContentTypes.responseContentType(material.formalFileType()),
                 contentLength,
                 ContentDisposition.attachment(logicalName.normalized()),
+                contentDigest,
                 stream);
     }
 

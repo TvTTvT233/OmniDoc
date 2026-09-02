@@ -35,7 +35,35 @@ public final class VerifiedReviewM0FileAccess implements ReviewM0FileAccess {
 
     @Override
     public InputStream openFile(String ownerId, String fileId) {
+        return openVerifiedFile(ownerId, fileId, getOwnedFile(ownerId, fileId));
+    }
+
+    @Override
+    public InputStream openFile(
+            String ownerId,
+            String fileId,
+            FileArtifactSnapshot expectedSnapshot
+    ) {
+        requireIdentity(ownerId, fileId);
+        if (expectedSnapshot == null || !fileId.equals(expectedSnapshot.fileId())) {
+            throw new OwnedFileAccessException(
+                    OwnedFileAccessException.Kind.INTEGRITY_MISMATCH,
+                    "Expected owned file snapshot does not match the requested fileId");
+        }
         FileArtifactSnapshot before = getOwnedFile(ownerId, fileId);
+        if (!expectedSnapshot.sameImmutableFacts(before)) {
+            throw new OwnedFileAccessException(
+                    OwnedFileAccessException.Kind.INTEGRITY_MISMATCH,
+                    "Owned file facts changed before the byte read");
+        }
+        return openVerifiedFile(ownerId, fileId, before);
+    }
+
+    private InputStream openVerifiedFile(
+            String ownerId,
+            String fileId,
+            FileArtifactSnapshot before
+    ) {
         if (!before.available()) {
             throw new OwnedFileAccessException(
                     OwnedFileAccessException.Kind.SOURCE_UNAVAILABLE,

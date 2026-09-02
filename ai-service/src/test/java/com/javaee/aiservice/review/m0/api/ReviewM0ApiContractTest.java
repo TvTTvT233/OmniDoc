@@ -33,6 +33,7 @@ import javax.sql.DataSource;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -401,22 +402,44 @@ class ReviewM0ApiContractTest {
         String caseId = createCase("download", "download");
         MvcResult attach = mvc.perform(post("/api/review-m0/cases/{caseId}/submission-sources", caseId)
                         .header("Idempotency-Key", "attach-pdf").contentType("application/json")
-                        .content("{\"fileId\":\"file-pdf\",\"submissionFileName\":\"申请表.pdf\"}"))
+                        .content("{\"fileId\":\"file-pdf\",\"submissionFileName\":\"initial.pdf\"}"))
                 .andExpect(status().isCreated()).andReturn();
-        String materialId = json.readTree(attach.getResponse().getContentAsString())
-                .path("materials").get(0).path("materialId").textValue();
+        JsonNode material = json.readTree(attach.getResponse().getContentAsString())
+                .path("materials").get(0);
+        String materialId = material.path("materialId").textValue();
+        MvcResult beforeRenameInitial = mvc.perform(get(
+                        "/api/review-m0/cases/{caseId}/materials/{materialId}/download", caseId, materialId))
+                .andExpect(request().asyncStarted()).andReturn();
+        MvcResult beforeRename = mvc.perform(asyncDispatch(beforeRenameInitial))
+                .andExpect(status().isOk()).andReturn();
+        assertIntegrityHeaders(beforeRename, bytes);
+
+        String unicodeName = "奖学金材料（最终）.pdf";
+        mvc.perform(patch("/api/review-m0/cases/{caseId}/materials/{materialId}", caseId, materialId)
+                        .header("Idempotency-Key", "rename-download-unicode")
+                        .contentType("application/json")
+                        .content("{\"expectedVersion\":" + material.path("version").longValue()
+                                + ",\"submissionFileName\":\"" + unicodeName + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.submissionFileName").value(unicodeName));
         MvcResult initial = mvc.perform(get(
                         "/api/review-m0/cases/{caseId}/materials/{materialId}/download", caseId, materialId))
                 .andExpect(request().asyncStarted()).andReturn();
         MvcResult download = mvc.perform(asyncDispatch(initial)).andExpect(status().isOk()).andReturn();
         assertThat(download.getResponse().getContentAsByteArray()).isEqualTo(bytes);
+        assertIntegrityHeaders(download, bytes);
+        assertThat(download.getResponse().getHeader("X-Content-SHA256"))
+                .isEqualTo(beforeRename.getResponse().getHeader("X-Content-SHA256"));
         assertThat(download.getResponse().getHeader("Content-Disposition"))
-                .contains("attachment; filename=\"").contains("filename*=UTF-8''").doesNotContain("\r", "\n");
+                .contains("attachment; filename=\"").contains("filename*=UTF-8''")
+                .contains("%E5%A5%96%E5%AD%A6%E9%87%91")
+                .doesNotContain("\r", "\n");
         assertThat(files.facts("file-pdf")).isEqualTo(before);
         authenticate(OTHER);
-        assertError(mvc.perform(get(
+        MvcResult hidden = assertError(mvc.perform(get(
                         "/api/review-m0/cases/{caseId}/materials/{materialId}/download", caseId, materialId)),
                 404, "REVIEW_M0_CASE_NOT_FOUND");
+        assertNoIntegrityHeaders(hidden);
     }
 
     @Test
@@ -424,9 +447,11 @@ class ReviewM0ApiContractTest {
         setup(true);
         authenticate(OWNER);
         byte[] leaf = SyntheticFileFixtures.pdf("zip-leaf");
+        byte[] other = SyntheticFileFixtures.pdf("other");
         byte[] zip = SyntheticFileFixtures.zip(List.of(
-                SyntheticFileFixtures.entry("folder/leaf.pdf", leaf),
-                SyntheticFileFixtures.entry("other.pdf", SyntheticFileFixtures.pdf("other"))));
+                SyntheticFileFixtures.entry("folder/first.pdf", other),
+                SyntheticFileFixtures.entry("folder/selected.pdf", leaf),
+                SyntheticFileFixtures.entry("folder/image.png", SyntheticFileFixtures.png((byte) 9))));
         files.put(OWNER, "file-zip", "bundle.zip", "application/zip", zip, "v1", "private/zip");
         files.put(OWNER, "file-txt", "bad.txt", "text/plain", "bad".getBytes(StandardCharsets.UTF_8), "v1", "private/txt");
         String caseId = createCase("zip", "zip");
@@ -436,19 +461,48 @@ class ReviewM0ApiContractTest {
                 .andExpect(status().isCreated()).andReturn();
         JsonNode materials = json.readTree(attach.getResponse().getContentAsString()).path("materials");
         JsonNode target = null;
-        for (JsonNode item : materials) if (item.path("submissionFileName").textValue().equals("leaf.pdf")) target = item;
+        for (JsonNode item : materials) {
+            if (item.path("submissionFileName").textValue().equals("selected.pdf")) target = item;
+        }
         assertThat(target).isNotNull();
         MvcResult initial = mvc.perform(get(
                         "/api/review-m0/cases/{caseId}/materials/{materialId}/download",
                         caseId, target.path("materialId").textValue()))
                 .andExpect(request().asyncStarted()).andReturn();
         MvcResult downloaded = mvc.perform(asyncDispatch(initial)).andExpect(status().isOk()).andReturn();
-        assertThat(downloaded.getResponse().getContentAsByteArray()).isEqualTo(leaf).isNotEqualTo(zip);
+        assertThat(downloaded.getResponse().getContentAsByteArray())
+                .isEqualTo(leaf).isNotEqualTo(other).isNotEqualTo(zip);
         assertThat(downloaded.getResponse().getContentLengthLong()).isEqualTo(leaf.length);
+        assertIntegrityHeaders(downloaded, leaf);
+        assertThat(downloaded.getResponse().getHeader("X-Content-SHA256"))
+                .isNotEqualTo(sha256(other)).isNotEqualTo(sha256(zip));
         assertError(mvc.perform(post("/api/review-m0/cases/{caseId}/submission-sources", caseId)
                         .header("Idempotency-Key", "attach-txt").contentType("application/json")
                         .content("{\"fileId\":\"file-txt\",\"submissionFileName\":\"bad.txt\"}")),
                 415, "REVIEW_M0_UNSUPPORTED_FILE_TYPE");
+    }
+
+    @Test
+    void unavailableDownloadReturnsFrozen503WithoutSuccessIntegrityHeadersOrOriginalBytes() throws Exception {
+        setup(true);
+        authenticate(OWNER);
+        byte[] bytes = SyntheticFileFixtures.pdf("unavailable-download");
+        files.put(OWNER, "file-unavailable", "source.pdf", "application/pdf",
+                bytes, "v1", "private/unavailable");
+        String caseId = createCase("unavailable-download", "unavailable-download");
+        MvcResult attach = mvc.perform(post("/api/review-m0/cases/{caseId}/submission-sources", caseId)
+                        .header("Idempotency-Key", "attach-unavailable").contentType("application/json")
+                        .content("{\"fileId\":\"file-unavailable\",\"submissionFileName\":\"source.pdf\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        String materialId = json.readTree(attach.getResponse().getContentAsString())
+                .path("materials").get(0).path("materialId").textValue();
+        files.setAvailable("file-unavailable", false);
+
+        MvcResult unavailable = assertError(mvc.perform(get(
+                        "/api/review-m0/cases/{caseId}/materials/{materialId}/download", caseId, materialId)),
+                503, "REVIEW_M0_FILE_SERVICE_UNAVAILABLE");
+        assertNoIntegrityHeaders(unavailable);
+        assertThat(unavailable.getResponse().getContentAsByteArray()).isNotEqualTo(bytes);
     }
 
     @Test
@@ -594,6 +648,30 @@ class ReviewM0ApiContractTest {
         assertThat(body.path("requestId").textValue()).startsWith("req_");
         assertThat(body.path("details").isObject()).isTrue();
         return result;
+    }
+
+    private static void assertIntegrityHeaders(MvcResult result, byte[] expectedBytes) throws Exception {
+        byte[] actualBytes = result.getResponse().getContentAsByteArray();
+        assertThat(actualBytes).isEqualTo(expectedBytes);
+        String sha256 = sha256(actualBytes);
+        assertThat(result.getResponse().getHeader("ETag")).isEqualTo('"' + sha256 + '"');
+        assertThat(result.getResponse().getHeader("X-Content-SHA256")).isEqualTo(sha256);
+        assertThat(result.getResponse().getHeader("Digest"))
+                .isEqualTo("sha-256=" + Base64.getEncoder().encodeToString(
+                        HexFormat.of().parseHex(sha256)));
+        assertThat(result.getResponse().getHeader("dIgEsT"))
+                .isEqualTo(result.getResponse().getHeader("Digest"));
+        assertThat(result.getResponse().getContentLengthLong()).isEqualTo(actualBytes.length);
+    }
+
+    private static void assertNoIntegrityHeaders(MvcResult result) {
+        assertThat(result.getResponse().getHeader("ETag")).isNull();
+        assertThat(result.getResponse().getHeader("Digest")).isNull();
+        assertThat(result.getResponse().getHeader("X-Content-SHA256")).isNull();
+    }
+
+    private static String sha256(byte[] bytes) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 
     private static Set<String> fieldNames(JsonNode node) {

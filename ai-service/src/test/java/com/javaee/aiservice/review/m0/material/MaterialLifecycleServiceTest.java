@@ -511,6 +511,8 @@ class MaterialLifecycleServiceTest {
                 "ZIP source verification must finish before the response stream is exposed");
         assertEquals(ordinary.length, ordinaryPayload.contentLength());
         assertEquals(target.length, zipPayload.contentLength());
+        assertEquals(SyntheticFileFixtures.sha256(ordinary), ordinaryPayload.contentDigest());
+        assertEquals(SyntheticFileFixtures.sha256(target), zipPayload.contentDigest());
         assertTrue(ordinaryPayload.contentDisposition().contains("filename*=UTF-8''"));
         assertTrue(ordinaryPayload.contentDisposition().contains("%E7%94%B3%E8%AF%B7%E8%A1%A8"));
         assertFalse(ordinaryPayload.contentDisposition().contains("\r"));
@@ -537,6 +539,15 @@ class MaterialLifecycleServiceTest {
             @Override
             public InputStream openFile(String ownerId, String fileId) {
                 return fileAccess.openFile(ownerId, fileId);
+            }
+
+            @Override
+            public InputStream openFile(
+                    String ownerId,
+                    String fileId,
+                    FileArtifactSnapshot expectedSnapshot
+            ) {
+                return fileAccess.openFile(ownerId, fileId, expectedSnapshot);
             }
 
             @Override
@@ -572,6 +583,93 @@ class MaterialLifecycleServiceTest {
                         .openOwned(OWNER, CASE_ID, material.materialId()));
         assertEquals(ReviewM0ErrorCode.REVIEW_M0_FILE_SERVICE_UNAVAILABLE, error.errorCode());
         assertTrue(closed.get());
+    }
+
+    @Test
+    void topLevelMaterialDigestMismatchFailsBeforeAResponsePayloadIsExposed() {
+        byte[] bytes = SyntheticFileFixtures.pdf("top-level-digest-mismatch");
+        put("ordinary-mismatch", "source.pdf", "application/pdf", bytes);
+        SubmissionMaterial material = service.attachOwned(
+                OWNER, CASE_ID, "ordinary-mismatch", "source.pdf").materials().get(0);
+        fixture.jdbc().update("""
+                UPDATE review_m0_material SET content_digest=? WHERE material_id=?
+                """, "f".repeat(64), material.materialId());
+
+        ReviewM0Exception error = assertThrows(ReviewM0Exception.class,
+                () -> downloads.openOwned(OWNER, CASE_ID, material.materialId()));
+        assertEquals(ReviewM0ErrorCode.REVIEW_M0_FILE_SERVICE_UNAVAILABLE, error.errorCode());
+    }
+
+    @Test
+    void ordinaryDownloadRemainsStreamingWithoutPreloadingTheUnboundedPayload() throws Exception {
+        byte[] bytes = SyntheticFileFixtures.pdf("ordinary-streaming");
+        put("ordinary-streaming", "source.pdf", "application/pdf", bytes);
+        SubmissionMaterial material = service.attachOwned(
+                OWNER, CASE_ID, "ordinary-streaming", "source.pdf").materials().get(0);
+        AtomicInteger readCalls = new AtomicInteger();
+        ReviewM0FileAccess trackingAccess = new ReviewM0FileAccess() {
+            @Override
+            public FileArtifactSnapshot getOwnedFile(String ownerId, String fileId) {
+                return fileAccess.getOwnedFile(ownerId, fileId);
+            }
+
+            @Override
+            public InputStream openFile(String ownerId, String fileId) {
+                InputStream delegate = fileAccess.openFile(ownerId, fileId);
+                return tracking(delegate);
+            }
+
+            @Override
+            public InputStream openFile(
+                    String ownerId,
+                    String fileId,
+                    FileArtifactSnapshot expectedSnapshot
+            ) {
+                InputStream delegate = fileAccess.openFile(ownerId, fileId, expectedSnapshot);
+                return tracking(delegate);
+            }
+
+            private InputStream tracking(InputStream delegate) {
+                return new InputStream() {
+                    @Override
+                    public int read() throws IOException {
+                        readCalls.incrementAndGet();
+                        return delegate.read();
+                    }
+
+                    @Override
+                    public int read(byte[] buffer, int offset, int length) throws IOException {
+                        readCalls.incrementAndGet();
+                        return delegate.read(buffer, offset, length);
+                    }
+
+                    @Override
+                    public void close() throws IOException {
+                        delegate.close();
+                    }
+                };
+            }
+
+            @Override
+            public InputStream openZipEntry(
+                    String ownerId,
+                    String fileId,
+                    String normalizedEntryPath,
+                    String expectedEntryDigest
+            ) {
+                return fileAccess.openZipEntry(
+                        ownerId, fileId, normalizedEntryPath, expectedEntryDigest);
+            }
+        };
+
+        DownloadPayload payload = new MaterialDownloadService(repository, trackingAccess)
+                .openOwned(OWNER, CASE_ID, material.materialId());
+        assertEquals(0, readCalls.get(), "ordinary download must not preload its response body");
+        try (InputStream input = payload.stream()) {
+            assertArrayEquals(bytes, input.readAllBytes());
+        }
+        assertTrue(readCalls.get() > 0);
+        assertEquals(SyntheticFileFixtures.sha256(bytes), payload.contentDigest());
     }
 
     @Test

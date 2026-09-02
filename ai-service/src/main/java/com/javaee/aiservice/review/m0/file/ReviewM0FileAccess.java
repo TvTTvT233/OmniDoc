@@ -7,6 +7,12 @@ public interface ReviewM0FileAccess {
 
     InputStream openFile(String ownerId, String fileId);
 
+    InputStream openFile(
+            String ownerId,
+            String fileId,
+            FileArtifactSnapshot expectedSnapshot
+    );
+
     InputStream openZipEntry(
             String ownerId,
             String fileId,

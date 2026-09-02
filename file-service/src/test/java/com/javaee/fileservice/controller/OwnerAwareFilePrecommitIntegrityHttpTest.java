@@ -107,7 +107,9 @@ class OwnerAwareFilePrecommitIntegrityHttpTest {
                 .hasValue(sha256(NORMAL_BYTES));
         assertThat(response.headers().firstValue("ETag"))
                 .hasValue('"' + sha256(NORMAL_BYTES) + '"');
-        assertThat(response.headers().firstValue("Digest")).isPresent();
+        assertThat(response.headers().firstValue("Digest"))
+                .hasValue("sha-256=" + java.util.Base64.getEncoder().encodeToString(
+                        HexFormat.of().parseHex(sha256(NORMAL_BYTES))));
     }
 
     @Test
@@ -139,6 +141,13 @@ class OwnerAwareFilePrecommitIntegrityHttpTest {
     @Test
     void storageReadFailureMapsToFrozen503BeforeAny200() throws Exception {
         state.failDuringRead = true;
+
+        assertPrecommitUnavailable(get(OWNER_ID, FILE_ID));
+    }
+
+    @Test
+    void delayedEofFailureMapsToFrozen503BeforeAny200OrIntegrityHeaders() throws Exception {
+        state.failAtEof = true;
 
         assertPrecommitUnavailable(get(OWNER_ID, FILE_ID));
     }
@@ -375,10 +384,12 @@ class OwnerAwareFilePrecommitIntegrityHttpTest {
                     if (state.failOnOpen) {
                         throw new OwnedFileUnavailableException("synthetic storage open failure");
                     }
-                    if (!state.failDuringRead) {
-                        return new ByteArrayInputStream(state.objectBytes);
+                    if (state.failDuringRead) {
+                        return new FailingInputStream(state.objectBytes);
                     }
-                    return new FailingInputStream(state.objectBytes);
+                    return state.failAtEof
+                            ? new DelayedEofFailingInputStream(state.objectBytes)
+                            : new ByteArrayInputStream(state.objectBytes);
                 }
 
                 @Override
@@ -399,12 +410,14 @@ class OwnerAwareFilePrecommitIntegrityHttpTest {
         private volatile byte[] objectBytes;
         private volatile boolean failOnOpen;
         private volatile boolean failDuringRead;
+        private volatile boolean failAtEof;
 
         void reset() {
             objectBytes = NORMAL_BYTES.clone();
             metadata = metadata(OWNER_ID, objectBytes.length, sha256(objectBytes));
             failOnOpen = false;
             failDuringRead = false;
+            failAtEof = false;
         }
     }
 
@@ -430,6 +443,34 @@ class OwnerAwareFilePrecommitIntegrityHttpTest {
                 throw new IOException("synthetic storage read failure");
             }
             int read = Math.min(length, Math.max(1, bytes.length / 2 - position));
+            System.arraycopy(bytes, position, buffer, offset, read);
+            position += read;
+            return read;
+        }
+    }
+
+    private static final class DelayedEofFailingInputStream extends InputStream {
+        private final byte[] bytes;
+        private int position;
+
+        private DelayedEofFailingInputStream(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (position == bytes.length) {
+                throw new IOException("synthetic delayed EOF verification failure");
+            }
+            return bytes[position++] & 0xff;
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            if (position == bytes.length) {
+                throw new IOException("synthetic delayed EOF verification failure");
+            }
+            int read = Math.min(length, bytes.length - position);
             System.arraycopy(bytes, position, buffer, offset, read);
             position += read;
             return read;
