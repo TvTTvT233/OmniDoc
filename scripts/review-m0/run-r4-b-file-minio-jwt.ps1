@@ -137,7 +137,8 @@ function Assert-IntegrityHeaders($Response, [string]$Name) {
     Assert-True ($Response.Headers.ContainsKey('ETag') -and $Response.Headers.ContainsKey('Digest') -and $Response.Headers.ContainsKey('X-Content-SHA256')) "$Name.present"
     $hex = Get-Sha256Hex ([byte[]]$Response.Bytes)
     $expectedEtag = '"' + $hex + '"'
-    $rawDigest = [Convert]::FromHexString($hex)
+    $rawDigest = New-Object byte[] ($hex.Length / 2)
+    for ($i = 0; $i -lt $rawDigest.Length; $i++) { $rawDigest[$i] = [Convert]::ToByte($hex.Substring($i * 2, 2), 16) }
     $expectedDigest = 'sha-256=' + [Convert]::ToBase64String($rawDigest)
     Assert-True ([string]$Response.Headers['ETag'] -ceq $expectedEtag) "$Name.etagMatchesBody"
     Assert-True ([string]$Response.Headers['X-Content-SHA256'] -ceq $hex) "$Name.xContentShaMatchesBody"
