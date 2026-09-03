@@ -124,7 +124,7 @@ function ConvertTo-Base64Url([byte[]]$Bytes) {
 
 function Get-Sha256Hex([byte[]]$Bytes) {
     $sha = [Security.Cryptography.SHA256]::Create()
-    try { return ([Convert]::ToHexString($sha.ComputeHash($Bytes))).ToLowerInvariant() } finally { $sha.Dispose() }
+    try { return ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
 function Assert-NoSuccessIntegrityHeaders($Response, [string]$Name) {
