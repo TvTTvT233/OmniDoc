@@ -316,13 +316,16 @@ function Assert-LogSafety([string]$Directory) {
     }
     foreach ($name in $patterns.Keys) {
         $count = 0
-        foreach ($file in $files) { $count += ([regex]::Matches((Get-Content -LiteralPath $file.FullName -Raw), $patterns[$name])).Count }
+        foreach ($file in $files) {
+            $logText = [string](Get-Content -LiteralPath $file.FullName -Raw)
+            $count += ([regex]::Matches($logText, $patterns[$name])).Count
+        }
         Assert-Equal 0 $count "logs.$name"
     }
     $runtimeSensitiveValues = @($script:tokenA,$script:tokenB,$script:invalid,$script:expired,$script:mysqlPassword,$script:minioAccess,$script:minioSecret,$script:jwtSecret) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
     $runtimeSensitiveMatches = 0
     foreach ($file in $files) {
-        $text = Get-Content -LiteralPath $file.FullName -Raw
+        $text = [string](Get-Content -LiteralPath $file.FullName -Raw)
         foreach ($value in $runtimeSensitiveValues) {
             if ($text.Contains([string]$value)) { $runtimeSensitiveMatches++ }
         }
