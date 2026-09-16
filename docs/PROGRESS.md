@@ -1,5 +1,26 @@
 # OmniDoc 项目进展
 
+## 2026-09-17 跨分支状态核对（调查记录）
+
+本节记录本地分支与 GitHub 的实际差异，不表示后续实现已合入本 checkout。下方原状态快照属于本分支的 Memory V1 历史状态；Review M0 的后续进展需结合对应分支的交接记录阅读。
+
+- 调查开始时，当前 `docs/bootstrap-project-context` 工作区干净，HEAD 为 `d289cf03fe57e81f78cab9ece9e2e47d84bf1474`。实时 `git ls-remote --heads origin` 确认 GitHub 同名分支和 `milestone/memory-v1` 均指向同一 SHA；本地与已推送版本没有代码差异。
+- GitHub 当前仅有 `main`、`docs/bootstrap-project-context`、`milestone/mcp-search`、`milestone/qdrant`、`milestone/memory-v1` 五个分支；`git ls-remote --tags origin` 无输出。远端 `main` 仍为 `56e9ceb`，比当前分支少 48 个提交。当前远端公开给本次 Git 连接的 refs 不包含 Review M0 成果；不能据此推断曾被删除的远端历史。
+- 本地 `milestone/review-m0` 为 `fa7f1d8`，比当前已推送基线多 25 个提交，差异为 323 个文件、38064 行新增、8 行删除。其 R3 交接记录为 `AUTO_VERIFIED / MANUAL_PENDING`，统一 Integrated 门 41/41（资产 26、生产目标 15）；这是历史验收记录，本次未重跑。
+- M0 已实现后端案例、清单及确认快照、材料与 ZIP、逻辑命名与副本下载、材料齐全性/命名审查、证据报告、过期/增量重审、幂等/恢复/取消和 30 个结构化 HTTP 端点。M0 不覆盖完整奖学金 V1 的资格、填写规范、跨材料一致性、成果支持性或内容质量建议；P-09 页面仍未实现，P-08 保持 LOCAL_ONLY。
+- 后续已提交产品候选为 `fix/review-m0-b-fix2-integrity-header-r1` 的 `1da749f`，比 GitHub 的 `d289cf0` 多 46 个提交，408 个文件变化（45563 行新增、270 行删除）。变化分布为 ai-service 326、common 1、docs 45、file-service 30、scripts 6；web 无变化。比 M0 里程碑新增 MySQL 8 迁移、应用启动、并发幂等、数据库故障有界响应、JWT 401、日志及下载完整性等修复。
+- `validation/review-m0-r4-a-r4` 的 `edf10ac` 记录真实 MySQL 8/原生服务 A 验收通过；该结论只对应产品候选 `a8e3440`，不能当作后续候选完整 A 重验通过。
+- 最新已提交 B 验收记录位于 `validation/review-m0-r4-b-r3-01a06793` 的 `5e04a93`：候选 `1da749f` 的 Probe P1-P6 通过，P7 因 file-service MyBatis 输出文件摘要及内部对象元数据失败（125 项通过后 1 项失败）；Formal B1-B8 未运行，C/D 未启动。不能宣称真实全链路或人工验收完成。
+- 本地 `fix/review-m0-b-fix3-file-mybatis-runtime-logging-r1` 仍停在 `1da749f`，另有 7 个未提交文件（4 个已跟踪修改、3 个新增），涉及 MyBatis 日志关闭、运行时配置、测试及专项脚本。其现存 2026-09-04 Surefire XML 合计 33 tests、0 failures/errors/skipped；未找到专项 result/report/summary JSON 或已提交 B-FIX3 交接，不能确认真实 B 验收已转通过。
+- 本次实际检查：`git status --short --branch`、`git remote -v`、`git branch -vv`、`git ls-remote --heads/--tags origin`、`git worktree list --porcelain`、各 Review worktree 的 `git status --porcelain`、`git show`/`git log`、`git rev-list --left-right --count`、`git diff --shortstat/--name-only`、Controller 路由和前端入口静态检索、现有交接文档和 Surefire XML 核对。未启动服务、未执行业务测试、未切换/合并/提交/推送分支。本次仅追加本节调查记录。
+- 下一步：完成 B-FIX3 的修复验证与提交，在新候选上重跑 B Probe/Formal，再完成其余真实链路及页面验收；按明确候选整理集成与推送，不能把分散 worktree 或历史局部通过视为统一完成版本。
+
+## 2026-09-17 GitHub 推送准备
+
+- 用户已要求先推送当前成果。本次选择当前文档分支、`milestone/review-m0`、`fix/review-m0-b-fix2-integrity-header-r1`、`validation/review-m0-r4-a-r4` 和 `validation/review-m0-r4-b-r3-01a06793`，保留实现候选与验收证据的分支边界。
+- B-FIX3 工作区的 7 个未提交文件仍是未完成修复，不纳入此次已提交版本推送；不移动里程碑，不合并 `main`。
+- 本次为提交及推送已有成果，不重跑业务测试。推送是否成功以执行后的远端 SHA 核对及任务回执为准；前节远端缺少 Review M0 的描述是推送前调查快照。
+
 ## 状态快照
 
 - **更新日期**：2026-08-11
