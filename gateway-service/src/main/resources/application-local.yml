@@ -1,0 +1,36 @@
+spring:
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.nacos.discovery.NacosDiscoveryAutoConfiguration
+      - com.alibaba.cloud.nacos.registry.NacosServiceRegistryAutoConfiguration
+
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      registry:
+        enabled: false
+
+  data:
+    redis:
+      host: ${REDIS_LOCAL_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_LOCAL_PASSWORD:}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+gateway:
+  route:
+    user-uri: http://localhost:8081
+    file-uri: http://localhost:8082
+    ai-uri: http://localhost:8083
+    ai-ws-uri: ws://localhost:8083
+    document-uri: http://localhost:8084
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info

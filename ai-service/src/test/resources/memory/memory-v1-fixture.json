@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "id": "memory-v1-synthetic-conversation-v1",
+  "synthetic": true,
+  "remoteModel": false,
+  "remoteEmbedding": false,
+  "conversation": {
+    "conversationId": "memory-v1-conv-a",
+    "userId": "memory-v1-user-a",
+    "status": "ACTIVE"
+  },
+  "messages": [
+    {
+      "messageId": "memory-v1-msg-001",
+      "sequence": 1,
+      "role": "USER",
+      "messageType": "TEXT",
+      "content": "提交时间是周五。",
+      "contentHash": "fde557b6a84960c94fbabe011c573337dca49051f600c428ca34a15a35e367ae"
+    },
+    {
+      "messageId": "memory-v1-msg-002",
+      "sequence": 2,
+      "role": "ASSISTANT",
+      "messageType": "TEXT",
+      "content": "已记录提交时间。",
+      "contentHash": "103fe44bc308bbc604781951c362db7ccc7c80cc70725e01b5ac83a981a573e0"
+    },
+    {
+      "messageId": "memory-v1-msg-003",
+      "sequence": 3,
+      "role": "USER",
+      "messageType": "TEXT",
+      "content": "主要检查成绩证明。",
+      "contentHash": "e29e97750a897c934b100281633a4adffb8ed4751efd24f02f65f2287c7ea7d0"
+    },
+    {
+      "messageId": "memory-v1-msg-004",
+      "sequence": 4,
+      "role": "ASSISTANT",
+      "messageType": "TEXT",
+      "content": "建议增加材料目录。",
+      "contentHash": "a02226a025dd8c2caab0be0b7b1b37cc0199856237bc9cdfdf83dcd13cb68cea"
+    },
+    {
+      "messageId": "memory-v1-msg-005",
+      "sequence": 5,
+      "role": "USER",
+      "messageType": "TEXT",
+      "content": "把提交时间改为下周一。",
+      "contentHash": "0a2f709aeb8088cedbcd3d8e4186b4815802cf5bcf029a0911eb4061f5fd834c"
+    },
+    {
+      "messageId": "memory-v1-msg-006",
+      "sequence": 6,
+      "role": "TOOL",
+      "messageType": "TOOL_CALL",
+      "toolCallId": "memory-v1-tool-call-1",
+      "content": "查找成绩证明要求。",
+      "contentHash": "6b05d26be3babcf0c42cdda65b73c65c1eaf68c540444026237088da215b6d50"
+    },
+    {
+      "messageId": "memory-v1-msg-007",
+      "sequence": 7,
+      "role": "TOOL",
+      "messageType": "TOOL_RESULT",
+      "toolCallId": "memory-v1-tool-call-1",
+      "content": "已定位成绩证明要求。",
+      "contentHash": "062f52f53bf9eea153ed9a9bc33597650ef6c1f32a7456a4b02e48ed2a702ae2"
+    },
+    {
+      "messageId": "memory-v1-msg-008",
+      "sequence": 8,
+      "role": "USER",
+      "messageType": "TEXT",
+      "content": "请保留当前目标和待办。",
+      "contentHash": "653c43555d021d8ad81e019592d80f07e5dcdee2abb9786a2003ebb111e90b03"
+    }
+  ],
+  "expectedSummary": {
+    "schemaVersion": "1.0",
+    "conversationId": "memory-v1-conv-a",
+    "summaryVersion": 1,
+    "coverage": {
+      "fromSeq": 1,
+      "toSeq": 5,
+      "sourceDigest": "ddce4c5c3ef38736ab417fa75345e031641dff458bee1a210f5acd34839e7ae8"
+    },
+    "goal": {
+      "id": "goal-grade-proof",
+      "content": "主要检查成绩证明",
+      "status": "active",
+      "sourceRefs": [
+        {"type": "MESSAGE", "id": "memory-v1-msg-003"}
+      ],
+      "lastUpdatedSeq": 3
+    },
+    "constraints": [],
+    "facts": [
+      {
+        "id": "fact-submit-friday",
+        "content": "提交时间曾为周五",
+        "status": "superseded",
+        "sourceRefs": [
+          {"type": "MESSAGE", "id": "memory-v1-msg-001"}
+        ],
+        "lastUpdatedSeq": 5
+      },
+      {
+        "id": "fact-submit-monday",
+        "content": "当前提交时间为下周一",
+        "status": "confirmed",
+        "sourceRefs": [
+          {"type": "MESSAGE", "id": "memory-v1-msg-005"}
+        ],
+        "lastUpdatedSeq": 5
+      }
+    ],
+    "decisions": [
+      {
+        "id": "decision-material-index",
+        "content": "增加材料目录",
+        "status": "proposed",
+        "sourceRefs": [
+          {"type": "MESSAGE", "id": "memory-v1-msg-004"}
+        ],
+        "lastUpdatedSeq": 4
+      }
+    ],
+    "openQuestions": [],
+    "todos": [
+      {
+        "id": "todo-check-grade-proof",
+        "content": "检查成绩证明",
+        "status": "pending",
+        "sourceRefs": [
+          {"type": "MESSAGE", "id": "memory-v1-msg-003"}
+        ],
+        "lastUpdatedSeq": 3
+      }
+    ],
+    "resources": [],
+    "meta": {
+      "previousSummaryVersion": 0,
+      "generatedAt": "2026-08-11T00:00:00Z"
+    }
+  },
+  "runtimeState": {
+    "selectedText": "仅本轮使用的合成选区",
+    "pageContext": "仅本轮使用的合成页面",
+    "pendingApprovalReference": "memory-v1-ephemeral-approval-ref"
+  },
+  "expectations": {
+    "summarySequences": [1, 2, 3, 4, 5],
+    "recentRawSequences": [6, 7],
+    "currentMessageSequence": 8,
+    "toolPairs": [
+      {"toolCallId": "memory-v1-tool-call-1", "callSequence": 6, "resultSequence": 7}
+    ],
+    "successfulCrossUserOperations": 0,
+    "deletionResidue": {
+      "conversations": 0,
+      "messages": 0,
+      "summaries": 0,
+      "redisKeys": 0,
+      "runtimeStateKeys": 0
+    },
+    "tokenBudget": {
+      "modelWindow": 32768,
+      "outputReserve": 4096,
+      "safetyReservePercent": 10,
+      "oversizedCurrentMessageError": "MEMORY_CONTEXT_TOO_LARGE"
+    }
+  }
+}

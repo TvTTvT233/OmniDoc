@@ -1,0 +1,27 @@
+spring:
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.nacos.discovery.NacosDiscoveryAutoConfiguration
+      - com.alibaba.cloud.nacos.registry.NacosServiceRegistryAutoConfiguration
+
+  datasource:
+    url: jdbc:mysql://${MYSQL_LOCAL_HOST:localhost}:${MYSQL_LOCAL_PORT:3306}/${MYSQL_DATABASE:omnidoc}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_LOCAL_USERNAME:root}
+    password: ${MYSQL_LOCAL_PASSWORD:}
+
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      registry:
+        enabled: false
+
+  data:
+    redis:
+      host: ${REDIS_LOCAL_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_LOCAL_PASSWORD:}
+
+logging:
+  level:
+    com.javaee.user: info

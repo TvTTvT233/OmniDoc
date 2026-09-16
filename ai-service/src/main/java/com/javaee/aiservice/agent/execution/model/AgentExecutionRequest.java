@@ -1,5 +1,7 @@
 package com.javaee.aiservice.agent.execution.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.javaee.aiservice.memory.context.MemoryTurnContext;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +25,9 @@ public class AgentExecutionRequest {
     private Map<String, Object> context = new HashMap<>();
     private String continueTraceId;
     private String approvalToken;
+    private String clientRequestId;
+    @JsonIgnore
+    private transient MemoryTurnContext memoryTurnContext;
 
     public String getTask() {
         return task;
@@ -142,5 +147,22 @@ public class AgentExecutionRequest {
 
     public void setApprovalToken(String approvalToken) {
         this.approvalToken = approvalToken;
+    }
+
+    public String getClientRequestId() {
+        return clientRequestId;
+    }
+
+    public void setClientRequestId(String clientRequestId) {
+        this.clientRequestId = clientRequestId;
+    }
+
+    @JsonIgnore
+    public MemoryTurnContext getMemoryTurnContext() {
+        return memoryTurnContext;
+    }
+
+    public void setMemoryTurnContext(MemoryTurnContext memoryTurnContext) {
+        this.memoryTurnContext = memoryTurnContext;
     }
 }

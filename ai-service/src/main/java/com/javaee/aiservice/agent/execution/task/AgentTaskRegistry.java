@@ -1,5 +1,6 @@
 package com.javaee.aiservice.agent.execution.task;
 
+import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -9,6 +10,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -150,6 +152,42 @@ public class AgentTaskRegistry {
         return false;
     }
 
+    /**
+     * Returns every local or persisted task snapshot associated with a Conversation.
+     * Redis failures are not degraded to an empty list because this method is used by permanent
+     * Conversation deletion.
+     */
+    public List<Map<String, Object>> findByConversationIdRequired(String conversationId) {
+        if (conversationId == null || conversationId.isBlank()) {
+            throw new IllegalArgumentException("conversationId must not be blank");
+        }
+        Map<String, Map<String, Object>> matched = new LinkedHashMap<>();
+        for (Map<String, Object> snapshot : tasks.values()) {
+            addConversationSnapshot(matched, conversationId, snapshot);
+        }
+        if (redisTemplate != null) {
+            for (Map<String, Object> snapshot : listFromRedisRequired(TASK_ALL_ZSET)) {
+                addConversationSnapshot(matched, conversationId, snapshot);
+            }
+        }
+        return List.copyOf(matched.values());
+    }
+
+    /**
+     * Deletes a task snapshot for a required lifecycle operation. Unlike the compatibility delete
+     * method, a Redis failure is explicit and cannot be mistaken for successful cleanup.
+     */
+    public void deleteRequired(String traceId) {
+        if (traceId == null || traceId.isBlank()) {
+            throw new IllegalArgumentException("traceId must not be blank");
+        }
+        if (redisTemplate != null) {
+            deletePersistedRequired(traceId);
+        }
+        tasks.remove(traceId);
+        evictionOrder.remove(traceId);
+    }
+
     private void persist(String traceId, Map<String, Object> snapshot) {
         if (redisTemplate == null) {
             return;
@@ -203,6 +241,61 @@ public class AgentTaskRegistry {
             return snapshots;
         } catch (Exception ignored) {
             return List.of();
+        }
+    }
+
+    private List<Map<String, Object>> listFromRedisRequired(String zsetKey) {
+        try {
+            // Permanent deletion must not inherit the normal UI list limit; otherwise an older
+            // still-live task could keep a deleted Conversation reachable until its seven-day TTL.
+            Set<Object> ids = redisTemplate.opsForZSet().reverseRange(zsetKey, 0, -1);
+            if (ids == null || ids.isEmpty()) {
+                return List.of();
+            }
+            List<Map<String, Object>> snapshots = new ArrayList<>();
+            for (Object id : new LinkedHashSet<>(ids)) {
+                Object stored = redisTemplate.opsForValue().get(TASK_KEY_PREFIX + id);
+                if (stored instanceof Map<?, ?> raw) {
+                    Map<String, Object> snapshot = new LinkedHashMap<>();
+                    raw.forEach((key, value) -> {
+                        if (key != null) {
+                            snapshot.put(key.toString(), value);
+                        }
+                    });
+                    snapshots.add(snapshot);
+                }
+            }
+            return snapshots;
+        } catch (Exception error) {
+            throw new RuntimeStateException.Unavailable("agent task cleanup scan", error);
+        }
+    }
+
+    private void deletePersistedRequired(String traceId) {
+        try {
+            Object stored = redisTemplate.opsForValue().get(TASK_KEY_PREFIX + traceId);
+            Object userId = stored instanceof Map<?, ?> snapshot ? snapshot.get("userId") : null;
+            redisTemplate.delete(TASK_KEY_PREFIX + traceId);
+            redisTemplate.opsForZSet().remove(TASK_ALL_ZSET, traceId);
+            if (userId != null) {
+                redisTemplate.opsForZSet().remove(TASK_USER_ZSET_PREFIX + userId, traceId);
+            }
+        } catch (Exception error) {
+            throw new RuntimeStateException.Unavailable("agent task cleanup delete", error);
+        }
+    }
+
+    private static void addConversationSnapshot(
+            Map<String, Map<String, Object>> matched,
+            String conversationId,
+            Map<String, Object> snapshot
+    ) {
+        if (!conversationId.equals(String.valueOf(snapshot.get("conversationId")))) {
+            return;
+        }
+        Object traceId = snapshot.get("traceId");
+        if (traceId != null && !traceId.toString().isBlank()) {
+            matched.put(traceId.toString(), snapshot);
         }
     }
 

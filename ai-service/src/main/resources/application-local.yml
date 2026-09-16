@@ -52,7 +52,7 @@ spring:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
       chat:
-        model: qwen3.6-plus
+        model: qwen3.7-max-2026-05-20
       embedding:
         model: text-embedding-v1
         api-key: ${DASHSCOPE_API_KEY}
@@ -63,10 +63,10 @@ spring:
         api-key: ${DASHSCOPE_API_KEY}
     openai:
       api-key: ${OPENAI_API_KEY}
-      base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+      base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
 
   rabbitmq:
-    host: ${RABBITMQ_HOST:infra_rabbitmq}
+    host: ${RABBITMQ_HOST:localhost}
     port: 5672
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
@@ -80,6 +80,48 @@ spring:
 
 # AI配置
 ai:
+  memory:
+    enabled: ${AI_MEMORY_ENABLED:true}
+    api:
+      # Configure one shared value in production so signed list cursors survive restarts/replicas.
+      cursor-signing-key: ${AI_MEMORY_CURSOR_SIGNING_KEY:${OMNIDOC_JWT_SECRET:}}
+    context:
+      default-window-tokens: ${AI_MEMORY_CONTEXT_WINDOW_TOKENS:32768}
+      reserved-output-tokens: ${AI_MEMORY_CONTEXT_RESERVED_OUTPUT_TOKENS:4096}
+      safety-reserve-percent: ${AI_MEMORY_CONTEXT_SAFETY_PERCENT:10}
+      history-page-size: ${AI_MEMORY_CONTEXT_HISTORY_PAGE_SIZE:200}
+      block-overhead-tokens: ${AI_MEMORY_CONTEXT_BLOCK_OVERHEAD_TOKENS:8}
+    summary:
+      enabled: ${AI_MEMORY_SUMMARY_ENABLED:true}
+      trigger-input-tokens: ${AI_MEMORY_SUMMARY_TRIGGER_TOKENS:12000}
+      retain-recent-tokens: ${AI_MEMORY_SUMMARY_RETAIN_RECENT_TOKENS:4000}
+      max-source-tokens: ${AI_MEMORY_SUMMARY_MAX_SOURCE_TOKENS:16000}
+      max-attempts: ${AI_MEMORY_SUMMARY_MAX_ATTEMPTS:2}
+      timeout: ${AI_MEMORY_SUMMARY_TIMEOUT:20s}
+      model: ${AI_MEMORY_SUMMARY_MODEL:}
+    schema:
+      auto-migration:
+        enabled: ${AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED:false}
+    legacy:
+      import:
+        enabled: ${AI_MEMORY_LEGACY_IMPORT_ENABLED:false}
+    runtime-state:
+      current-document-id:
+        ttl: 30m
+        max-bytes: 512
+      selected-text:
+        ttl: 10m
+        max-bytes: 16384
+      page-context:
+        ttl: 10m
+        max-bytes: 4096
+      pending-approval:
+        ttl: 5m
+        max-bytes: 1024
+      current-tool-state:
+        ttl: 1h
+        max-bytes: 2048
+      legacy-compatibility-ttl: 10m
   conversation:
     max-messages: 100
     expiry-hours: 24
@@ -87,12 +129,30 @@ ai:
     reflection:
       enabled: true
   vector:
+    mode: ${VECTOR_STORE_MODE:baseline}
     dimension: 1536
+    embedding:
+      model: ${VECTOR_EMBEDDING_MODEL:text-embedding-v1}
+      schema-version: ${VECTOR_SCHEMA_VERSION:1}
     hnsw:
       m: 16
       ef-construction: 200
       ef: 128
       max-items: 200000
+    qdrant:
+      host: ${QDRANT_HOST:localhost}
+      grpc-port: ${QDRANT_GRPC_PORT:6334}
+      api-key: ${QDRANT_API_KEY:}
+      collection-alias: ${QDRANT_COLLECTION_ALIAS:omnidoc_chunks_active}
+      connect-timeout-ms: 3000
+      request-timeout-ms: 5000
+      batch-size: 100
+    shadow:
+      sample-rate: 1.0
+      timeout-ms: 3000
+    migration:
+      batch-size: 100
+      checkpoint-path: ${VECTOR_MIGRATION_CHECKPOINT_PATH:var/qdrant-migration/checkpoint.json}
   aiops:
     metrics:
       retention-ms: 900000
@@ -108,21 +168,21 @@ ai:
   # 多模型配置
   models:
     openai:
-      qwen3.6-plus:
+      qwen3.7-max-2026-05-20:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       glm-5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       kimi-k2.5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
       MiniMax-M2.5:
         api-key: ${OPENAI_API_KEY}
-        base-url: ${OPENAI_BASE_URL:https://coding.dashscope.aliyuncs.com/v1}
+        base-url: ${OPENAI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
         enabled: true
 
 # MinIO配置

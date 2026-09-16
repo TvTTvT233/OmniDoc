@@ -375,7 +375,15 @@ public class KnowledgeIndexAgent {
         log.info("搜索知识库: query={}, userId={}", query, userId);
         try {
             float[] queryVector = documentVectorizer.vectorize(query);
-            List<Map<String, Object>> results = vectorStore.search(queryVector, Math.max(1, Math.min(topK, 50)));
+            Map<String, Object> filters = Map.of(
+                    "userId", userId == null || userId.isBlank() ? "system" : userId,
+                    "knowledgeBaseId", knowledgeBaseId == null || knowledgeBaseId.isBlank()
+                            ? "default"
+                            : knowledgeBaseId);
+            List<Map<String, Object>> results = vectorStore.search(
+                    queryVector,
+                    Math.max(1, Math.min(topK, 50)),
+                    filters);
             return results.stream()
                     .filter(item -> matchesOwner(item, userId, knowledgeBaseId))
                     .toList();
@@ -388,7 +396,6 @@ public class KnowledgeIndexAgent {
     public Map<String, Object> deleteIndex(String documentId) {
         log.info("删除文档索引: documentId={}", documentId);
         try {
-            vectorStore.delete(documentId);
             knowledgeBase.removeDocument(documentId);
             return Map.of(
                 "status", "success",

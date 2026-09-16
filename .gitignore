@@ -3,6 +3,7 @@ target/
 *.log
 *.log.*
 .env
+.local/
 .maven-cache/
 .pnpm-store/
 node_modules/

@@ -71,7 +71,11 @@ class KnowledgeIndexAgentTest {
         Map<String, Object> b = new LinkedHashMap<>();
         b.put("userId", "user-2");
         b.put("knowledgeBaseId", "kb-1");
-        when(vectorStore.search(any(), anyInt())).thenReturn(List.of(a, b));
+        when(vectorStore.search(
+                any(),
+                anyInt(),
+                eq(Map.of("userId", "user-1", "knowledgeBaseId", "kb-1"))))
+                .thenReturn(List.of(a, b));
 
         List<Map<String, Object>> filtered = agent.searchKnowledge("query", 5, "user-1", "kb-1");
 

@@ -1,0 +1,48 @@
+{
+  "fixtureId": "qv04-synthetic-vector-acceptance-v1",
+  "synthetic": true,
+  "remoteEmbedding": false,
+  "embedding": {
+    "model": "qv04-deterministic-sha256-v1",
+    "dimension": 16,
+    "schemaVersion": 1
+  },
+  "generator": {
+    "algorithm": "sha-256-normalized-bytes-v1",
+    "seed": "omnidoc-qv04-2026-08-10"
+  },
+  "scopes": [
+    {"id":"user-a-rules","userId":"qv04-user-a","knowledgeBaseId":"qv04-kb-rules"},
+    {"id":"user-a-portfolio","userId":"qv04-user-a","knowledgeBaseId":"qv04-kb-portfolio"},
+    {"id":"user-b-rules","userId":"qv04-user-b","knowledgeBaseId":"qv04-kb-rules"},
+    {"id":"user-b-portfolio","userId":"qv04-user-b","knowledgeBaseId":"qv04-kb-portfolio"},
+    {"id":"user-c-rules","userId":"qv04-user-c","knowledgeBaseId":"qv04-kb-rules"},
+    {"id":"user-c-portfolio","userId":"qv04-user-c","knowledgeBaseId":"qv04-kb-portfolio"}
+  ],
+  "segmentTemplates": [
+    {"ordinal":0,"documentSlot":0,"semanticKey":"shared-eligibility-evidence","text":"Synthetic segment: eligibility evidence is listed in the test checklist."},
+    {"ordinal":1,"documentSlot":0,"semanticKey":"shared-eligibility-evidence","text":"Synthetic segment: a second chunk repeats the same eligibility evidence topic."},
+    {"ordinal":2,"documentSlot":0,"semanticKey":"submission-deadline","text":"Synthetic segment: the example submission deadline is a fictional date."},
+    {"ordinal":3,"documentSlot":0,"semanticKey":"form-signature","text":"Synthetic segment: the fictional form contains a signature field."},
+    {"ordinal":4,"documentSlot":0,"semanticKey":"ranking-proof","text":"Synthetic segment: a fabricated ranking-proof placeholder is present."},
+    {"ordinal":5,"documentSlot":1,"semanticKey":"award-evidence","text":"Synthetic segment: a fabricated award-evidence placeholder is present."},
+    {"ordinal":6,"documentSlot":1,"semanticKey":"material-checklist","text":"Synthetic segment: the example material checklist contains only test items."},
+    {"ordinal":7,"documentSlot":1,"semanticKey":"cross-document-consistency","text":"Synthetic segment: fictional names are compared for consistency."},
+    {"ordinal":8,"documentSlot":1,"semanticKey":"content-clarity","text":"Synthetic segment: the example paragraph can be made clearer."},
+    {"ordinal":9,"documentSlot":1,"semanticKey":"deletion-target","text":"Synthetic segment: this record is reserved for deletion acceptance."}
+  ],
+  "queries": [
+    {"id":"q-user-a-rules","scopeRef":"user-a-rules","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-user-a-portfolio","scopeRef":"user-a-portfolio","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-user-b-rules","scopeRef":"user-b-rules","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-user-b-portfolio","scopeRef":"user-b-portfolio","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-user-c-rules","scopeRef":"user-c-rules","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-user-c-portfolio","scopeRef":"user-c-portfolio","semanticKey":"shared-eligibility-evidence","topK":5,"expectedOrdinals":[0,1],"noAnswer":false},
+    {"id":"q-document-filter","scopeRef":"user-a-rules","semanticKey":"award-evidence","topK":5,"documentSlot":1,"expectedOrdinals":[5],"noAnswer":false},
+    {"id":"q-no-answer","scopeRef":"user-c-portfolio","semanticKey":"topic-absent-from-fixture","topK":5,"expectedOrdinals":[],"noAnswer":true}
+  ],
+  "deletions": [
+    {"id":"delete-document","scopeRef":"user-a-rules","mode":"DOCUMENT","documentSlot":1,"expectedOrdinals":[5,6,7,8,9]},
+    {"id":"delete-record","scopeRef":"user-b-portfolio","mode":"ID","expectedOrdinals":[9]}
+  ]
+}

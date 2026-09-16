@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/memory-v1-acceptance-report.json",
+  "title": "OmniDoc Memory V1 acceptance report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reportType",
+    "stage",
+    "status",
+    "finalAcceptance",
+    "manualStatus",
+    "generatedAtUtc",
+    "fixture",
+    "environment",
+    "boundaries",
+    "tests",
+    "gates",
+    "contentSafety",
+    "metrics",
+    "stageGate",
+    "unverified"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "reportType": {"enum": ["FINAL_ACCEPTANCE", "STAGE_GATE"]},
+    "stage": {"enum": ["M02", "M03_A", "M03", "M06_A", "M07"]},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "STAGE_VERIFIED", "AUTO_VERIFIED", "FAILED"]},
+    "finalAcceptance": {"type": "boolean"},
+    "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING", "HUMAN_ACCEPTED"]},
+    "generatedAtUtc": {"type": "string", "format": "date-time"},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "synthetic", "messageCount", "summarySchemaVersion"],
+      "properties": {
+        "id": {"type": "string"},
+        "synthetic": {"const": true},
+        "messageCount": {"type": "integer", "minimum": 0},
+        "summarySchemaVersion": {"const": "1.0"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branch", "head", "os", "java", "node", "externalNetworkIncluded"],
+      "properties": {
+        "branch": {"type": "string"},
+        "head": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "os": {"type": "string"},
+        "java": {"type": "string"},
+        "node": {"type": "string"},
+        "externalNetworkIncluded": {"const": false}
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mysqlConnected",
+        "redisConnected",
+        "realModel",
+        "remoteEmbedding",
+        "embeddingCalls",
+        "memoryQdrantCollections"
+      ],
+      "properties": {
+        "mysqlConnected": {"type": "boolean"},
+        "redisConnected": {"type": "boolean"},
+        "realModel": {"type": "boolean"},
+        "remoteEmbedding": {"const": false},
+        "embeddingCalls": {"type": "integer", "minimum": 0},
+        "memoryQdrantCollections": {"type": "integer", "minimum": 0}
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "failures", "errors", "skipped", "asset", "integrated"],
+      "properties": {
+        "run": {"type": "integer", "minimum": 0},
+        "failures": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "asset": {"type": ["object", "null"]},
+        "integrated": {"type": ["object", "null"]}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "messageLoss",
+        "duplicateSequence",
+        "coverageGap",
+        "coverageDuplicate",
+        "staleSummaryOverwrite",
+        "unsupportedConfirmedItems",
+        "successfulCrossUserAccess",
+        "deleteResidue",
+        "tokenOverBudget",
+        "modelCallPathsCovered",
+        "requiredModelCallPaths"
+      ],
+      "properties": {
+        "messageLoss": {"type": ["integer", "null"], "minimum": 0},
+        "duplicateSequence": {"type": ["integer", "null"], "minimum": 0},
+        "coverageGap": {"type": ["integer", "null"], "minimum": 0},
+        "coverageDuplicate": {"type": ["integer", "null"], "minimum": 0},
+        "staleSummaryOverwrite": {"type": ["integer", "null"], "minimum": 0},
+        "unsupportedConfirmedItems": {"type": ["integer", "null"], "minimum": 0},
+        "successfulCrossUserAccess": {"type": ["integer", "null"], "minimum": 0},
+        "deleteResidue": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["conversations", "messages", "summaries", "redisKeys", "runtimeStateKeys"],
+          "properties": {
+            "conversations": {"type": "integer", "minimum": 0},
+            "messages": {"type": "integer", "minimum": 0},
+            "summaries": {"type": "integer", "minimum": 0},
+            "redisKeys": {"type": "integer", "minimum": 0},
+            "runtimeStateKeys": {"type": "integer", "minimum": 0}
+          }
+        },
+        "tokenOverBudget": {"type": ["integer", "null"], "minimum": 0},
+        "modelCallPathsCovered": {"type": ["integer", "null"], "minimum": 0},
+        "requiredModelCallPaths": {"const": 7}
+      }
+    },
+    "contentSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "containsConversationContent",
+        "containsSummaryContent",
+        "containsDocumentContent",
+        "containsPromptContent",
+        "containsSelectedText",
+        "containsToolResultContent",
+        "containsCredential"
+      ],
+      "properties": {
+        "containsConversationContent": {"const": false},
+        "containsSummaryContent": {"const": false},
+        "containsDocumentContent": {"const": false},
+        "containsPromptContent": {"const": false},
+        "containsSelectedText": {"const": false},
+        "containsToolResultContent": {"const": false},
+        "containsCredential": {"const": false}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tokenBudget", "summaryCalls", "summaryFailures"],
+      "properties": {
+        "tokenBudget": {"type": ["object", "null"]},
+        "summaryCalls": {"type": ["integer", "null"], "minimum": 0},
+        "summaryFailures": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "stageGate": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/stageGate"}
+      ]
+    },
+    "unverified": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "$defs": {
+    "stageGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready",
+        "requiredTargets",
+        "readinessMissing",
+        "targetTestsExpected",
+        "targetTestsSkipped",
+        "regressionGroups"
+      ],
+      "properties": {
+        "ready": {"type": "boolean"},
+        "requiredTargets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "readinessMissing": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        },
+        "targetTestsExpected": {"type": "integer", "minimum": 0},
+        "targetTestsSkipped": {"type": ["integer", "null"], "minimum": 0},
+        "regressionGroups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"reportType": {"const": "STAGE_GATE"}},
+        "required": ["reportType"]
+      },
+      "then": {
+        "properties": {
+          "stage": {"enum": ["M02", "M03_A", "M03", "M06_A"]},
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "STAGE_VERIFIED", "FAILED"]},
+          "finalAcceptance": {"const": false},
+          "manualStatus": {"const": "NOT_READY"},
+          "stageGate": {"$ref": "#/$defs/stageGate"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "AUTO_VERIFIED"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "reportType": {"const": "FINAL_ACCEPTANCE"},
+          "stage": {"const": "M07"},
+          "finalAcceptance": {"const": true},
+          "manualStatus": {"const": "MANUAL_PENDING"},
+          "stageGate": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"reportType": {"const": "FINAL_ACCEPTANCE"}},
+        "required": ["reportType"]
+      },
+      "then": {
+        "properties": {
+          "stage": {"const": "M07"},
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "AUTO_VERIFIED", "FAILED"]},
+          "stageGate": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "PENDING_EXTERNAL", "STAGE_VERIFIED", "FAILED"]}
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "finalAcceptance": {"const": false}
+        }
+      }
+    }
+  ]
+}

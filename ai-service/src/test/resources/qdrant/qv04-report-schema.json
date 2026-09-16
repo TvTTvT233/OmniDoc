@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/qv04-acceptance-report-v1.json",
+  "title": "OmniDoc QV04 acceptance report",
+  "type": "object",
+  "required": ["schemaVersion", "status", "fixture", "environment", "tests", "gates", "metrics", "unverified"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED", "FAILED"]},
+    "fixture": {
+      "type": "object",
+      "required": ["id", "synthetic", "remoteEmbedding", "users", "knowledgeBasesPerUser", "segmentsPerKnowledgeBase", "records", "dimension"]
+    },
+    "environment": {
+      "type": "object",
+      "required": ["repositoryRoot", "branch", "head", "os", "java", "externalNetworkIncluded"]
+    },
+    "tests": {
+      "type": "object",
+      "required": ["run", "failures", "errors", "skipped"]
+    },
+    "gates": {
+      "type": "object",
+      "required": ["qdrantRecallAt5AtLeastBaseline", "tenantLeakage", "deleteResidue", "migrationCountDifference"]
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["baseline", "qdrant", "shadowOverlapAtK"]
+    },
+    "unverified": {"type": "array", "items": {"type": "string"}}
+  }
+}

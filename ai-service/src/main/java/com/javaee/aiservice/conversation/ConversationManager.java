@@ -1,179 +1,132 @@
 package com.javaee.aiservice.conversation;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ScanOptions;
+import com.javaee.aiservice.conversation.model.Conversation;
+import com.javaee.aiservice.conversation.model.ConversationCursor;
+import com.javaee.aiservice.conversation.model.ConversationPage;
+import com.javaee.aiservice.conversation.model.ConversationStatus;
+import com.javaee.aiservice.conversation.model.ConversationMessage;
+import com.javaee.aiservice.conversation.model.MessageAppendCommand;
+import com.javaee.aiservice.conversation.service.ConversationService;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * 对话管理器
- * 管理对话生命周期和消息历史
- * 支持多轮对话和上下文管理
+ * Compatibility facade for the legacy Agent chat API.
+ *
+ * <p>Conversation and Message facts are delegated to the JDBC-backed service. Methods without
+ * an authenticated user are deliberately rejected because they cannot satisfy the owner contract.</p>
  */
 @Component
 public class ConversationManager {
 
-    private static final Logger log = LoggerFactory.getLogger(ConversationManager.class);
-    private static final String CONVERSATION_PREFIX = "conv:";
-    private static final String USER_PREFIX = "user:";
+    private static final int LEGACY_HISTORY_LIMIT = 100;
+    private static final int LEGACY_LIST_LIMIT = 200;
 
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private final ConversationService conversationService;
 
-    @Value("${ai.conversation.max-messages:100}")
-    private int maxMessages;
+    public ConversationManager(ConversationService conversationService) {
+        this.conversationService = conversationService;
+    }
 
-    @Value("${ai.conversation.expiry-hours:24}")
-    private int expiryHours;
-
-    /**
-     * 创建新对话
-     * @param userId 用户ID
-     * @return 对话ID
-     */
     public String createConversation(String userId) {
-        String conversationId = UUID.randomUUID().toString();
-        String key = CONVERSATION_PREFIX + conversationId;
-
-        Map<String, Object> conversation = new HashMap<>();
-        conversation.put("userId", userId);
-        conversation.put("createdAt", System.currentTimeMillis());
-        conversation.put("updatedAt", System.currentTimeMillis());
-        conversation.put("messages", new ArrayList<String>());
-
-        redisTemplate.opsForHash().putAll(key, conversation);
-        redisTemplate.expire(key, java.time.Duration.ofHours(expiryHours));
-
-        log.info("创建新对话: userId={}, conversationId={}", userId, conversationId);
-        return conversationId;
+        return conversationService.createConversation(userId).conversationId();
     }
 
-    /**
-     * 添加消息到对话
-     * @param conversationId 对话ID
-     * @param userMessage 用户消息
-     * @param assistantMessage 助手消息
-     */
-    public void addMessage(String conversationId, String userMessage, String assistantMessage) {
-        String key = CONVERSATION_PREFIX + conversationId;
-        
-        @SuppressWarnings("unchecked")
-        List<String> messages = (List<String>) redisTemplate.opsForHash().get(key, "messages");
-        if (messages == null) {
-            messages = new ArrayList<>();
-        }
-
-        messages.add("User: " + userMessage);
-        messages.add("Assistant: " + assistantMessage);
-
-        if (messages.size() > maxMessages) {
-            messages = messages.subList(messages.size() - maxMessages, messages.size());
-        }
-
-        redisTemplate.opsForHash().put(key, "messages", messages);
-        redisTemplate.opsForHash().put(key, "updatedAt", System.currentTimeMillis());
-        redisTemplate.expire(key, java.time.Duration.ofHours(expiryHours));
-
-        log.debug("添加消息到对话: conversationId={}, messageCount={}", conversationId, messages.size());
+    public void addMessageForUser(
+            String conversationId,
+            String userId,
+            String userMessage,
+            String assistantMessage
+    ) {
+        String clientRequestId = UUID.randomUUID().toString();
+        String turnId = UUID.randomUUID().toString();
+        conversationService.appendExchange(
+                conversationId,
+                userId,
+                clientRequestId,
+                turnId,
+                userMessage,
+                assistantMessage);
     }
 
-    /**
-     * 获取对话历史
-     * @param conversationId 对话ID
-     * @return 消息列表
-     */
-    public List<String> getConversationHistory(String conversationId) {
-        String key = CONVERSATION_PREFIX + conversationId;
-        
-        @SuppressWarnings("unchecked")
-        List<String> messages = (List<String>) redisTemplate.opsForHash().get(key, "messages");
-        return messages != null ? messages : Collections.emptyList();
-    }
-
-    /**
-     * 删除对话
-     * @param conversationId 对话ID
-     */
-    public void deleteConversation(String conversationId) {
-        String key = CONVERSATION_PREFIX + conversationId;
-        redisTemplate.delete(key);
-        log.info("删除对话: conversationId={}", conversationId);
-    }
-
-    public void addMessageForUser(String conversationId, String userId, String userMessage, String assistantMessage) {
-        assertOwner(conversationId, userId);
-        addMessage(conversationId, userMessage, assistantMessage);
+    public List<ConversationMessage> appendMessagesForUser(
+            String conversationId,
+            String userId,
+            List<MessageAppendCommand> commands
+    ) {
+        return conversationService.appendMessages(conversationId, userId, commands);
     }
 
     public List<String> getConversationHistoryForUser(String conversationId, String userId) {
-        assertOwner(conversationId, userId);
-        return getConversationHistory(conversationId);
+        return conversationService.legacyHistory(conversationId, userId, LEGACY_HISTORY_LIMIT);
     }
 
     public void deleteConversationForUser(String conversationId, String userId) {
-        assertOwner(conversationId, userId);
-        deleteConversation(conversationId);
+        conversationService.delete(conversationId, userId);
     }
 
     public void assertOwner(String conversationId, String userId) {
-        if (conversationId == null || conversationId.isBlank()) {
-            throw new IllegalArgumentException("对话ID不能为空");
-        }
-        String key = CONVERSATION_PREFIX + conversationId;
-        Object owner = redisTemplate.opsForHash().get(key, "userId");
-        if (owner == null) {
-            throw new IllegalArgumentException("对话不存在");
-        }
-        if (!String.valueOf(owner).equals(userId)) {
-            throw new SecurityException("无权访问该对话");
-        }
+        conversationService.requireOwned(conversationId, userId);
     }
 
-    /**
-     * 获取用户的所有对话
-     * @param userId 用户ID
-     * @return 对话ID列表
-     */
     public List<String> getUserConversations(String userId) {
-        try {
-            List<String> conversationIds = new ArrayList<>();
-            ScanOptions options = ScanOptions.scanOptions().match(CONVERSATION_PREFIX + "*").count(200).build();
-            try (var cursor = redisTemplate.getConnectionFactory().getConnection().scan(options)) {
-                while (cursor.hasNext()) {
-                    String key = new String(cursor.next(), StandardCharsets.UTF_8);
-                    String convUserId = (String) redisTemplate.opsForHash().get(key, "userId");
-                if (userId.equals(convUserId)) {
-                    conversationIds.add(key.substring(CONVERSATION_PREFIX.length()));
-                }
-            }
-            }
-            return conversationIds;
-        } catch (Exception e) {
-            log.warn("获取用户对话列表失败", e);
-            return Collections.emptyList();
-        }
+        List<String> conversationIds = new ArrayList<>();
+        ConversationCursor cursor = null;
+        do {
+            ConversationPage page = conversationService.listConversations(
+                    userId,
+                    ConversationStatus.ACTIVE,
+                    cursor,
+                    LEGACY_LIST_LIMIT);
+            conversationIds.addAll(page.items().stream().map(Conversation::conversationId).toList());
+            cursor = page.nextCursor();
+        } while (cursor != null);
+        return List.copyOf(conversationIds);
     }
 
-    /**
-     * 获取对话信息
-     * @param conversationId 对话ID
-     * @return 对话信息
-     */
+    public Map<String, Object> getConversationInfoForUser(String conversationId, String userId) {
+        Conversation conversation = conversationService.requireOwned(conversationId, userId);
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("conversationId", conversation.conversationId());
+        info.put("userId", conversation.userId());
+        info.put("title", conversation.title());
+        info.put("status", conversation.status().name());
+        info.put("createdAt", conversation.createdAt());
+        info.put("updatedAt", conversation.updatedAt());
+        return Collections.unmodifiableMap(info);
+    }
+
+    /** @deprecated Ownerless access cannot satisfy Memory V1 authorization. */
+    @Deprecated(forRemoval = false)
+    public void addMessage(String conversationId, String userMessage, String assistantMessage) {
+        throw ownerRequired();
+    }
+
+    /** @deprecated Use {@link #getConversationHistoryForUser(String, String)}. */
+    @Deprecated(forRemoval = false)
+    public List<String> getConversationHistory(String conversationId) {
+        throw ownerRequired();
+    }
+
+    /** @deprecated Use {@link #deleteConversationForUser(String, String)}. */
+    @Deprecated(forRemoval = false)
+    public void deleteConversation(String conversationId) {
+        throw ownerRequired();
+    }
+
+    /** @deprecated Use {@link #getConversationInfoForUser(String, String)}. */
+    @Deprecated(forRemoval = false)
     public Map<String, Object> getConversationInfo(String conversationId) {
-        String key = CONVERSATION_PREFIX + conversationId;
-        Map<Object, Object> hash = redisTemplate.opsForHash().entries(key);
-        
-        Map<String, Object> info = new HashMap<>();
-        for (Map.Entry<Object, Object> entry : hash.entrySet()) {
-            info.put(entry.getKey().toString(), entry.getValue());
-        }
-        return info;
+        throw ownerRequired();
+    }
+
+    private static IllegalStateException ownerRequired() {
+        return new IllegalStateException("Authenticated userId is required for conversation access");
     }
 }

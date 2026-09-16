@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/memory-v1-summary.json",
+  "title": "OmniDoc Memory V1 structured conversation summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "conversationId",
+    "summaryVersion",
+    "coverage",
+    "goal",
+    "constraints",
+    "facts",
+    "decisions",
+    "openQuestions",
+    "todos",
+    "resources",
+    "meta"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "conversationId": {"type": "string", "minLength": 1, "maxLength": 64},
+    "summaryVersion": {"type": "integer", "minimum": 1},
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "goal": {
+      "oneOf": [
+        {"$ref": "#/$defs/goalItem"},
+        {"type": "null"}
+      ]
+    },
+    "constraints": {"type": "array", "items": {"$ref": "#/$defs/constraintItem"}},
+    "facts": {"type": "array", "items": {"$ref": "#/$defs/factItem"}},
+    "decisions": {"type": "array", "items": {"$ref": "#/$defs/decisionItem"}},
+    "openQuestions": {"type": "array", "items": {"$ref": "#/$defs/openQuestionItem"}},
+    "todos": {"type": "array", "items": {"$ref": "#/$defs/todoItem"}},
+    "resources": {"type": "array", "items": {"$ref": "#/$defs/resourceItem"}},
+    "meta": {"$ref": "#/$defs/meta"}
+  },
+  "$defs": {
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromSeq", "toSeq", "sourceDigest"],
+      "properties": {
+        "fromSeq": {"type": "integer", "minimum": 1},
+        "toSeq": {"type": "integer", "minimum": 1},
+        "sourceDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"enum": ["MESSAGE", "DOCUMENT", "TOOL_RESULT"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "versionId": {"type": "string", "minLength": 1, "maxLength": 128},
+        "locator": {"type": "object"},
+        "contentHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "itemBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "content", "status", "sourceRefs", "lastUpdatedSeq"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "content": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "status": {"type": "string"},
+        "sourceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        },
+        "lastUpdatedSeq": {"type": "integer", "minimum": 1}
+      }
+    },
+    "goalItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["active", "completed", "cancelled"]}}}
+      ]
+    },
+    "constraintItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["active", "superseded"]}}}
+      ]
+    },
+    "factItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["confirmed", "uncertain", "conflicting", "superseded"]}}}
+      ]
+    },
+    "decisionItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["proposed", "confirmed", "rejected", "superseded"]}}}
+      ]
+    },
+    "openQuestionItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["open", "resolved", "dropped"]}}}
+      ]
+    },
+    "todoItem": {
+      "allOf": [
+        {"$ref": "#/$defs/itemBase"},
+        {"properties": {"status": {"enum": ["pending", "in_progress", "done", "cancelled"]}}}
+      ]
+    },
+    "resourceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "content", "status", "sourceRefs", "lastUpdatedSeq"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "content": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "status": {"enum": ["active", "superseded", "removed"]},
+        "sourceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        },
+        "lastUpdatedSeq": {"type": "integer", "minimum": 1}
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["previousSummaryVersion", "generatedAt"],
+      "properties": {
+        "previousSummaryVersion": {"type": "integer", "minimum": 0},
+        "generatedAt": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
