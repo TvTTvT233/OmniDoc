@@ -1,5 +1,18 @@
 # OmniDoc 项目进展
 
+## 2026-10-13 核心能力整合候选
+
+- 本轮目标：先统一已有 MCP、Qdrant、Memory V1 成果作为后续验证基线；本轮仅建立本地候选和记录状态，不开展新增功能开发。
+- 本地仓库：`D:\OmniDoc`；候选分支：`integration/core-baseline`；来源为 `origin/docs/bootstrap-project-context` 的 `09974f73c19989cbca0f2bc86bf6b75d18d77944`，建立时相对 `main` 领先 49 个提交。
+- 已通过 Git 祖先关系检查确认候选完整包含 `milestone/mcp-search`（`99ed70c`）、`milestone/qdrant`（`00548c8`）、`milestone/memory-v1`（`d289cf0`）。三者逐层包含，无需重复合并或挑选提交。
+- 候选来源相对 Memory V1 仅多出 `docs/PROGRESS.md` 的历史调查与发布范围记录；本轮亦仅追加本节，业务代码、依赖和配置与 Memory V1 一致。
+- 本地 `main` 与 `origin/main` 保持 `56e9cebc9c63882eb847a2baea34991fc509e5df`；现有远程跟踪分支和里程碑引用均保留，本轮未推送远端。
+- Review M0、其后续修复和验收分支未纳入本轮候选。历史 B 验收失败和旧机器未提交的 B-FIX3 文件仍需后续核对，不能视为已解决或已恢复。
+- 文档口径说明：`docs/OMNIDOC_CONTEXT.md` 的“需求冻结/运行基线验证”及下方旧记录中的“进入主分支”属于历史阶段描述，不代表 Git `main` 已包含这些功能。当前准确状态为“核心能力候选已建立，当前机器回归与运行验证待执行”。旧报告的通过结果保留为历史证据，不作为本机新验收结果。
+- 本轮检查：`git status --short --branch`、`git worktree list --porcelain`、`git for-each-ref`、`git merge-base --is-ancestor`、`git rev-list --left-right --count`、排除进展文档后的 `git diff --exit-code`；已确认功能祖先全部包含、Review M0 未包含、业务代码与 Memory V1 无差异。
+- 本轮未运行构建、业务测试、基础设施或端到端流程，未验证本机服务可用性，也未更新 `main`。
+- 下一步：在此候选上重跑已有自动回归与前端构建，验证登录、文件上传、RAG、MCP、会话保存与恢复；按实际结果记录问题和修复，验证通过后再更新 `main`。Review M0 单独收尾和验收。
+
 ## 2026-09-17 跨分支状态核对（调查记录）
 
 本节记录本地分支与 GitHub 的实际差异，不表示后续实现已合入本 checkout。下方原状态快照属于本分支的 Memory V1 历史状态；Review M0 的后续进展需结合对应分支的交接记录阅读。
