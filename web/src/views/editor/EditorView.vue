@@ -163,7 +163,7 @@
         <el-button circle icon="Clock" size="small" style="margin-left:10px;" @click="openHistoryDrawer"></el-button>
       </div>
       <div class="header-right">
-        <el-button type="primary" size="small" round icon="Check" @click="handleManualSave" :loading="isSaving">手动保存</el-button>
+        <el-button type="primary" size="small" round icon="Check" @click="handleManualSave" :loading="isSaving" :disabled="!canEditDocument">手动保存</el-button>
         <el-button size="small" round icon="Download" @click="handleDownload">下载最新版</el-button>
         <el-button type="primary" size="small" round icon="Share">协作</el-button>
         <el-avatar :size="30" style="background-color: #3370ff; font-weight: bold; color: white; margin-left:10px;">{{ currentUserName.charAt(0).toUpperCase() }}</el-avatar>
@@ -172,9 +172,11 @@
 
     <div class="workspace">
       <aside class="left-sidebar">
-        <div class="sidebar-section" v-if="textStats">
+        <div class="sidebar-section">
           <div class="section-title"><el-icon><DataLine /></el-icon> 文本分析</div>
-          <div class="stats-grid">
+          <p v-if="textStatsLoading" role="status">正在分析文本…</p>
+          <p v-else-if="textStatsError" role="alert">{{ textStatsError }} <el-button link @click="analyzeDocumentText">重试分析</el-button></p>
+          <div v-else-if="textStats" class="stats-grid">
             <div class="stat-item"><span class="num">{{ textStats.totalCharacters || 0 }}</span><span class="desc">字数</span></div>
             <div class="stat-item"><span class="num">{{ textStats.lines || 0 }}</span><span class="desc">段落</span></div>
             <div class="stat-item"><span class="num">{{ textStats.chineseCharacters || 0 }}</span><span class="desc">中文字符</span></div>
@@ -182,10 +184,12 @@
           </div>
         </div>
 
-        <div class="sidebar-section" v-if="aiSummary">
+        <div class="sidebar-section" v-if="aiSummary || keywordsError || summaryError || keywords.length">
           <div class="section-title"><el-icon><Document /></el-icon> ✨ 智能摘要</div>
+          <p v-if="summaryError" role="alert">{{ summaryError }} <el-button link @click="generateDocSummary(currentDocumentText())">重试摘要</el-button></p>
           <div class="summary-text preserve-format">{{ aiSummary }}</div>
           <div class="keywords-area" v-loading="keywordsLoading">
+            <p v-if="keywordsError" role="alert">{{ keywordsError }} <el-button link @click="refreshKeywords(currentDocumentText())">重试关键词</el-button></p>
             <el-tag
                 v-for="(tag, index) in keywords"
                 :key="index"
@@ -198,13 +202,14 @@
           </div>
         </div>
 
-        <div class="sidebar-section" style="margin-top: auto;"> <CollaboratePanel :documentId="docId" :userId="currentUserId" :userName="currentUserName" />
+        <div class="sidebar-section" style="margin-top: auto;"> <CollaboratePanel v-if="canEditDocument" :documentId="docId" :userId="currentUserId" :userName="currentUserName" />
         </div>
       </aside>
 
       <main class="editor-main" v-loading="docLoading" @scroll="handleScroll">
         <div class="paper-container">
-          <div class="paper preserve-format" contenteditable="true" v-html="docContent" @mouseup="handleTextSelection" @input="handleInput"></div>
+          <p v-if="docError" class="document-load-error" role="alert">{{ docError }} <el-button link @click="loadDocData">重试读取文档</el-button></p>
+          <div class="paper preserve-format" :contenteditable="canEditDocument" v-html="docContent" @mouseup="handleTextSelection" @input="handleInput"></div>
         </div>
 
         <transition name="el-zoom-in-center">
@@ -226,8 +231,9 @@
               <el-icon color="#409EFF" size="18"><MagicStick /></el-icon> OmniDoc 灵感助理
             </span>
             <el-select v-model="currentModel" size="small" placeholder="切换模型" style="width: 130px;" @change="handleModelChange">
-              <el-option v-for="m in modelOptions" :key="m.code" :label="m.name" :value="m.code" />
+              <el-option v-for="m in modelOptions" :key="m.code" :label="m.name" :value="m.code" :disabled="m.available === false" />
             </el-select>
+            <span v-if="modelsError" role="alert">{{ modelsError }} <el-button link @click="fetchModels">重试模型列表</el-button></span>
           </div>
           <div class="editor-conversation-bar">
             <select :value="currentConvId || ''" :disabled="isConversationBusy" aria-label="选择编辑器会话" @change="handleEditorConversationSelect">
@@ -297,7 +303,7 @@
           <el-timeline-item v-for="ver in versionList" :key="ver.id" :timestamp="new Date(ver.createTime).toLocaleString()" placement="top">
             <el-card shadow="hover" class="version-card">
               <p>版本号：V{{ ver.versionNumber }}</p>
-              <el-button size="small" type="primary" plain style="margin-top:10px" @click="handleRestore(ver.versionNumber)">恢复此版本</el-button>
+              <el-button size="small" type="primary" plain style="margin-top:10px" :disabled="!canEditDocument" @click="handleRestore(ver.versionNumber)">恢复此版本</el-button>
             </el-card>
           </el-timeline-item>
         </el-timeline>
@@ -315,8 +321,11 @@
         <el-select v-model="selectedStrategy" size="small" style="flex: 1;">
           <el-option v-for="(name, key) in strategyMap" :key="key" :label="name" :value="key" />
         </el-select>
-        <el-button type="primary" size="small" :loading="indexing" @click="doIndexDocument">执行分段</el-button>
+        <el-button type="primary" size="small" :loading="indexing" :disabled="!selectedStrategy || !canEditDocument" @click="doIndexDocument">执行分段</el-button>
       </div>
+      <p v-if="strategyError" role="alert">{{ strategyError }} <el-button link @click="loadSegmentStrategies">重试加载策略</el-button></p>
+      <p v-if="indexError" role="alert">{{ indexError }}</p>
+      <p v-if="indexSucceeded" role="status">索引请求已完成。</p>
     </div>
 
     <el-divider />
@@ -324,8 +333,10 @@
     <!-- 当前分段预览区 -->
     <h4 style="margin-bottom: 10px; display: flex; justify-content: space-between;">
       <span>当前文档分段明细</span>
-      <el-tag size="small" type="success">共 {{ segments.length }} 段</el-tag>
+      <el-tag v-if="!segmentsError && !segmentsLoading" size="small" type="info">共 {{ segments.length }} 段</el-tag>
     </h4>
+    <p v-if="segmentsLoading" role="status">正在加载分段…</p>
+    <p v-if="segmentsError" role="alert">{{ segmentsError }} <el-button link @click="loadDocumentSegments">重试加载分段</el-button></p>
     <el-collapse v-if="segments.length > 0" accordion>
       <el-collapse-item v-for="(seg, idx) in segments" :key="idx" :title="`分片 #${idx + 1}`" :name="idx">
         <div style="font-size: 12px; color: #666; white-space: pre-wrap; background: #f5f7fa; padding: 8px; border-radius: 4px;">
@@ -376,6 +387,8 @@ const chatTitle = computed(() => conversationWorkspace.activeConversation.value?
 const docName = ref(sessionStorage.getItem('currentDocName') || '未命名文档'); const currentUserName = ref('User')
 const currentUserId = ref(authenticatedUserId)
 const docContent = ref(''); const docLoading = ref(false); const aiSummary = ref('')
+const docError = ref(''); const docLoaded = ref(false)
+const canEditDocument = computed(() => docLoaded.value && !docLoading.value && !docError.value)
 const isAiThinking = ref(false); const pendingPreview = ref(null); const latestActionResult = ref(null); const isConversationLifecycleBusy = ref(false)
 const currentConvId = conversationWorkspace.activeConversationId
 const activeConversation = conversationWorkspace.activeConversation
@@ -409,31 +422,58 @@ const showAiBall = ref(false); const ballStyle = reactive({ top: '0px', left: '0
 const showHistory = ref(false); const versionList = ref([])
 const keywords = ref([]); const keywordsLoading = ref(false); const isRagMode = ref(false)
 const textStats = ref(null)
+const textStatsLoading = ref(false); const textStatsError = ref('')
+const keywordsError = ref(''); const summaryError = ref('')
+const currentDocumentText = () => {
+  const paper = document.querySelector('.paper')
+  if (paper && typeof paper.innerText === 'string') return paper.innerText
+  // 非布局环境（组件测试）也保留块级文本边界。
+  const html = paper?.innerHTML ?? docContent.value
+  const element = document.createElement('div')
+  element.innerHTML = html.replace(/<br\s*\/?\s*>|<\/(?:p|div|li|h[1-6]|tr)>/gi, '$&\n')
+  return element.textContent || ''
+}
+const analyzeDocumentText = async () => {
+  const plainText = currentDocumentText().trim()
+  textStats.value = null
+  textStatsError.value = ''
+  if (!plainText) return
+  textStatsLoading.value = true
+  try {
+    const res = await aiApi.analyzeText(plainText)
+    const stats = res?.data
+    if (!stats || !['totalCharacters', 'lines', 'chineseCharacters', 'punctuations'].every(key => Number.isFinite(stats[key]))) {
+      throw new Error('Invalid text analysis response')
+    }
+    textStats.value = stats
+  } catch {
+    textStatsError.value = '文本分析失败，未生成统计结果。'
+  } finally { textStatsLoading.value = false }
+}
 // RAG 分段管理逻辑
 const ragDrawerVisible = ref(false)
-const strategyMap = ref({ 'AUTO': '智能自动分段' }) // 默认保底数据
-const selectedStrategy = ref('AUTO')
+const strategyMap = ref({})
+const selectedStrategy = ref('')
 const segments = ref([])
 const indexing = ref(false)
-const currentModel = ref('qwen3.7-max-2026-05-20') // 默认模型
+const strategyError = ref(''); const segmentsError = ref(''); const segmentsLoading = ref(false)
+const indexError = ref(''); const indexSucceeded = ref(false)
+const currentModel = ref('') // 未选择时交给服务端使用其默认模型
 const modelOptions = ref([])
+const modelsError = ref('')
 
 // 获取可用模型列表
 const fetchModels = async () => {
+  modelsError.value = ''
   try {
     const res = await aiApi.getModels()
-    console.log('所有模型:', JSON.stringify(res.data, null, 2))
+    if (!Array.isArray(res?.data)) throw new Error('Invalid models')
     modelOptions.value = res.data
-
-    // 默认用 GLM-5
-    currentModel.value = 'glm-5'
-
+    if (!modelOptions.value.some(m => m.code === currentModel.value && m.available !== false)) {
+      currentModel.value = modelOptions.value.find(m => m.available !== false)?.code || ''
+    }
   } catch {
-    modelOptions.value = [
-      { code: 'glm-5', name: '智谱GLM-5', available: true },
-      { code: 'qwen3.7-max-2026-05-20', name: '通义千问 3.7 Max', available: true },
-    ]
-    currentModel.value = 'glm-5'
+    modelsError.value = '模型列表加载失败，可用性未知。'
   }
 }
 
@@ -450,40 +490,20 @@ const loadDocData = async () => {
     return
   }
   docLoading.value = true
+  docError.value = ''
+  saveStatusText.value = '正在读取…'
   try {
     const docRes = await docApi.getDocDetail(docId)
     const data = docRes.data || docRes
     docName.value = data.title; aiSummary.value = data.summary; docContent.value = data.content || ''
+    docLoaded.value = true
+    saveStatusText.value = '已同步'
 
-    // 如果文档有内容，并行去请求“文本分析(字数统计)”接口
-    if (data.content && data.content.length > 5) {
-      // 获取纯文本用于分析 (剥离可能存在的 HTML 标签)
-      const plainText = data.content.replace(/<[^>]+>/g, '')
-
-      aiApi.analyzeText(plainText).then(res => {
-        // 将后端的 TextAnalyzeVO 数据赋给前端变量
-        textStats.value = res.data
-      }).catch(e => {
-        console.warn('文本分析接口调用失败', e)
-        // Mock
-        textStats.value = {
-          totalCharacters: plainText.length,
-          lines: plainText.split('\n').filter(line => line.trim() !== '').length,
-          chineseCharacters: Math.floor(plainText.length * 0.8),
-          punctuations: Math.floor(plainText.length * 0.15)
-        }
-      })
-    }
-
-    // 并行拉取关键词 (不阻塞 A4 纸显示)
-    if (data.content && data.content.length > 5) {
-      keywordsLoading.value = true
-      aiApi.extractKeywords(data.content).then(res => {
-        keywords.value = res.data.keywords.map(k => k.word)
-      }).finally(() => { keywordsLoading.value = false })
-    }
+    await nextTick()
+    void analyzeDocumentText()
   } catch (e) {
-    docContent.value = `<div style="text-align:center;color:red;padding:100px;">读取文档失败</div>`
+    docError.value = '读取文档失败，现有正文未被替换。请重试后再编辑或保存。'
+    saveStatusText.value = '读取失败'
   } finally { docLoading.value = false }
 }
 
@@ -496,6 +516,7 @@ onMounted(async () => {
   ])
   syncConversationRoute()
   loadDocData().then(() => {
+    if (!canEditDocument.value) return
     const paperElement = document.querySelector('.paper')
     if (paperElement) {
       const content = paperElement.innerHTML
@@ -510,6 +531,8 @@ onMounted(async () => {
 const refreshKeywords = async (content) => {
   if (!content || content.length < 5) return
   keywordsLoading.value = true
+  keywordsError.value = ''
+  keywords.value = []
   try {
     // 💡剥离 A4 纸容器中的 HTML 标签，只传纯文本给 AI，防止标签干扰
     const plainText = content.replace(/<[^>]+>/g, '').trim()
@@ -521,10 +544,11 @@ const refreshKeywords = async (content) => {
       keywords.value = res.data.keywords.map(k => k.word)
     } else if (Array.isArray(res?.data)) {
       keywords.value = res.data
+    } else {
+      throw new Error('Invalid keyword response')
     }
-  } catch (e) {
-    console.error('关键词提取失败，使用 Mock 兜底', e)
-    keywords.value = ['AI分析', '智能协作', '办公规范']
+  } catch {
+    keywordsError.value = '关键词提取失败，未生成关键词。'
   } finally {
     keywordsLoading.value = false
   }
@@ -533,14 +557,17 @@ const refreshKeywords = async (content) => {
 // 改造自动摘要函数：把 currentModel 传给后端
 const generateDocSummary = async (content) => {
   if (!content) return
+  summaryError.value = ''
   try {
     const plainText = content.replace(/<[^>]+>/g, '').trim()
     const res = await aiApi.summarizeText(plainText, 200, currentModel.value)
     if (res?.data?.summary) {
       aiSummary.value = res.data.summary
+    } else {
+      throw new Error('Invalid summary response')
     }
-  } catch (e) {
-    console.error('摘要生成失败', e)
+  } catch {
+    summaryError.value = aiSummary.value ? '摘要更新失败，下方保留上次结果。' : '摘要生成失败，尚无结果。'
   }
 }
 
@@ -556,6 +583,7 @@ const handleModelChange = () => {
 
 // ===== 2. 交互逻辑 =====
 const handleSend = async () => {
+  if (!isChatMode.value && !canEditDocument.value) return ElMessage.warning('请先成功读取文档，再执行文档任务')
   if (!userMsg.value.trim() || isConversationBusy.value) return
 
   const q = userMsg.value
@@ -720,6 +748,7 @@ const applyFrontendWriteFromToolResults = (toolResults) => {
 }
 
 const applyFrontendDocumentWrite = (data) => {
+  if (!canEditDocument.value) return false
   const paperElement = document.querySelector('.paper')
   if (!paperElement || !data?.content) return false
 
@@ -931,7 +960,7 @@ const parseToolResults = (toolResults) => {
 
 // ===== 3. 手动保存与恢复逻辑 =====
 const handleManualSave = async () => {
-  if (isChatMode.value) return
+  if (isChatMode.value || !canEditDocument.value) return
   isSaving.value = true; saveStatusText.value = '正在保存...'
   try {
     const content = document.querySelector('.paper').innerHTML
@@ -942,6 +971,7 @@ const handleManualSave = async () => {
 }
 
 const handleRestore = async (verNum) => {
+  if (!canEditDocument.value) return
   ElMessageBox.confirm(`确定要将文档恢复到 V${verNum} 吗？当前未保存的修改将丢失。`, '版本回溯').then(async () => {
     docLoading.value = true
     try {
@@ -1082,48 +1112,59 @@ const handleDownloadAgentFile = (actionResult) => {
   }
 }
 
-const openRagSettings = async () => {
-  ragDrawerVisible.value = true
-  // 拉取后端支持的策略列表 (如果后端接口没好，就用我们自己的假数据)
+const loadSegmentStrategies = async () => {
+  strategyError.value = ''
   try {
     const res = await aiApi.getSegmentStrategies()
-    if (res.data) strategyMap.value = res.data
-
-    // 拉取当前文档的分段列表
-    const segRes = await aiApi.getDocumentSegments(docId)
-    if (segRes.data) segments.value = segRes.data
-  } catch (e) {
-    console.warn('获取分段策略失败，使用本地配置')
-    strategyMap.value = {
-      'FIXED_LENGTH': '固定长度 (1000字符/10%重叠)',
-      'CHAPTER': '智能按章节分段',
-      'SEMANTIC': '语义分割 (句子级别)'
-    }
+    if (!res?.data || typeof res.data !== 'object' || Array.isArray(res.data) || !Object.keys(res.data).length) throw new Error('Invalid strategies')
+    strategyMap.value = res.data
+    if (!strategyMap.value[selectedStrategy.value]) selectedStrategy.value = Object.keys(res.data)[0]
+  } catch {
+    strategyError.value = Object.keys(strategyMap.value).length ? '策略更新失败，保留上次加载的选项。' : '分段策略加载失败，请重试。'
   }
+}
+
+const loadDocumentSegments = async () => {
+  segmentsLoading.value = true
+  segmentsError.value = ''
+  segments.value = []
+  try {
+    const res = await aiApi.getDocumentSegments(docId)
+    if (!Array.isArray(res?.data)) throw new Error('Invalid segments')
+    segments.value = res.data
+  } catch {
+    segmentsError.value = '分段明细加载失败，当前结果未知。'
+  } finally { segmentsLoading.value = false }
+}
+
+const openRagSettings = async () => {
+  ragDrawerVisible.value = true
+  await Promise.all([loadSegmentStrategies(), loadDocumentSegments()])
 }
 
 // 执行高级索引
 const doIndexDocument = async () => {
+  if (!canEditDocument.value) return
   // 获取 A4 纸里最新的纯文本内容
-  const content = document.querySelector('.paper').innerText || '无内容'
+  const content = currentDocumentText()
   if (content.length < 10) return ElMessage.warning('文档内容过少，无法分段')
+  if (!selectedStrategy.value || indexing.value) return
 
   indexing.value = true
+  indexError.value = ''
+  indexSucceeded.value = false
+  segments.value = []
+  segmentsError.value = ''
   try {
     // 提交给后端的 /index/segment 接口
     await aiApi.indexWithSegment(docId, content, selectedStrategy.value)
-    ElMessage.success('向量化重构完成！')
-
-    // 重新拉取展示分段结果
-    const segRes = await aiApi.getDocumentSegments(docId)
-    segments.value = segRes.data || []
-  } catch (e) {
-    ElMessage.error('分段策略执行失败')
-    // Mock 演示效果
-    segments.value = [
-      { content: content.substring(0, 500) + '...' },
-      { content: content.substring(500, 1000) + '...' }
-    ]
+    indexSucceeded.value = true
+    ElMessage.success('索引请求已完成')
+    await loadDocumentSegments()
+  } catch {
+    indexError.value = '索引请求失败，无法确认是否完成；可重新执行分段。'
+    segmentsError.value = '尚未确认最新分段，请重新加载明细。'
+    ElMessage.error('索引请求失败')
   } finally {
     indexing.value = false
   }
@@ -1349,6 +1390,7 @@ const scrollToBottom = () => { nextTick(() => {
 .workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
 .editor-main { flex: 1; overflow-y: auto; display: flex; justify-content: center; padding: 50px 0; background: #f0f2f5; position: relative; }
 .paper-container { position: relative; }
+.document-load-error { max-width: 780px; box-sizing: border-box; padding: 12px 16px; margin: 0 0 16px; color: #a12622; background: #fef0f0; border: 1px solid #fbc4c4; border-radius: 6px; }
 .paper { width: 780px; min-height: 1100px; background: #fff; padding: 80px 100px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); outline: none; line-height: 1.8; font-size: 16px; color: #1f2329; }
 
 .ai-sidebar { width: 360px; background: #fff; border-left: 1px solid #dee0e3; display: flex; flex-direction: column; height: 100%; flex-shrink: 0;}

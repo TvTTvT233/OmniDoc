@@ -158,6 +158,7 @@
     <!-- PPT 生成器弹窗 -->
     <el-dialog v-model="pptDialogVisible" title="🎨 HTML PPT 生成器" width="600px" destroy-on-close>
       <el-form :model="pptForm" label-position="top">
+        <p v-if="modelsError" role="alert">{{ modelsError }} <el-button link @click="fetchModels">重试加载模型</el-button></p>
         <el-alert :title="`即将使用 [${currentModelName}] 为您生成内容`" type="info" show-icon :closable="false" style="margin-bottom: 15px;" />
         <el-form-item label="📌 演示标题">
           <el-input v-model="pptForm.title" placeholder="例如：2026年OmniDoc项目" />
@@ -232,6 +233,7 @@ const search = ref('')
 const aiTask = ref('')
 const fileInputRef = ref(null)
 const modelsLoading = ref(false)
+const modelsError = ref('')
 const aiModelsList = ref([])
 const pptDialogVisible = ref(false)
 const pptLoading = ref(false)
@@ -291,19 +293,18 @@ const fetchFiles = async () => {
 // 获取 AI 模型列表
 const fetchModels = async () => {
   modelsLoading.value = true
+  modelsError.value = ''
   try {
-    const res = await aiApi.getModels().catch(() => null)
-    if (res && res.data && res.data.length > 0) {
+    const res = await aiApi.getModels()
+    if (Array.isArray(res?.data)) {
       aiModelsList.value = res.data
       const firstAvailable = res.data.find(m => m.available)
       if (firstAvailable) pptForm.value.model = firstAvailable.code
     } else {
-      // 容灾假数据
-      aiModelsList.value = [
-        { code: 'qwen-plus', name: '通义千问 Plus (Mock)', available: true, provider: '阿里云' },
-        { code: 'deepseek-v3.2', name: 'DeepSeek (Mock)', available: true, provider: 'DeepSeek' }
-      ]
+      throw new Error('Invalid models response')
     }
+  } catch {
+    modelsError.value = '模型列表加载失败，可用性未知。'
   } finally {
     modelsLoading.value = false
   }

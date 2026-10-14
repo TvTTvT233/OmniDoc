@@ -1,0 +1,38 @@
+# Explicit API/storage-only baseline. No synthetic answers or embeddings.
+spring:
+  ai:
+    dashscope:
+      api-key: ""
+      embedding:
+        api-key: ""
+      rerank:
+        enabled: false
+        api-key: ""
+    openai:
+      api-key: ""
+      base-url: http://127.0.0.1:9
+ai:
+  memory:
+    summary:
+      enabled: false
+  models:
+    openai:
+      "[qwen3.7-max-2026-05-20]":
+        enabled: false
+        api-key: ""
+        base-url: http://127.0.0.1:9
+      "[glm-5]":
+        enabled: false
+        api-key: ""
+        base-url: http://127.0.0.1:9
+      "[kimi-k2.5]":
+        enabled: false
+        api-key: ""
+        base-url: http://127.0.0.1:9
+      "[MiniMax-M2.5]":
+        enabled: false
+        api-key: ""
+        base-url: http://127.0.0.1:9
+agent:
+  mcp:
+    enabled: false

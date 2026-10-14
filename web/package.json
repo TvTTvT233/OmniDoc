@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:memory-baseline": "vitest run --config vitest.config.js",
     "test:memory-contract": "vitest run --config vitest.memory-contract.config.js",
-    "test:memory-ui": "vitest run --config vitest.memory-ui.config.js"
+    "test:memory-ui": "vitest run --config vitest.memory-ui.config.js",
+    "test:baseline-state": "vitest run --config vitest.baseline-state.config.js && vitest run --config vitest.startup.config.js"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

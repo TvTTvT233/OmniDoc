@@ -1,6 +1,7 @@
 package com.javaee.aiservice.agent.execution.tool;
 
 import com.javaee.aiservice.agent.execution.mcp.contract.McpToolDescriptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ public class McpToolCatalogAdapter {
     private final AgentToolRegistry toolRegistry;
     private final McpToolDefinitionMapper definitionMapper;
 
+    @Autowired
     public McpToolCatalogAdapter(AgentToolRegistry toolRegistry) {
         this(toolRegistry, new McpToolDefinitionMapper());
     }

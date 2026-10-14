@@ -1,0 +1,61 @@
+name: omnidoc-baseline-20261014
+services:
+  mysql:
+    image: mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run Initialize-Runtime.ps1 first}
+      MYSQL_DATABASE: omnidoc
+    ports: ["127.0.0.1:13306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ../../docker/mysql-init/10-user-schema.sql:/docker-entrypoint-initdb.d/10-user-schema.sql:ro
+      - ../../file-service/src/main/resources/file.sql:/docker-entrypoint-initdb.d/20-file-schema.sql:ro
+      - ../../document-service/src/main/resources/document.sql:/docker-entrypoint-initdb.d/30-document-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h localhost -uroot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis@sha256:3e1b24a1a8f24ff926b15e5ace8c38a03e5657fb66e1fc7e5188e315aa5fa094
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Run Initialize-Runtime.ps1 first}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    ports: ["127.0.0.1:16379:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  rabbitmq:
+    image: rabbitmq@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?Run Initialize-Runtime.ps1 first}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Run Initialize-Runtime.ps1 first}
+    ports: ["127.0.0.1:15673:5672", "127.0.0.1:15674:15672"]
+    volumes: ["rabbitmq-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  minio:
+    image: minio/minio@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Run Initialize-Runtime.ps1 first}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?Run Initialize-Runtime.ps1 first}
+    command: server /data --console-address ":9001"
+    ports: ["127.0.0.1:19000:9000", "127.0.0.1:19001:9001"]
+    volumes: ["minio-data:/data"]
+  qdrant:
+    image: qdrant/qdrant@sha256:affb67e1d6f2f93d7d20b90d238a7d4b974d36351c162e73bda794e4b2e03483
+    profiles: ["qdrant"]
+    ports: ["127.0.0.1:16333:6333", "127.0.0.1:16334:6334"]
+    volumes: ["qdrant-data:/qdrant/storage"]
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+  qdrant-data:
