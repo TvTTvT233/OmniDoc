@@ -41,7 +41,10 @@ const mountView = async (component = EditorView) => {
     attachTo: document.body,
     global: {
       renderStubDefaultSlot: true,
-      stubs: { 'el-button': { props: ['disabled', 'loading'], template: '<button :disabled="disabled || loading"><slot /></button>' } },
+      stubs: {
+        'el-button': { props: ['disabled', 'loading'], template: '<button :disabled="disabled || loading"><slot /></button>' },
+        'el-empty': { props: ['description'], template: '<p>{{ description }}</p>' },
+      },
       directives: { loading: {} },
       mocks: { $router: { push: vi.fn() } },
       config: { warnHandler: () => {} },
@@ -180,5 +183,86 @@ describe('editor baseline truthful states (mocked component tests)', () => {
     expect(vm.modelsError).toContain('可用性未知')
     await vm.fetchModels()
     expect(vm.aiModelsList).toEqual([])
+  })
+
+  it('shows not indexed only when the backend explicitly confirms that state', async () => {
+    mocks.api.getDocumentSegments.mockResolvedValue({ data: { indexState: 'NOT_INDEXED', segments: [] } })
+    const vm = await mountView()
+    await vm.openRagSettings(); await flushPromises()
+    expect(wrapper.text()).toContain('当前文档尚未索引')
+    expect(vm.segmentsIndexState).toBe('NOT_INDEXED')
+    expect(vm.segmentsError).toBe('')
+    expect(vm.segments).toEqual([])
+    expect(mocks.success).not.toHaveBeenCalled()
+    expect(mocks.api.indexWithSegment).not.toHaveBeenCalled()
+    expect(wrapper.find('.paper').html()).toContain('第二段')
+  })
+
+  it('displays indexed fragments and clears the former not-indexed state on reload', async () => {
+    mocks.api.getDocumentSegments.mockResolvedValueOnce({ data: { indexState: 'NOT_INDEXED', segments: [] } })
+    const vm = await mountView()
+    await vm.openRagSettings()
+    const fragments = [{ segmentId: 'segment-1', content: '已索引的真实片段' }]
+    mocks.api.getDocumentSegments.mockResolvedValueOnce({ data: { indexState: 'SEGMENTS_AVAILABLE', segments: fragments } })
+    await vm.loadDocumentSegments(); await flushPromises()
+    expect(vm.segments).toEqual(fragments)
+    expect(wrapper.text()).toContain('已索引的真实片段')
+    expect(wrapper.text()).not.toContain('尚未索引')
+    expect(vm.segmentsIndexState).toBe('SEGMENTS_AVAILABLE')
+  })
+
+  it('does not infer not-indexed from the legacy empty-array response', async () => {
+    const vm = await mountView()
+    await vm.openRagSettings(); await flushPromises()
+    expect(vm.segmentsIndexState).toBe('LEGACY')
+    expect(wrapper.text()).not.toContain('尚未索引')
+    expect(wrapper.text()).toContain('未返回分段，接口未提供索引状态')
+  })
+
+  it.each([
+    [401, '登录状态已失效'],
+    [403, '无权读取该索引'],
+    [404, '文档不存在或无权访问'],
+    [409, '分段数据不完整或暂不可读'],
+    [503, '分段读取服务暂不可用'],
+  ])('keeps HTTP %s as a failure instead of not-indexed or stale fragments', async (status, message) => {
+    mocks.api.getDocumentSegments.mockResolvedValueOnce({ data: { indexState: 'SEGMENTS_AVAILABLE', segments: [{ content: '过期片段' }] } })
+    const vm = await mountView()
+    await vm.openRagSettings()
+    mocks.api.getDocumentSegments.mockRejectedValueOnce({ response: { status, data: { code: status } } })
+    await vm.loadDocumentSegments(); await flushPromises()
+    expect(vm.segmentsError).toContain(message)
+    expect(vm.segmentsIndexState).toBe(null)
+    expect(vm.segments).toEqual([])
+    expect(wrapper.text()).not.toContain('尚未索引')
+    expect(wrapper.text()).not.toContain('过期片段')
+    expect(wrapper.text()).toContain('重试加载分段')
+  })
+
+  it.each([
+    {},
+    { indexState: 'NOT_INDEXED', segments: [{ content: '矛盾内容' }] },
+    { indexState: 'SEGMENTS_AVAILABLE', segments: [{ content: null }] },
+    { indexState: 'SEGMENTS_AVAILABLE', segments: [] },
+    { indexState: 'LEGACY', segments: [] },
+  ])('rejects an invalid or contradictory state response without claiming not-indexed: %j', async (data) => {
+    mocks.api.getDocumentSegments.mockResolvedValue({ data })
+    const vm = await mountView()
+    await vm.openRagSettings(); await flushPromises()
+    expect(vm.segmentsError).toBe('分段明细加载失败，当前结果未知。')
+    expect(vm.segmentsIndexState).toBe(null)
+    expect(wrapper.text()).not.toContain('尚未索引')
+  })
+
+  it('recovers from unavailable storage to a confirmed not-indexed response on retry', async () => {
+    mocks.api.getDocumentSegments.mockRejectedValueOnce({ response: { status: 503 } })
+    const vm = await mountView()
+    await vm.openRagSettings()
+    mocks.api.getDocumentSegments.mockResolvedValueOnce({ data: { indexState: 'NOT_INDEXED', segments: [] } })
+    await wrapper.findAll('button').find(button => button.text() === '重试加载分段').trigger('click')
+    await flushPromises()
+    expect(vm.segmentsError).toBe('')
+    expect(wrapper.text()).toContain('当前文档尚未索引')
+    expect(mocks.api.indexWithSegment).not.toHaveBeenCalled()
   })
 })

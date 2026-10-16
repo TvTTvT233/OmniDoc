@@ -1,5 +1,20 @@
 # OmniDoc 项目进展
 
+## 2026-10-16～17 分段403修复与验收
+
+- 用户授权先修复分段接口把未索引误判为无权的问题；继续由本对话验收，三个子Agent分别实施后端、前端和运行验证。起点为 `integration/core-baseline` / `05c2d63`，未更新main、未推送、未合入Review M0。
+- 真实复现：同一合成文档的文档API为200且归属匹配，Redis `doc` 与 `doc_segments` 都不存在，旧分段API仍为HTTP200/business403。证据为本轮 `before.json`。
+- 新分段读取先通过JWT-only文档读权限窄接口核验active实体与ACL，再严格读取Redis。权限请求不信任 `X-User-Id`，不返回正文；原文档旧header回退接口没有在本轮统一重构。保留索引归属限制，缺元数据不自动放行。
+- 显式区分NOT_INDEXED与SEGMENTS_AVAILABLE；无登录401、文档无权/不存在404、索引归属冲突403、分段残缺/不可验证409、依赖故障503。前端显示对应状态且保留重试，不将故障当成空结果；分段可读不声称向量化完成。
+- 后端新增29项通过，包含在AI本地回归313项（310通过、真实Qdrant3项跳过）及document11/11中；两服务打包通过。前端专项33/33、独立startup1/1、既有Memory UI11/11通过；最终409文案修改后专项再次33/33，生产构建通过。已有大chunk警告保留。本轮未重复M07完整门禁。
+- 真实HTTP权限与分段矩阵14/14、文档服务停机与Redis停机2/2通过。Redis503实测约21秒，不宣称故障响应性能达标。故障恢复后原未索引和合成分段状态恢复，四个模型仍禁用；10/17复核五服务、五隔离容器正常。
+- 10/17真实Edge headless浏览器通过未索引、合成两段可读、他人拒绝3条，使用Vite dev与真实HTTP、无mock。主协调复核原始结果和三张截图。合成分段是直接准备的Redis读取夹具，未调用索引API、Embedding或写向量，不算真实索引构建/问答通过。
+- 收尾仅删除本轮4个合成Redis键，清单目标剩余0；合成文档/文件/账号保留，用户原始材料未改。临时浏览器与Vite已停止，5后台服务/5隔离容器继续运行。清理及最终状态见 `fixture-cleanup.json`、`environment-final-2026-10-17.json`。
+- 首次后端/前端测试布置问题及运行JAR被Windows锁定的首次打包失败记录保留；修正测试布置和停服解除锁后，以最终日志计通过。没有弱化权限或错误状态断言。
+- 主协调结论：本轮分段读取403问题修复通过，汇总 `docs/baseline/RESULT-2026-10-17.md`；分项报告为 `segment-access-{backend,frontend,runtime}-2026-10-16.md`。证据位于Git忽略的 `.local/baseline-evidence/segment-access-2026-10-16/`，凭据不提交。
+- 兼容边界：无真实文档实体的独立RAG旧记录现在404；文档协作者不能自动读取其他用户私有索引，管理员无该端点索引归属豁免；整文向量无分段列表可返回409，不等同向量损坏。其他RAG端点/旧文档身份兼容逻辑不在本轮修复范围。
+- 后续待讨论：旧“AI已就绪”标记、文档/索引版本一致性、自动重索引和真实模型链路。原始材料不变，未自动进入下一开发阶段。
+
 ## 2026-10-15 分段业务403说明（只读定位）
 
 - 用户询问上一轮报告中的分段403含义。本次读取 `RagController.getDocumentSegments/assertDocumentAccess`、`KnowledgeBase.getDocumentMetadata/addDocumentWithSegment` 和 `AiSecurityExceptionHandler`，未修改业务代码、未重跑服务。

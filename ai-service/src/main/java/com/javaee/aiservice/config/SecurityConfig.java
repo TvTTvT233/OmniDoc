@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -23,6 +24,12 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
+            .exceptionHandling(errors -> errors.defaultAuthenticationEntryPointFor(
+                    (request, response, exception) -> {
+                        response.setStatus(401);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":401,\"message\":\"请先登录\",\"data\":null}");
+                    }, new AntPathRequestMatcher("/api/ai/rag/document/*/segments", "GET")))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(

@@ -333,10 +333,11 @@
     <!-- 当前分段预览区 -->
     <h4 style="margin-bottom: 10px; display: flex; justify-content: space-between;">
       <span>当前文档分段明细</span>
-      <el-tag v-if="!segmentsError && !segmentsLoading" size="small" type="info">共 {{ segments.length }} 段</el-tag>
+      <el-tag v-if="!segmentsError && !segmentsLoading && segmentsIndexState && segmentsIndexState !== 'NOT_INDEXED'" size="small" type="info">共 {{ segments.length }} 段</el-tag>
     </h4>
     <p v-if="segmentsLoading" role="status">正在加载分段…</p>
     <p v-if="segmentsError" role="alert">{{ segmentsError }} <el-button link @click="loadDocumentSegments">重试加载分段</el-button></p>
+    <p v-else-if="!segmentsLoading && segmentsIndexState === 'NOT_INDEXED'" role="status">当前文档尚未索引。需要用于知识问答时，可执行分段建立索引。</p>
     <el-collapse v-if="segments.length > 0" accordion>
       <el-collapse-item v-for="(seg, idx) in segments" :key="idx" :title="`分片 #${idx + 1}`" :name="idx">
         <div style="font-size: 12px; color: #666; white-space: pre-wrap; background: #f5f7fa; padding: 8px; border-radius: 4px;">
@@ -344,7 +345,7 @@
         </div>
       </el-collapse-item>
     </el-collapse>
-    <el-empty v-else description="暂未获取到分段信息" :image-size="60" />
+    <el-empty v-else-if="!segmentsLoading && !segmentsError && segmentsIndexState === 'LEGACY'" description="未返回分段，接口未提供索引状态" :image-size="60" />
   </el-drawer>
 
 </template>
@@ -455,6 +456,7 @@ const ragDrawerVisible = ref(false)
 const strategyMap = ref({})
 const selectedStrategy = ref('')
 const segments = ref([])
+const segmentsIndexState = ref(null)
 const indexing = ref(false)
 const strategyError = ref(''); const segmentsError = ref(''); const segmentsLoading = ref(false)
 const indexError = ref(''); const indexSucceeded = ref(false)
@@ -1127,13 +1129,31 @@ const loadSegmentStrategies = async () => {
 const loadDocumentSegments = async () => {
   segmentsLoading.value = true
   segmentsError.value = ''
+  segmentsIndexState.value = null
   segments.value = []
   try {
     const res = await aiApi.getDocumentSegments(docId)
-    if (!Array.isArray(res?.data)) throw new Error('Invalid segments')
-    segments.value = res.data
-  } catch {
-    segmentsError.value = '分段明细加载失败，当前结果未知。'
+    const data = res?.data
+    // 兼容旧服务的数组，但不能仅凭空数组推断文档尚未索引。
+    const state = Array.isArray(data) ? 'LEGACY' : data?.indexState
+    const items = Array.isArray(data) ? data : data?.segments
+    if ((!Array.isArray(data) && !['NOT_INDEXED', 'SEGMENTS_AVAILABLE'].includes(state))
+        || !Array.isArray(items)
+        || items.some(item => !item || typeof item.content !== 'string')
+        || (state === 'NOT_INDEXED' && items.length !== 0)
+        || (state === 'SEGMENTS_AVAILABLE' && items.length === 0)) throw new Error('Invalid segments response')
+    segments.value = items
+    segmentsIndexState.value = state
+  } catch (error) {
+    const status = error?.response?.status
+    const messages = {
+      401: '登录状态已失效，请重新登录后读取分段。',
+      403: '无权读取该索引的分段信息。',
+      404: '文档不存在或无权访问，无法读取分段。',
+      409: '分段数据不完整或暂不可读，请稍后重试。',
+      503: '分段读取服务暂不可用，请稍后重试。',
+    }
+    segmentsError.value = messages[status] || '分段明细加载失败，当前结果未知。'
   } finally { segmentsLoading.value = false }
 }
 
@@ -1154,6 +1174,7 @@ const doIndexDocument = async () => {
   indexError.value = ''
   indexSucceeded.value = false
   segments.value = []
+  segmentsIndexState.value = null
   segmentsError.value = ''
   try {
     // 提交给后端的 /index/segment 接口

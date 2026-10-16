@@ -228,18 +228,6 @@ public class RagController {
     }
 
     /**
-     * 获取文档分段列表
-     */
-    @GetMapping("/document/{documentId}/segments")
-    @Operation(summary = "获取文档分段", description = "获取文档的分段列表")
-    public Result<List<Map<String, Object>>> getDocumentSegments(
-            @Parameter(description = "文档ID") @PathVariable String documentId) {
-        assertDocumentAccess(documentId);
-        List<Map<String, Object>> segments = knowledgeBase.getDocumentSegments(documentId);
-        return Result.success(segments);
-    }
-
-    /**
      * 获取知识库统计信息
      */
     @GetMapping("/statistics")

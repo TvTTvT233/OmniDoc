@@ -66,6 +66,10 @@ public class DocumentAccessService {
         }
     }
 
+    public boolean canRead(Document document, Long userId) {
+        return canAccess(document, userId, READ_ROLES);
+    }
+
     public void assertCanWrite(Document document, Long userId) {
         if (!canAccess(document, userId, WRITE_ROLES)) {
             throw new BusinessException("无权修改此文档");
