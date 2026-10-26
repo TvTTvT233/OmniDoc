@@ -25,6 +25,8 @@ import java.util.List;
 @Tag(name = "文档管理", description = "文档创建、更新、删除、查询、版本控制等接口")
 public class DocumentController {
 
+    public record VersionRequest(Integer expectedVersion) {}
+
     @Autowired
     private DocumentService documentService;
 
@@ -175,9 +177,15 @@ public class DocumentController {
     @Operation(summary = "恢复文档版本", description = "将文档恢复到指定版本，自动保存当前版本作为历史版本")
     public Result<DocumentVO> restoreVersion(
             @Parameter(description = "文档ID") @PathVariable String id,
-            @Parameter(description = "版本号") @PathVariable Integer versionNumber) {
+            @Parameter(description = "版本号") @PathVariable Integer versionNumber,
+            @RequestBody VersionRequest request) {
         Long userId = requestUserContext.getRequiredUserId();
-        DocumentVO document = documentService.restoreVersion(id, versionNumber, userId);
+        DocumentVO document = documentService.restoreVersion(id, versionNumber, request.expectedVersion(), userId);
         return Result.success(document);
+    }
+
+    @PostMapping("/{id}/parse/retry")
+    public Result<DocumentVO> retryParse(@PathVariable String id,@RequestBody VersionRequest request) {
+        return Result.success(documentService.retryParse(id,request.expectedVersion(),requestUserContext.getRequiredUserId()));
     }
 }

@@ -53,7 +53,9 @@ class DocumentSegmenterTest {
     }
 
     private static SegmentStrategy.Segment segment(String documentId, String content, int index, String title) {
-        return new SegmentStrategy.Segment(documentId + "_chapter_" + index, documentId, content, index, title);
+        SegmentStrategy.Segment value = new SegmentStrategy.Segment(documentId + "_chapter_" + index, documentId, content, index, title);
+        value.setStartOffset(index * 100); value.setEndOffset(index * 100 + content.length());
+        return value;
     }
 
     private static class StubFixedLengthSegmentStrategy extends FixedLengthSegmentStrategy {
@@ -85,7 +87,9 @@ class DocumentSegmenterTest {
     private static class StubSemanticSegmentStrategy extends SemanticSegmentStrategy {
         @Override
         public List<Segment> segment(String documentId, String content) {
-            return List.of(new Segment(documentId, content + " semantic", 0));
+            Segment value = new Segment(documentId, content + " semantic", 0);
+            value.setStartOffset(0); value.setEndOffset(content.length());
+            return List.of(value);
         }
     }
 }

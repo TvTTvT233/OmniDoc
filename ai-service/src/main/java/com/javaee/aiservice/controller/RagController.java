@@ -44,6 +44,9 @@ public class RagController {
     @Autowired
     private RequestUserContext requestUserContext;
 
+    @Autowired
+    private com.javaee.aiservice.consistency.CurrentGenerationRetrieval currentGenerations;
+
     /**
      * 文档索引
      */
@@ -53,8 +56,7 @@ public class RagController {
             @Parameter(description = "文档ID") @RequestParam String documentId,
             @Parameter(description = "知识库ID") @RequestParam(defaultValue = "default") String knowledgeBaseId,
             @Parameter(description = "文档内容") @RequestBody String content) {
-        knowledgeBase.addDocument(documentId, content, userMetadata(knowledgeBaseId));
-        return Result.success();
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**
@@ -68,16 +70,7 @@ public class RagController {
             @Parameter(description = "知识库ID") @RequestParam(defaultValue = "default") String knowledgeBaseId,
             @Parameter(description = "分段策略: AUTO, FIXED_LENGTH, CHAPTER, SEMANTIC, HYBRID")
             @RequestParam(defaultValue = "AUTO") String strategy) {
-
-        DocumentSegmenter.StrategyType strategyType;
-        try {
-            strategyType = DocumentSegmenter.StrategyType.valueOf(strategy.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return Result.fail("无效的分段策略: " + strategy);
-        }
-
-        knowledgeBase.addDocument(documentId, content, userMetadata(knowledgeBaseId), strategyType);
-        return Result.success();
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**
@@ -163,6 +156,9 @@ public class RagController {
         List<Map<String, Object>> results = knowledgeBase.hybridSearchWithRerank(question, 3,
                 rerankStrategy, DocumentSegmenter.StrategyType.CHAPTER, userMetadata(knowledgeBaseId));
 
+        if (results.isEmpty()) throw new com.javaee.aiservice.consistency.IndexConsistencyException("INDEX_NOT_READY");
+        var references = currentGenerations.references(results);
+
         StringBuilder context = new StringBuilder();
         for (Map<String, Object> result : results) {
             context.append(result.get("content")).append("\n\n");
@@ -170,11 +166,15 @@ public class RagController {
 
         String answerText = generateAnswer(question, context.toString(), strategy);
 
+        if (currentGenerations.validateReferences(references, requestUserContext.getRequiredUserId(), knowledgeBaseId).size() != references.size())
+            throw new com.javaee.aiservice.consistency.IndexConsistencyException("INDEX_NOT_READY");
+
         Map<String, Object> answer = Map.of(
             "question", question,
             "context", context.toString(),
             "answer", answerText,
             "sources", results.stream().map(r -> r.get("id")).toList(),
+            "references", references,
             "retrievalStrategy", strategy
         );
 
@@ -188,9 +188,9 @@ public class RagController {
     @Operation(summary = "获取文档内容", description = "获取知识库中的文档内容")
     public Result<String> getDocument(
             @Parameter(description = "文档ID") @PathVariable String documentId) {
-        assertDocumentAccess(documentId);
-        String content = knowledgeBase.getDocumentContent(documentId);
-        return Result.success(content);
+        List<Map<String,Object>> rows = currentGenerations.segments(documentId, requestUserContext.getRequiredUserId(), "default");
+        if (rows.isEmpty()) throw new com.javaee.aiservice.consistency.IndexConsistencyException("INDEX_NOT_READY");
+        return Result.success(rows.stream().map(row -> row.get("content").toString()).collect(java.util.stream.Collectors.joining("\n\n")));
     }
 
     /**
@@ -200,9 +200,7 @@ public class RagController {
     @Operation(summary = "删除文档", description = "从知识库删除文档")
     public Result<Void> deleteDocument(
             @Parameter(description = "文档ID") @PathVariable String documentId) {
-        assertDocumentAccess(documentId);
-        knowledgeBase.removeDocument(documentId);
-        return Result.success();
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**

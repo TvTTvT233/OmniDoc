@@ -78,6 +78,7 @@
               <!-- 执行结果用 el-scrollbar -->
               <div class="result-viewer" v-if="executionResult">
                 <h4>执行结果 / Timeline</h4>
+                <DocumentReferences :references="executionResult.references" />
                 <el-scrollbar max-height="300px">
                   <pre class="json-code">{{ JSON.stringify(executionResult, null, 2) }}</pre>
                 </el-scrollbar>
@@ -119,6 +120,7 @@
 import { ref, onMounted } from 'vue'
 import { agentApi } from '../../api/agent'
 import { ElMessage } from 'element-plus'
+import DocumentReferences from '../components/DocumentReferences.vue'
 
 // 数据状态
 const loading = ref(false)

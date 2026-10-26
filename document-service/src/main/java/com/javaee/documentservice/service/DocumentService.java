@@ -83,5 +83,7 @@ public interface DocumentService {
      * @param userId 操作用户ID
      * @return 恢复后的文档VO
      */
-    DocumentVO restoreVersion(String documentId, Integer versionNumber, Long userId);
+    DocumentVO restoreVersion(String documentId, Integer versionNumber, Integer expectedVersion, Long userId);
+
+    DocumentVO retryParse(String documentId, Integer expectedVersion, Long userId);
 }

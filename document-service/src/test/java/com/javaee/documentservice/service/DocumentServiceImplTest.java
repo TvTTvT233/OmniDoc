@@ -7,6 +7,7 @@ import com.javaee.documentservice.entity.Document;
 import com.javaee.documentservice.mapper.DocumentMapper;
 import com.javaee.documentservice.mapper.DocumentVersionMapper;
 import com.javaee.documentservice.service.impl.DocumentServiceImpl;
+import com.javaee.documentservice.consistency.DocumentIndexService;
 import com.javaee.documentservice.vo.DocumentVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,10 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class DocumentServiceImplTest {
 
@@ -30,6 +35,7 @@ class DocumentServiceImplTest {
     private DocumentContentService documentContentService;
     private DocumentAccessService documentAccessService;
     private DocumentServiceImpl documentService;
+    private DocumentIndexService indexService;
 
     @BeforeEach
     void setUp() {
@@ -38,6 +44,8 @@ class DocumentServiceImplTest {
         documentContentService = mock(DocumentContentService.class);
         documentAccessService = mock(DocumentAccessService.class);
         documentService = new DocumentServiceImpl();
+        indexService = mock(DocumentIndexService.class);
+        ReflectionTestUtils.setField(documentService,"indexService",indexService);
         ReflectionTestUtils.setField(documentService, "documentMapper", documentMapper);
         ReflectionTestUtils.setField(documentService, "documentVersionMapper", documentVersionMapper);
         ReflectionTestUtils.setField(documentService, "documentContentService", documentContentService);
@@ -65,23 +73,23 @@ class DocumentServiceImplTest {
         ArgumentCaptor<Document> inserted = ArgumentCaptor.forClass(Document.class);
         verify(documentMapper).insert(inserted.capture());
         assertThat(inserted.getValue().getBucketName()).isEqualTo("user-7");
-        verify(documentMapper).updateById(any(Document.class));
+        verify(documentMapper,times(2)).updateById(any(Document.class));
         verify(documentAccessService).grantOwnerAccess("doc-1", "user-7", 7L);
+        verify(indexService).snapshotAndSchedule(any(Document.class),eq("PLAIN_TEXT"),eq(""),eq("初始版本"),eq(7L),eq("explicit-content-v1"));
         assertThat(vo.getBucketName()).isEqualTo("user-7");
         assertThat(vo.getObjectName()).isEqualTo("document-content/doc-1.txt");
     }
 
     @Test
-    void collaboratorReadsContentFromDocumentBucket() {
+    void collaboratorReadsAuthoritativeContentAfterAccessCheck() {
         Document document = document("doc-2", 1L, "team-bucket", "document-content/doc-2.txt");
-        when(documentMapper.selectById("doc-2")).thenReturn(document);
-        doNothing().when(documentAccessService).assertCanRead(document, 2L);
-        when(documentContentService.getContent("doc-2", "team-bucket")).thenReturn("shared text");
+        when(indexService.requireDocument("doc-2",2L,false,false)).thenReturn(document);
+        document.setContent("shared text");document.setSnapshotState("VERIFIED");
 
         DocumentVO vo = documentService.getById("doc-2", 2L);
 
-        verify(documentAccessService).assertCanRead(document, 2L);
-        verify(documentContentService).getContent("doc-2", "team-bucket");
+        verify(indexService).requireDocument("doc-2",2L,false,false);
+        verify(documentContentService,never()).getContent(anyString(),anyString());
         assertThat(vo.getContent()).isEqualTo("shared text");
         assertThat(vo.getBucketName()).isEqualTo("team-bucket");
     }
@@ -89,7 +97,7 @@ class DocumentServiceImplTest {
     @Test
     void grantAccessUsesDocumentBucketAndRequiresOwner() {
         Document document = document("doc-3", 1L, "user-1", "document-content/doc-3.txt");
-        when(documentMapper.selectById("doc-3")).thenReturn(document);
+        when(indexService.requireDocument("doc-3",1L,true,true)).thenReturn(document);
         when(documentAccessService.isOwner(document, 1L)).thenReturn(true);
 
         documentService.grantAccess("doc-3", 2L, "editor", 1L);
@@ -100,17 +108,18 @@ class DocumentServiceImplTest {
     @Test
     void collaboratorCanSaveEmptyContentWithoutOverwritingMetadata() {
         Document document = document("doc-4", 1L, "owner-bucket", "document-content/doc-4.txt");
-        when(documentMapper.selectById("doc-4")).thenReturn(document);
-        doNothing().when(documentAccessService).assertCanWrite(document, 2L);
-        when(documentContentService.getContent("doc-4", "owner-bucket")).thenReturn("before");
+        when(indexService.requireDocument("doc-4",2L,true,true)).thenReturn(document);
+        when(indexService.nextVersion(document)).thenReturn(2);
+        document.setContent("before");document.setContentFormat("PLAIN_TEXT");document.setSnapshotState("VERIFIED");
 
         DocumentUpdateDTO dto = new DocumentUpdateDTO();
         dto.setContent("");
+        dto.setExpectedVersion(1);dto.setContentFormat("PLAIN_TEXT");
 
         DocumentVO vo = documentService.update("doc-4", dto, 2L);
 
-        verify(documentAccessService).assertCanWrite(document, 2L);
-        verify(documentContentService).updateContent("doc-4", "owner-bucket", "");
+        verify(indexService).requireDocument("doc-4",2L,true,true);
+        verify(indexService).snapshotAndSchedule(document,"PLAIN_TEXT","",null,2L,"explicit-content-v1");
         assertThat(document.getTitle()).isEqualTo("doc");
         assertThat(vo.getContent()).isEqualTo("");
     }

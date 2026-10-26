@@ -10,7 +10,12 @@ import java.util.*;
 /** Strict, read-only view of stored segments. It does not certify vector indexing success. */
 @Service
 public class DocumentSegmentReadService {
-    public record View(String indexState, List<Map<String, Object>> segments) {}
+    public record View(String indexState, List<Map<String, Object>> segments, Long documentVersion, String generationId) {
+        public View(String indexState, List<Map<String,Object>> segments) { this(indexState, segments, null, null); }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.javaee.aiservice.consistency.CurrentGenerationRetrieval currentGenerations;
 
     private final RedisTemplate<String, Object> redis;
 
@@ -19,6 +24,12 @@ public class DocumentSegmentReadService {
     }
 
     public View read(String documentId, String userId) {
+        if (currentGenerations != null) {
+            List<Map<String,Object>> rows = currentGenerations.segments(documentId, userId, "default");
+            if (rows.isEmpty()) return new View("NOT_INDEXED", List.of());
+            var ref = (com.javaee.aiservice.consistency.IndexContracts.Reference) rows.get(0).get("reference");
+            return new View("SEGMENTS_AVAILABLE", rows, ref.documentVersion(), ref.generationId());
+        }
         try {
             return redis.execute(new SessionCallback<View>() {
                 @Override

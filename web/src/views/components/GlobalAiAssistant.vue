@@ -137,6 +137,7 @@
               <div :class="['bubble', msg.role === 'user' ? 'user-bubble' : 'ai-bubble', 'preserve-format']">
                 {{ msg.text }}
               </div>
+              <DocumentReferences v-if="msg.role === 'ai'" :references="msg.references" />
 
               <div v-if="msg.actionResult" class="agent-file-card" @click="handleDownload(msg.actionResult)">
                 <el-icon size="24" color="#3370ff"><Document /></el-icon>
@@ -200,6 +201,7 @@ import {
 } from '../../composables/useConversationWorkspace.js'
 import { useGlobalAi } from '../../utils/useGlobalAi.js'
 import { getAuthenticatedUserId } from '../../utils/jwt.js'
+import DocumentReferences from './DocumentReferences.vue'
 
 const route = useRoute()
 const authenticatedUserId = getAuthenticatedUserId()

@@ -36,12 +36,16 @@ public class KnowledgeBase {
     @Autowired
     private DocumentSegmenter documentSegmenter;
 
+    @Autowired
+    private com.javaee.aiservice.consistency.CurrentGenerationRetrieval currentGenerations;
+
     public void addDocument(String documentId, String content, Map<String, Object> metadata) {
         addDocumentWithSegment(documentId, content, metadata, DocumentSegmenter.StrategyType.AUTO);
     }
 
     public void addDocumentWithSegment(String documentId, String content, Map<String, Object> metadata,
                                        DocumentSegmenter.StrategyType strategyType) {
+        if (currentGenerations != null) throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
         log.info("添加文档到知识库: documentId={}, strategy={}", documentId, strategyType);
 
         try {
@@ -206,6 +210,7 @@ public class KnowledgeBase {
     public List<Map<String, Object>> search(String query, int topK,
                                             DocumentSegmenter.StrategyType strategyType,
                                             Map<String, Object> filters) {
+        if (currentGenerations != null) return currentGenerations.search(query, topK, filters, false, null);
         log.info("搜索知识库: query={}, topK={}, strategy={}", query, topK, strategyType);
 
         try {
@@ -240,6 +245,7 @@ public class KnowledgeBase {
     public List<Map<String, Object>> hybridSearch(String query, int topK,
                                                    DocumentSegmenter.StrategyType strategyType,
                                                    Map<String, Object> filters) {
+        if (currentGenerations != null) return currentGenerations.search(query, topK, filters, true, null);
         log.info("混合检索: query={}, topK={}, strategy={}", query, topK, strategyType);
 
         try {
@@ -297,6 +303,7 @@ public class KnowledgeBase {
                                                             Reranker.RerankStrategy rerankStrategy,
                                                             DocumentSegmenter.StrategyType strategyType,
                                                             Map<String, Object> filters) {
+        if (currentGenerations != null) return currentGenerations.search(query, topK, filters, true, rerankStrategy);
         log.info("混合检索加重排序: query={}, topK={}, strategy={}, rerankStrategy={}",
                 query, topK, strategyType, rerankStrategy);
 

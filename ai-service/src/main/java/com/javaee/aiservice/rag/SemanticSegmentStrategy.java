@@ -34,6 +34,11 @@ public class SemanticSegmentStrategy implements SegmentStrategy {
         this.similarityThreshold = similarityThreshold;
     }
 
+    public SemanticSegmentStrategy(DocumentVectorizer vectorizer, int targetChunkSize) {
+        this(targetChunkSize, DEFAULT_MIN_CHUNK_SIZE, DEFAULT_SIMILARITY_THRESHOLD);
+        this.vectorizer = vectorizer;
+    }
+
     @Override
     public List<Segment> segment(String documentId, String content) {
         log.info("执行语义分段: documentId={}, targetChunkSize={}, threshold={}",
@@ -58,13 +63,17 @@ public class SemanticSegmentStrategy implements SegmentStrategy {
 
         int segmentIndex = 0;
         for (SentenceGroup group : groups) {
-            String segmentContent = buildSegmentContent(group);
+            int rangeStart = group.getSentences().get(0).getCharPosition();
+            Sentence last = group.getSentences().get(group.getSentences().size() - 1);
+            int rangeEnd = last.getCharPosition() + last.getText().length();
+            String segmentContent = content.substring(rangeStart, rangeEnd);
 
             if (segmentContent.length() < minChunkSize && segmentIndex > 0) {
                 if (!segments.isEmpty()) {
                     Segment lastSegment = segments.get(segments.size() - 1);
-                    String mergedContent = lastSegment.getContent() + "\n" + segmentContent;
+                    String mergedContent = content.substring(lastSegment.getStartOffset(), rangeEnd);
                     lastSegment.setContent(mergedContent);
+                    lastSegment.setEndOffset(rangeEnd);
                     lastSegment.setCharCount(mergedContent.length());
                     log.debug("合并到上一个分段: segmentId={}, newCharCount={}",
                             lastSegment.getSegmentId(), mergedContent.length());
@@ -77,6 +86,8 @@ public class SemanticSegmentStrategy implements SegmentStrategy {
                         segmentIndex,
                         group.getTheme()
                 );
+                segment.setStartOffset(rangeStart);
+                segment.setEndOffset(rangeEnd);
                 segments.add(segment);
                 log.debug("生成分段: segmentId={}, theme={}, charCount={}",
                         segment.getSegmentId(), group.getTheme(), segmentContent.length());
@@ -91,39 +102,30 @@ public class SemanticSegmentStrategy implements SegmentStrategy {
     private List<Sentence> splitIntoSentences(String content) {
         List<Sentence> sentences = new ArrayList<>();
 
-        String[] lines = content.split("\n");
-        StringBuilder currentParagraph = new StringBuilder();
-        int charPosition = 0;
-
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty()) {
-                if (currentParagraph.length() > 0) {
-                    charPosition += currentParagraph.length() + 1;
-                    currentParagraph.setLength(0);
+        int position = 0;
+        int paragraphStart = -1;
+        int paragraphEnd = -1;
+        while (position < content.length()) {
+            int newline = content.indexOf('\n', position);
+            int lineEnd = newline < 0 ? content.length() : newline;
+            int left = position, right = lineEnd;
+            while (left < right && content.charAt(left) <= ' ') left++;
+            while (right > left && content.charAt(right - 1) <= ' ') right--;
+            if (left == right) {
+                if (paragraphStart >= 0) sentences.add(new Sentence(content.substring(paragraphStart, paragraphEnd), paragraphStart));
+                paragraphStart = -1;
+            } else {
+                if (paragraphStart < 0) paragraphStart = left;
+                paragraphEnd = right;
+                char terminal = content.charAt(right - 1);
+                if (paragraphEnd - paragraphStart >= targetChunkSize / 2 || "。！？.!?".indexOf(terminal) >= 0) {
+                    sentences.add(new Sentence(content.substring(paragraphStart, paragraphEnd), paragraphStart));
+                    paragraphStart = -1;
                 }
-                continue;
             }
-
-            if (currentParagraph.length() > 0) {
-                currentParagraph.append(" ");
-            }
-            currentParagraph.append(line);
-
-            if (currentParagraph.length() >= targetChunkSize / 2 ||
-                    line.endsWith("。") || line.endsWith("！") || line.endsWith("？") ||
-                    line.endsWith(".") || line.endsWith("!") || line.endsWith("?")) {
-
-                sentences.add(new Sentence(currentParagraph.toString(), charPosition));
-                charPosition += currentParagraph.length();
-                currentParagraph.setLength(0);
-            }
+            position = newline < 0 ? content.length() : newline + 1;
         }
-
-        if (currentParagraph.length() > 0) {
-            sentences.add(new Sentence(currentParagraph.toString(), charPosition));
-        }
-
+        if (paragraphStart >= 0) sentences.add(new Sentence(content.substring(paragraphStart, paragraphEnd), paragraphStart));
         return sentences;
     }
 

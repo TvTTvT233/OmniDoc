@@ -12,6 +12,9 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.*;
+import jakarta.annotation.PreDestroy;
+import com.javaee.aiservice.consistency.IndexConsistencyException;
 
 /**
  * 文档向量化器
@@ -32,12 +35,38 @@ public class DocumentVectorizer {
     @Value("${spring.ai.dashscope.embedding.dimension:1024}")
     private int dimension;
 
+    @Value("${spring.ai.dashscope.embedding.enabled:false}")
+    private boolean enabled;
+    @Value("${spring.ai.dashscope.embedding.timeout-ms:15000}")
+    private int timeoutMs;
+    private final ExecutorService calls = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(1), runnable -> { Thread t = new Thread(runnable, "embedding-http"); t.setDaemon(true); return t; }, new ThreadPoolExecutor.AbortPolicy());
+
+    public void assertAvailable() {
+        if (!enabled) throw new IndexConsistencyException("EMBEDDING_DISABLED");
+        if (apiKey == null || apiKey.isBlank()) throw new IndexConsistencyException("EMBEDDING_NOT_CONFIGURED");
+    }
+    public String modelName() { return model; }
+    public int configuredDimension() { return dimension; }
+    @PreDestroy public void shutdown() { calls.shutdownNow(); }
+
     /**
      * 将文本向量化
      * @param text 文本内容
      * @return 向量表示
      */
     public float[] vectorize(String text) {
+        assertAvailable();
+        Future<float[]> pending;
+        try { pending = calls.submit(() -> vectorizeRemote(text)); }
+        catch (RejectedExecutionException e) { throw new IndexConsistencyException("EMBEDDING_BUSY"); }
+        try { return pending.get(Math.max(100, timeoutMs), TimeUnit.MILLISECONDS); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); pending.cancel(true); throw new IndexConsistencyException("EMBEDDING_INTERRUPTED"); }
+        catch (TimeoutException e) { pending.cancel(true); throw new IndexConsistencyException("EMBEDDING_TIMEOUT"); }
+        catch (ExecutionException e) { throw new IndexConsistencyException("EMBEDDING_FAILED"); }
+    }
+
+    private float[] vectorizeRemote(String text) {
         log.debug("开始向量化文本，长度={}", text.length());
 
         try {

@@ -15,6 +15,8 @@ public interface SegmentStrategy {
         private int index;
         private String title;
         private int charCount;
+        private int startOffset;
+        private int endOffset;
 
         public Segment(String documentId, String content, int index) {
             this.segmentId = generateSegmentId(documentId, index);
@@ -49,5 +51,9 @@ public interface SegmentStrategy {
         public void setTitle(String title) { this.title = title; }
         public int getCharCount() { return charCount; }
         public void setCharCount(int charCount) { this.charCount = charCount; }
+        public int getStartOffset() { return startOffset; }
+        public void setStartOffset(int value) { startOffset = value; }
+        public int getEndOffset() { return endOffset; }
+        public void setEndOffset(int value) { endOffset = value; }
     }
 }

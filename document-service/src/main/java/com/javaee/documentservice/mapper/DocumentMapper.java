@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.javaee.documentservice.entity.Document;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -12,6 +13,9 @@ import java.util.List;
  */
 @Mapper
 public interface DocumentMapper extends BaseMapper<Document> {
+
+    @Select("SELECT * FROM document WHERE id=#{id} FOR UPDATE")
+    Document selectForUpdate(@Param("id") String id);
 
     List<Document> selectByUserId(@Param("userId") Long userId);
 

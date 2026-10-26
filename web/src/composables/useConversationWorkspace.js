@@ -32,6 +32,7 @@ export function toConversationChatMessage(message) {
     sequence: message.sequence,
     role: message.role === 'USER' ? 'user' : 'ai',
     text: message.content,
+    references: message.references || [],
     messageType: message.messageType,
     isToolEvent: message.role === 'TOOL',
     createdAt: message.createdAt,

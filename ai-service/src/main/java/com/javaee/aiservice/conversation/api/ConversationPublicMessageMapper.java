@@ -53,7 +53,10 @@ public final class ConversationPublicMessageMapper {
                 publicIdentifier(message.traceId()),
                 publicIdentifier(message.toolCallId()),
                 metadata,
-                message.createdAt().toString());
+                message.createdAt().toString(),
+                message.role() == ConversationRole.ASSISTANT && message.messageType() == ConversationMessageType.TEXT
+                        ? com.javaee.aiservice.consistency.PublicDocumentReferences.from(message.metadata().get("references"))
+                        : java.util.List.of());
     }
 
     private static Map<String, Object> publicMetadata(Map<String, Object> source) {

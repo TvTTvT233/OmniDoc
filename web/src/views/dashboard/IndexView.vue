@@ -140,8 +140,8 @@
                   </div>
                   <div class="doc-meta">
                     <span>{{ doc.time }}</span>
-                    <el-tag size="small" :type="doc.analyzed ? 'success' : 'info'" round effect="light">
-                      {{ doc.analyzed ? 'AI已就绪' : '待处理' }}
+                    <el-tag size="small" :type="doc.queryable ? 'success' : 'info'" round effect="light">
+                      {{ doc.indexLabel || '索引状态待确认' }}
                     </el-tag>
                   </div>
                 </div>
@@ -221,6 +221,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fileApi } from '../../api/file'
 import { userApi } from '../../api/user'
 import { docApi } from '../../api/document'
+import { indexStateLabel, normalizeIndexState } from '../../composables/useDocumentIndexState'
 import { aiApi } from '../../api/ai'
 import { STORAGE_KEYS } from '../../constants'
 import { isAdmin } from '../../utils/jwt'
@@ -266,7 +267,24 @@ const fetchUser = async () => {
 }
 
 // 获取文档列表 (从 8084 获取)
+let documentListGeneration = 0
+const loadCardIndexStates = async (generation) => {
+  await Promise.all(docList.value.map(async (doc) => {
+    try {
+      const result = await docApi.getIndexState(doc.id)
+      if (generation !== documentListGeneration) return
+      const state = normalizeIndexState(result?.data)
+      if (String(state.documentId) !== String(doc.id)) throw new Error('Mismatched index state')
+      doc.queryable = state.queryable
+      doc.indexLabel = indexStateLabel(state)
+    } catch {
+      if (generation !== documentListGeneration) return
+      doc.queryable = false; doc.indexLabel = '索引状态未知'
+    }
+  }))
+}
 const fetchFiles = async () => {
+  const generation = ++documentListGeneration
   const uid = getCurrentUserId()
   if (!uid) {
     router.push('/login')
@@ -275,15 +293,17 @@ const fetchFiles = async () => {
   loading.value = true
   try {
     const res = await docApi.getUserDocs(uid)
+    if (generation !== documentListGeneration) return
     if (res.data && Array.isArray(res.data)) {
       docList.value = res.data.map(item => ({
         id: item.id,
         fileId: item.fileId,
         name: item.title || '未命名文档',
         time: item.createTime ? new Date(item.createTime).toLocaleDateString() : '未知',
-        analyzed: !!item.summary,
+        queryable: false, indexLabel: '索引状态待确认',
         color: ['bg-blue', 'bg-orange', 'bg-green', 'bg-purple'][Math.floor(Math.random() * 4)]
       }))
+      void loadCardIndexStates(generation)
     }
   } catch (e) {
     console.error('拉取列表失败', e)
@@ -321,18 +341,22 @@ const handleSearch = async () => {
   }
 
   loading.value = true
+  const generation = ++documentListGeneration
   try {
     // 调 8084 接口进行全文检索（搜标题+内容）
     const res = await docApi.searchDocs(search.value)
+    if (generation !== documentListGeneration) return
 
     if (res.data) {
       docList.value = res.data.map(item => ({
         id: item.id,
         fileId: item.fileId,
         name: item.title,
+        queryable: false, indexLabel: '索引状态待确认',
         time: new Date(item.createTime).toLocaleDateString(),
         color: ['bg-blue', 'bg-orange', 'bg-green', 'bg-purple'][Math.floor(Math.random() * 4)]
       }))
+      void loadCardIndexStates(generation)
     }
     ElMessage.success(`搜索到 ${docList.value.length} 篇相关文档`)
   } catch (e) {

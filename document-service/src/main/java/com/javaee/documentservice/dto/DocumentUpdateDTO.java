@@ -16,6 +16,9 @@ public class DocumentUpdateDTO {
 
     private String content;
 
+    private String contentFormat;
+    private Integer expectedVersion;
+
     private String category;
 
     private List<String> tags;

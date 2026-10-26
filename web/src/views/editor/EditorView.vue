@@ -76,6 +76,7 @@
               <div v-if="msg.role === 'user'" class="user-bubble preserve-format">{{ msg.text }}</div>
               <div v-else class="ai-structured-card">
                 <div class="card-body preserve-format">{{ msg.text }}</div>
+                <DocumentReferences :references="msg.references" />
 
                 <div v-if="msg.actionResult" class="agent-action-box" style="margin-top: 16px;">
                   <el-divider border-style="dashed" style="margin: 12px 0;" />
@@ -160,6 +161,7 @@
         <el-divider direction="vertical" />
         <span class="doc-title">{{ docName }}</span>
         <span class="save-status">{{ saveStatusText }}</span>
+        <span v-if="savedVersion" class="save-status">V{{ savedVersion }} · {{ indexLabel }}</span>
         <el-button circle icon="Clock" size="small" style="margin-left:10px;" @click="openHistoryDrawer"></el-button>
       </div>
       <div class="header-right">
@@ -202,13 +204,15 @@
           </div>
         </div>
 
-        <div class="sidebar-section" style="margin-top: auto;"> <CollaboratePanel v-if="canEditDocument" :documentId="docId" :userId="currentUserId" :userName="currentUserName" />
+        <div class="sidebar-section" style="margin-top: auto;"> <CollaboratePanel v-if="canEditDocument" :documentId="docId" :userId="currentUserId" :userName="currentUserName" :saveDocument="saveDocumentContent" :acceptRemoteDocument="acceptRemoteDocument" />
         </div>
       </aside>
 
       <main class="editor-main" v-loading="docLoading" @scroll="handleScroll">
         <div class="paper-container">
           <p v-if="docError" class="document-load-error" role="alert">{{ docError }} <el-button link @click="loadDocData">重试读取文档</el-button></p>
+          <p v-if="docLoaded && parseState === 'FAILED'" class="document-load-error" role="alert">原文件解析失败，原文件仍保留；请在知识分段面板重试解析，或编辑后显式保存。</p>
+          <p v-else-if="docLoaded && snapshotState === 'MIGRATION_REQUIRED'" role="status">这是旧版文档，请核对正文并保存后再用于知识问答。</p>
           <div class="paper preserve-format" :contenteditable="canEditDocument" v-html="docContent" @mouseup="handleTextSelection" @input="handleInput"></div>
         </div>
 
@@ -258,6 +262,7 @@
           <div v-if="chatHistory.length === 0" class="empty-conversation">你好！你可以向我提问，或选中文本进行润色。</div>
           <div v-for="msg in chatHistory" :key="msg.id" :class="['chat-bubble', msg.role]">
             <div class="preserve-format">{{ msg.text }}</div>
+            <DocumentReferences v-if="msg.role === 'ai'" :references="msg.references" />
 
             <div v-if="msg.actionResult" class="agent-action-box" style="margin-top: 10px;">
               <el-divider border-style="dashed" style="margin: 8px 0;" />
@@ -321,11 +326,20 @@
         <el-select v-model="selectedStrategy" size="small" style="flex: 1;">
           <el-option v-for="(name, key) in strategyMap" :key="key" :label="name" :value="key" />
         </el-select>
-        <el-button type="primary" size="small" :loading="indexing" :disabled="!selectedStrategy || !canEditDocument" @click="doIndexDocument">执行分段</el-button>
+        <el-button type="primary" size="small" :loading="indexing" :disabled="!selectedStrategy || !canEditDocument || isSaving || (indexBusy && !isDirty) || (parseState === 'FAILED' && !isDirty)" @click="doIndexDocument">{{ isDirty || snapshotState === 'MIGRATION_REQUIRED' ? '保存并更新索引' : '更新索引' }}</el-button>
       </div>
+      <p v-if="isDirty" role="status">修改未保存，尚未纳入知识库。更新索引前将先保存。</p>
+      <p v-if="parseState === 'FAILED'" role="alert">原文件解析失败，未生成可信正文。原文件保留，可重试解析或编辑后显式保存。
+        <el-button size="small" :loading="parsing" :disabled="isDirty || isSaving || indexing" @click="retryDocumentParse">重试解析原文件</el-button>
+      </p>
+      <p v-else-if="snapshotState === 'MIGRATION_REQUIRED'" role="status">旧文档尚无可信版本快照，请核对正文后保存。</p>
+      <p role="status" data-testid="document-index-state">{{ indexLabel }}</p>
+      <p v-if="indexState && !indexQueryable">当前文档暂不参与新的知识问答；历史答案仍可查看原版本引用。</p>
+      <el-button v-if="indexState?.retryable && !indexBusy" size="small" :disabled="isSaving || indexing || !canEditDocument" @click="retryDocumentIndex">重试索引</el-button>
+      <el-button link size="small" :loading="indexStateLoading" @click="refreshIndexState">刷新索引状态</el-button>
       <p v-if="strategyError" role="alert">{{ strategyError }} <el-button link @click="loadSegmentStrategies">重试加载策略</el-button></p>
       <p v-if="indexError" role="alert">{{ indexError }}</p>
-      <p v-if="indexSucceeded" role="status">索引请求已完成。</p>
+      <p v-if="indexSucceeded" role="status">索引任务已受理，实际可用性以上方状态为准。</p>
     </div>
 
     <el-divider />
@@ -337,7 +351,7 @@
     </h4>
     <p v-if="segmentsLoading" role="status">正在加载分段…</p>
     <p v-if="segmentsError" role="alert">{{ segmentsError }} <el-button link @click="loadDocumentSegments">重试加载分段</el-button></p>
-    <p v-else-if="!segmentsLoading && segmentsIndexState === 'NOT_INDEXED'" role="status">当前文档尚未索引。需要用于知识问答时，可执行分段建立索引。</p>
+    <p v-else-if="!segmentsLoading && segmentsIndexState === 'NOT_INDEXED'" role="status">当前没有可用分段，请以上方索引状态为准。</p>
     <el-collapse v-if="segments.length > 0" accordion>
       <el-collapse-item v-for="(seg, idx) in segments" :key="idx" :title="`分片 #${idx + 1}`" :name="idx">
         <div style="font-size: 12px; color: #666; white-space: pre-wrap; background: #f5f7fa; padding: 8px; border-radius: 4px;">
@@ -351,7 +365,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fileApi } from '../../api/file'
 import { userApi } from '../../api/user'
@@ -360,6 +374,8 @@ import { aiApi } from '../../api/ai'
 import { agentApi } from '../../api/agent'
 import request from '../../utils/request'
 import CollaboratePanel from '../../collaboration/CollaboratePanel.vue'
+import DocumentReferences from '../components/DocumentReferences.vue'
+import { useDocumentIndexState } from '../../composables/useDocumentIndexState'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CONVERSATION_ERROR,
@@ -389,6 +405,14 @@ const docName = ref(sessionStorage.getItem('currentDocName') || '未命名文档
 const currentUserId = ref(authenticatedUserId)
 const docContent = ref(''); const docLoading = ref(false); const aiSummary = ref('')
 const docError = ref(''); const docLoaded = ref(false)
+const savedVersion = ref(null), savedContent = ref(''), draftContent = ref('')
+const parseState = ref('UNKNOWN'), snapshotState = ref('MIGRATION_REQUIRED'), parsing = ref(false)
+const isDirty = computed(() => draftContent.value !== savedContent.value)
+const documentIndex = useDocumentIndexState(docId, savedVersion)
+const { state: indexState, label: indexLabel, queryable: indexQueryable, loading: indexStateLoading, refresh: refreshIndexState } = documentIndex
+const indexBusy = computed(() => ['QUEUED', 'BUILDING'].includes(indexState.value?.indexState))
+let disposed = false
+onBeforeUnmount(() => { disposed = true })
 const canEditDocument = computed(() => docLoaded.value && !docLoading.value && !docError.value)
 const isAiThinking = ref(false); const pendingPreview = ref(null); const latestActionResult = ref(null); const isConversationLifecycleBusy = ref(false)
 const currentConvId = conversationWorkspace.activeConversationId
@@ -460,6 +484,13 @@ const segmentsIndexState = ref(null)
 const indexing = ref(false)
 const strategyError = ref(''); const segmentsError = ref(''); const segmentsLoading = ref(false)
 const indexError = ref(''); const indexSucceeded = ref(false)
+const segmentsVersion = ref(null), segmentsGeneration = ref(null)
+watch([() => indexState.value?.activeGenerationId, () => indexState.value?.currentVersion, indexQueryable], () => {
+  if (segments.value.length && (!indexQueryable.value || segmentsVersion.value !== savedVersion.value || segmentsGeneration.value !== indexState.value?.activeGenerationId)) {
+    clearSegmentPreview()
+    segmentsError.value = '索引版本已变化，请重新加载当前分段。'
+  }
+})
 const currentModel = ref('') // 未选择时交给服务端使用其默认模型
 const modelOptions = ref([])
 const modelsError = ref('')
@@ -497,11 +528,19 @@ const loadDocData = async () => {
   try {
     const docRes = await docApi.getDocDetail(docId)
     const data = docRes.data || docRes
-    docName.value = data.title; aiSummary.value = data.summary; docContent.value = data.content || ''
+    docName.value = data.title; aiSummary.value = data.summary
+    docContent.value = data.contentFormat === 'PLAIN_TEXT' ? plainTextToEditorHtml(data.content || '') : data.content || ''
+    parseState.value = data.parseState || 'UNKNOWN'; snapshotState.value = data.snapshotState || 'MIGRATION_REQUIRED'
+    savedVersion.value = Number.isInteger(data.version) ? data.version : null
+    savedContent.value = data.content || ''; draftContent.value = savedContent.value
+    documentIndex.invalidate()
+    if (savedVersion.value !== null) void refreshIndexState()
     docLoaded.value = true
     saveStatusText.value = '已同步'
 
     await nextTick()
+    savedContent.value = document.querySelector('.paper')?.innerHTML ?? docContent.value
+    draftContent.value = savedContent.value
     void analyzeDocumentText()
   } catch (e) {
     docError.value = '读取文档失败，现有正文未被替换。请重试后再编辑或保存。'
@@ -860,6 +899,7 @@ const replaceTextInElement = (root, targetText, replacementHtml) => {
   return false
 }
 
+const plainTextToEditorHtml = (text) => text ? `<p>${escapeHtml(String(text)).replace(/\r\n?|\n/g, '<br>')}</p>` : ''
 const textToEditorHtml = (text) => {
   return normalizeAiDocumentText(text)
       .split(/\n{2,}/)
@@ -961,23 +1001,80 @@ const parseToolResults = (toolResults) => {
 }
 
 // ===== 3. 手动保存与恢复逻辑 =====
-const handleManualSave = async () => {
-  if (isChatMode.value || !canEditDocument.value) return
+const saveDocumentContent = async (content) => {
+  if (isChatMode.value || !canEditDocument.value || isSaving.value) return false
+  if (!Number.isInteger(savedVersion.value)) {
+    saveStatusText.value = '无法确认文档版本，请重新读取后保存'; return false
+  }
+  const expectedVersion = savedVersion.value
   isSaving.value = true; saveStatusText.value = '正在保存...'
   try {
-    const content = document.querySelector('.paper').innerHTML
-    await docApi.updateDoc(docId, { title: docName.value, content: content, category: 'default' })
-    saveStatusText.value = '已同步'; ElMessage.success('保存成功')
-  } catch (e) { saveStatusText.value = '保存失败'; ElMessage.error('同步失败') }
+    const result = await docApi.updateDoc(docId, { title: docName.value, content, category: 'default', contentFormat: 'HTML', expectedVersion })
+    if (disposed) return false
+    if (!Number.isInteger(result?.data?.version) || result.data.version <= expectedVersion) throw new Error('Invalid saved version')
+    savedVersion.value = result.data.version
+    parseState.value = result.data.parseState || parseState.value; snapshotState.value = result.data.snapshotState || snapshotState.value
+    savedContent.value = content
+    draftContent.value = document.querySelector('.paper')?.innerHTML ?? draftContent.value
+    saveStatusText.value = isDirty.value ? '已保存提交内容，仍有修改未保存' : '已同步'
+    documentIndex.invalidate(); clearSegmentPreview(); void refreshIndexState()
+    return true
+  } catch (e) {
+    saveStatusText.value = e?.response?.status === 409 ? '版本冲突，草稿已保留；请核对最新版本' : '保存失败，草稿已保留'
+    documentIndex.invalidate(); void refreshIndexState()
+    return false
+  }
   finally { isSaving.value = false }
+}
+const handleManualSave = async () => {
+  const content = document.querySelector('.paper')?.innerHTML
+  if (typeof content !== 'string') return false
+  const success = await saveDocumentContent(content)
+  if (success) ElMessage.success('保存成功')
+  else ElMessage.error(saveStatusText.value)
+  return success
+}
+const retryDocumentParse = async () => {
+  if (!canEditDocument.value || parsing.value || isSaving.value || indexing.value || isDirty.value || !Number.isInteger(savedVersion.value)) return
+  parsing.value = true; docLoading.value = true
+  try {
+    const result = await docApi.retryParse(docId, savedVersion.value)
+    if (!Number.isInteger(result?.data?.version)) throw new Error('Invalid parse retry result')
+    documentIndex.invalidate(); clearSegmentPreview(); await loadDocData()
+  } catch (error) {
+    ElMessage.error(error?.response?.status === 409 ? '文档版本已变化，未重新解析' : '解析重试失败，原文件与现有正文已保留')
+  } finally { parsing.value = false; docLoading.value = false }
+}
+const clearSegmentPreview = () => {
+  segments.value = []; segmentsIndexState.value = null; segmentsError.value = ''
+  segmentsLoading.value = false
+  segmentsVersion.value = null; segmentsGeneration.value = null
+  indexSucceeded.value = false; indexError.value = ''; segmentRequestGeneration++
+}
+const acceptRemoteDocument = (data) => {
+  if (!Number.isInteger(data?.version) || data.version < savedVersion.value) return false
+  const remoteHtml = data.contentFormat === 'PLAIN_TEXT' ? plainTextToEditorHtml(data.content || '') : data.content || ''
+  const content = document.querySelector('.paper')?.innerHTML ?? draftContent.value
+  if (content !== savedContent.value && content !== remoteHtml) {
+    saveStatusText.value = '远端版本有变化，本地草稿已保留；请核对后保存'
+    documentIndex.invalidate(); void refreshIndexState(); return false
+  }
+  if (isSaving.value) return false
+  savedVersion.value = data.version; savedContent.value = remoteHtml; draftContent.value = savedContent.value
+  parseState.value = data.parseState || parseState.value; snapshotState.value = data.snapshotState || snapshotState.value
+  docContent.value = savedContent.value; saveStatusText.value = '已同步'
+  documentIndex.invalidate(); clearSegmentPreview(); void refreshIndexState(); return true
 }
 
 const handleRestore = async (verNum) => {
-  if (!canEditDocument.value) return
+  if (!canEditDocument.value || isSaving.value || !Number.isInteger(savedVersion.value)) return
+  const expectedVersion = savedVersion.value
   ElMessageBox.confirm(`确定要将文档恢复到 V${verNum} 吗？当前未保存的修改将丢失。`, '版本回溯').then(async () => {
     docLoading.value = true
     try {
-      await docApi.restoreVersion(docId, verNum)
+      const result = await docApi.restoreVersion(docId, verNum, expectedVersion)
+      if (!Number.isInteger(result?.data?.version)) throw new Error('Invalid restored version')
+      documentIndex.invalidate(); clearSegmentPreview()
       ElMessage.success('版本已回溯')
 
       // 恢复成功后重新拉取数据
@@ -985,7 +1082,7 @@ const handleRestore = async (verNum) => {
 
       showHistory.value = false
     } catch (e) {
-      ElMessage.error('回溯失败')
+      ElMessage.error(e?.response?.status === 409 ? '版本已变化，未恢复；现有草稿已保留' : '回溯失败')
     } finally {
       docLoading.value = false
     }
@@ -1018,7 +1115,7 @@ const handleDownload = async () => {
     window.URL.revokeObjectURL(url)
 
     ElMessage.success('导出成功')
-    saveStatusText.value = '已同步'
+    saveStatusText.value = isDirty.value ? '修改未保存' : '已同步'
   } catch (e) { ElMessage.error('下载失败') }
   finally { isSaving.value = false }
 }
@@ -1126,25 +1223,34 @@ const loadSegmentStrategies = async () => {
   }
 }
 
+let segmentRequestGeneration = 0
 const loadDocumentSegments = async () => {
+  const generation = ++segmentRequestGeneration
   segmentsLoading.value = true
   segmentsError.value = ''
   segmentsIndexState.value = null
   segments.value = []
   try {
     const res = await aiApi.getDocumentSegments(docId)
+    if (generation !== segmentRequestGeneration || disposed) return
     const data = res?.data
-    // 兼容旧服务的数组，但不能仅凭空数组推断文档尚未索引。
-    const state = Array.isArray(data) ? 'LEGACY' : data?.indexState
-    const items = Array.isArray(data) ? data : data?.segments
-    if ((!Array.isArray(data) && !['NOT_INDEXED', 'SEGMENTS_AVAILABLE'].includes(state))
+    const state = data?.indexState
+    const items = data?.segments
+    if (!['NOT_INDEXED', 'SEGMENTS_AVAILABLE'].includes(state)
         || !Array.isArray(items)
         || items.some(item => !item || typeof item.content !== 'string')
         || (state === 'NOT_INDEXED' && items.length !== 0)
         || (state === 'SEGMENTS_AVAILABLE' && items.length === 0)) throw new Error('Invalid segments response')
+    await refreshIndexState()
+    if (generation !== segmentRequestGeneration || disposed) return
+    if (state === 'SEGMENTS_AVAILABLE') {
+      if (!indexQueryable.value || data.documentVersion !== savedVersion.value || data.generationId !== indexState.value?.activeGenerationId) throw new Error('Unverified segment version')
+      segmentsVersion.value = data.documentVersion; segmentsGeneration.value = data.generationId
+    } else if (indexQueryable.value) throw new Error('Inconsistent current segment state')
     segments.value = items
     segmentsIndexState.value = state
   } catch (error) {
+    if (generation !== segmentRequestGeneration || disposed) return
     const status = error?.response?.status
     const messages = {
       401: '登录状态已失效，请重新登录后读取分段。',
@@ -1154,7 +1260,7 @@ const loadDocumentSegments = async () => {
       503: '分段读取服务暂不可用，请稍后重试。',
     }
     segmentsError.value = messages[status] || '分段明细加载失败，当前结果未知。'
-  } finally { segmentsLoading.value = false }
+  } finally { if (generation === segmentRequestGeneration) segmentsLoading.value = false }
 }
 
 const openRagSettings = async () => {
@@ -1164,28 +1270,32 @@ const openRagSettings = async () => {
 
 // 执行高级索引
 const doIndexDocument = async () => {
-  if (!canEditDocument.value) return
-  // 获取 A4 纸里最新的纯文本内容
-  const content = currentDocumentText()
-  if (content.length < 10) return ElMessage.warning('文档内容过少，无法分段')
-  if (!selectedStrategy.value || indexing.value) return
-
-  indexing.value = true
-  indexError.value = ''
-  indexSucceeded.value = false
-  segments.value = []
-  segmentsIndexState.value = null
-  segmentsError.value = ''
+  return submitDocumentIndex(false)
+}
+const retryDocumentIndex = async () => submitDocumentIndex(true)
+const submitDocumentIndex = async (retry) => {
+  if (!canEditDocument.value || isSaving.value || indexing.value || (indexBusy.value && !isDirty.value) || (!retry && !selectedStrategy.value)) return
+  if (parseState.value === 'FAILED' && !isDirty.value) return
+  indexing.value = true; indexError.value = ''; indexSucceeded.value = false
   try {
-    // 提交给后端的 /index/segment 接口
-    await aiApi.indexWithSegment(docId, content, selectedStrategy.value)
+    const content = document.querySelector('.paper')?.innerHTML ?? draftContent.value
+    if (content !== savedContent.value || snapshotState.value === 'MIGRATION_REQUIRED') {
+      if (!await saveDocumentContent(content)) throw new Error('保存失败，索引未提交')
+      if ((document.querySelector('.paper')?.innerHTML ?? draftContent.value) !== savedContent.value) throw new Error('保存期间又有修改，请先保存最新草稿')
+    }
+    if (!Number.isInteger(savedVersion.value)) throw new Error('无法确认已保存版本，请重新读取')
+    const expectedVersion = savedVersion.value
+    documentIndex.invalidate(); clearSegmentPreview()
+    if (retry) await docApi.retryIndex(docId, expectedVersion)
+    else await docApi.buildIndex(docId, expectedVersion, selectedStrategy.value)
+    if (disposed || savedVersion.value !== expectedVersion) return
     indexSucceeded.value = true
-    ElMessage.success('索引请求已完成')
-    await loadDocumentSegments()
-  } catch {
-    indexError.value = '索引请求失败，无法确认是否完成；可重新执行分段。'
-    segmentsError.value = '尚未确认最新分段，请重新加载明细。'
-    ElMessage.error('索引请求失败')
+    await refreshIndexState()
+    if (indexQueryable.value) await loadDocumentSegments()
+  } catch (error) {
+    indexError.value = error?.response?.status === 409 ? '版本已变化，索引未按旧版本提交；请重新读取状态。'
+      : `索引请求失败，无法确认是否完成。${error?.response ? '' : error?.message || ''}`
+    await refreshIndexState()
   } finally {
     indexing.value = false
   }
@@ -1199,7 +1309,10 @@ const askAiWithContext = (type) => {
 }
 const handleScroll = () => { if(showAiBall.value) showAiBall.value = false }
 const clearSelection = () => { selectedText.value = ''; showAiBall.value = false }
-const handleInput = () => { saveStatusText.value = '修改未保存' }
+const handleInput = () => {
+  draftContent.value = document.querySelector('.paper')?.innerHTML ?? draftContent.value
+  saveStatusText.value = isDirty.value ? '修改未保存' : '已同步'
+}
 const openHistoryDrawer = async () => { const res = await docApi.getVersions(docId); versionList.value = res.data; showHistory.value = true }
 const syncConversationRoute = () => {
   if (!isChatMode.value || typeof router.replace !== 'function') return

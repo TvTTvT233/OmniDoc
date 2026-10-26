@@ -46,6 +46,14 @@ public class DocumentSegmenter {
 
     private StrategyType defaultStrategy = StrategyType.CHAPTER;
 
+    public DocumentSegmenter() {}
+
+    public DocumentSegmenter(DocumentVectorizer vectorizer, int chunkSize, int overlap) {
+        this.fixedLengthStrategy = new FixedLengthSegmentStrategy(chunkSize, overlap);
+        this.chapterStrategy = new ChapterSegmentStrategy(100, chunkSize);
+        this.semanticStrategy = new SemanticSegmentStrategy(vectorizer, chunkSize);
+    }
+
     public List<SegmentStrategy.Segment> segment(String documentId, String content) {
         return segment(documentId, content, defaultStrategy);
     }
@@ -87,6 +95,8 @@ public class DocumentSegmenter {
             }
             for (SegmentStrategy.Segment semantic : chapterSemanticSegments) {
                 semantic.setTitle(firstNonBlank(chapter.getTitle(), semantic.getTitle()));
+                semantic.setStartOffset(semantic.getStartOffset() + chapter.getStartOffset());
+                semantic.setEndOffset(semantic.getEndOffset() + chapter.getStartOffset());
                 semanticSegments.add(semantic);
             }
         }
@@ -94,7 +104,7 @@ public class DocumentSegmenter {
         List<SegmentStrategy.Segment> finalResult = new ArrayList<>();
         Set<String> contentSeen = new LinkedHashSet<>();
         for (SegmentStrategy.Segment seg : semanticSegments) {
-            String normalized = seg.getContent().toLowerCase().replaceAll("\\s+", "");
+            String normalized = seg.getStartOffset() + ":" + seg.getEndOffset();
             if (contentSeen.add(normalized)) {
                 finalResult.add(seg);
             }

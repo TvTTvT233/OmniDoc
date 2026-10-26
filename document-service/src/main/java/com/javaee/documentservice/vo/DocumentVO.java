@@ -17,6 +17,11 @@ public class DocumentVO {
 
     private String content;
 
+    private String contentFormat;
+    private String contentHash;
+    private String snapshotState;
+    private String parseState;
+
     private String summary;
 
     private List<String> keywords;

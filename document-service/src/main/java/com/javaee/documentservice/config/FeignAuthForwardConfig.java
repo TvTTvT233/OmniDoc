@@ -23,10 +23,6 @@ public class FeignAuthForwardConfig {
             if (authorization != null && !authorization.isBlank()) {
                 template.header(HttpHeaders.AUTHORIZATION, authorization);
             }
-            String userId = attributes.getRequest().getHeader("X-User-Id");
-            if (userId != null && !userId.isBlank()) {
-                template.header("X-User-Id", userId);
-            }
         };
     }
 }

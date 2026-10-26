@@ -21,6 +21,13 @@ public class Document {
 
     private String content;
 
+    private String contentFormat;
+    private String contentHash;
+    private String snapshotState;
+    private String parseState;
+    private String activeGenerationId;
+    private String indexConfigHash;
+
     private String summary;
 
     private String keywords;

@@ -1,24 +1,22 @@
 package com.javaee.documentservice.security;
 
-import com.javaee.common.exception.BusinessException;
+import com.javaee.documentservice.consistency.DocumentStateException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Optional;
 
 /**
- * Resolves the current user from JWT security context or gateway headers.
+ * Resolves the current user exclusively from the verified JWT security context.
  */
 @Component
 public class RequestUserContext {
 
     public Long getRequiredUserId() {
         return getCurrentUserId()
-                .orElseThrow(() -> new BusinessException("用户未认证，请先登录"));
+                .orElseThrow(() -> new DocumentStateException(401,"UNAUTHORIZED","请先登录"));
     }
 
     public Optional<Long> getCurrentUserId() {
@@ -26,7 +24,7 @@ public class RequestUserContext {
         if (principalUserId.isPresent()) {
             return principalUserId;
         }
-        return userIdFromHeader();
+        return Optional.empty();
     }
 
     private Optional<Long> userIdFromPrincipal() {
@@ -38,13 +36,6 @@ public class RequestUserContext {
             return Optional.empty();
         }
         return parseUserId(authentication.getPrincipal().toString());
-    }
-
-    private Optional<Long> userIdFromHeader() {
-        if (!(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes)) {
-            return Optional.empty();
-        }
-        return parseUserId(attributes.getRequest().getHeader("X-User-Id"));
     }
 
     private Optional<Long> parseUserId(String raw) {

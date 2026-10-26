@@ -242,11 +242,7 @@ public class AgentController {
     public Result<Map<String, Object>> indexDocument(
             @Parameter(description = "文档ID") @RequestParam String documentId,
             @Parameter(description = "文档内容") @RequestBody String content) {
-        Map<String, Object> result = knowledgeIndexAgent.indexDocument(documentId, content, Map.of(
-                "userId", requestUserContext.getRequiredUserId(),
-                "knowledgeBaseId", "default"
-        ));
-        return Result.success(result);
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**
@@ -270,13 +266,7 @@ public class AgentController {
     @Operation(summary = "删除索引", description = "删除文档索引")
     public Result<Map<String, Object>> deleteIndex(
             @Parameter(description = "文档ID") @PathVariable String documentId) {
-        Map<String, Object> metadata = knowledgeBase.getDocumentMetadata(documentId);
-        if (!requestUserContext.isAdmin()
-                && !requestUserContext.getRequiredUserId().equals(String.valueOf(metadata.getOrDefault("userId", "")))) {
-            throw new SecurityException("无权删除该索引");
-        }
-        Map<String, Object> result = knowledgeIndexAgent.deleteIndex(documentId);
-        return Result.success(result);
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**
@@ -288,10 +278,7 @@ public class AgentController {
             @Parameter(description = "文档ID") @RequestParam String documentId,
             @Parameter(description = "知识库ID") @RequestParam(defaultValue = "default") String knowledgeBaseId,
             @Parameter(description = "文档内容") @RequestBody String content) {
-        Map<String, Object> metadata = new java.util.HashMap<>();
-        metadata.put("userId", requestUserContext.getRequiredUserId());
-        metadata.put("knowledgeBaseId", knowledgeBaseId);
-        return Result.success(knowledgeIndexAgent.indexDocumentAsync(documentId, content, metadata));
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**
@@ -311,9 +298,7 @@ public class AgentController {
     public Result<Map<String, Object>> retryKnowledgeJob(
             @PathVariable String jobId,
             @RequestBody String content) {
-        Map<String, Object> metadata = new java.util.HashMap<>();
-        metadata.put("userId", requestUserContext.getRequiredUserId());
-        return Result.success(knowledgeIndexAgent.retryJob(jobId, content, metadata));
+        throw new com.javaee.aiservice.consistency.IndexConsistencyException("LEGACY_INDEX_WRITE_DISABLED");
     }
 
     /**

@@ -41,7 +41,7 @@ public class JdbcConversationStore implements ConversationStore {
 
     private static final Set<String> ALLOWED_METADATA_KEYS = Set.of(
             "legacyImported", "legacyUnparsed", "displayable", "source", "errorCode",
-            "eventType", "label", "status", "toolName");
+            "eventType", "label", "status", "toolName", "references");
     private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
     };
 
@@ -293,7 +293,7 @@ public class JdbcConversationStore implements ConversationStore {
                 ConversationMessage stored = existing.get();
                 if (!stored.contentHash().equals(contentHash)
                         || !Objects.equals(stored.toolCallId(), command.toolCallId())
-                        || !stored.metadata().equals(command.metadata())) {
+                        || !canonicalMetadata(stored.metadata()).equals(canonicalMetadata(command.metadata()))) {
                     throw conflict("Idempotency key was reused with different content", null);
                 }
                 results.add(stored);
@@ -400,6 +400,12 @@ public class JdbcConversationStore implements ConversationStore {
             throw invalid("Message metadata contains non-whitelisted fields");
         }
         command.metadata().forEach((key, value) -> {
+            if (key.equals("references")) {
+                if (command.role() != ConversationRole.ASSISTANT || command.messageType() != ConversationMessageType.TEXT
+                        || !"agent".equals(command.metadata().get("source")) || !(value instanceof List<?> list)
+                        || com.javaee.aiservice.consistency.PublicDocumentReferences.from(value).size() != list.size())
+                    throw invalid("Document references require bounded validated assistant source metadata");
+            }
             if ((key.equals("legacyImported") || key.equals("legacyUnparsed") || key.equals("displayable"))
                     && !(value instanceof Boolean)) {
                 throw invalid("Boolean message metadata has an invalid value");
@@ -452,6 +458,13 @@ public class JdbcConversationStore implements ConversationStore {
         } catch (Exception error) {
             throw invalid("Message metadata is not JSON serializable", error);
         }
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode canonicalMetadata(Map<String,Object> metadata) {
+        try {
+            // Parse serialized JSON on both sides: records contain long revisions, JDBC JSON may use Integer.
+            return objectMapper.readTree(objectMapper.writeValueAsString(metadata));
+        } catch (Exception error) { throw invalid("Message metadata is not JSON serializable", error); }
     }
 
     private Map<String, Object> readMetadata(String metadataJson) {

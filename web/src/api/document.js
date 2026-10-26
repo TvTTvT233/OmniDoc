@@ -37,9 +37,15 @@ export const docApi = {
     },
 
     // 恢复到指定版本
-    restoreVersion: (id, versionNumber) => {
-        return request.post(`/documents/${id}/restore/${versionNumber}`)
+    restoreVersion: (id, versionNumber, expectedVersion) => {
+        return request.post(`/documents/${id}/restore/${versionNumber}`, { expectedVersion })
     },
+
+    getIndexState: (id) => request.get(`/documents/${id}/index-state`),
+    buildIndex: (id, expectedVersion, strategy) => request.post(`/documents/${id}/index`, { expectedVersion, strategy }),
+    retryIndex: (id, expectedVersion) => request.post(`/documents/${id}/index/retry`, { expectedVersion }),
+    retryParse: (id, expectedVersion) => request.post(`/documents/${id}/parse/retry`, { expectedVersion }),
+    getReference: (id, referenceId) => request.get(`/documents/${encodeURIComponent(id)}/references/${encodeURIComponent(referenceId)}`),
 
     // 删除文档
     deleteDoc: (id) => {

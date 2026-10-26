@@ -224,6 +224,7 @@ public class DocumentSchemaInitializer implements ApplicationRunner {
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档批注表'
                     """);
 
+            com.javaee.documentservice.consistency.DocumentConsistencySchema.migrate(connection);
             normalizeManagedTableCollations(connection, statement);
         }
     }

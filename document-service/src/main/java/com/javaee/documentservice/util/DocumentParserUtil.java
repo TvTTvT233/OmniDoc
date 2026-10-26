@@ -31,6 +31,36 @@ import java.util.Set;
  * 支持多种文档格式：Word、PDF、HTML、Markdown、图片OCR等
  */
 public class DocumentParserUtil {
+    public static final String STRICT_PARSER_VERSION = "strict-parser-v1";
+    public static final String EXPLICIT_CONTENT_VERSION = "explicit-content-v1";
+
+    /** No binary-to-UTF8 fallback: failed parsing must not create a trustworthy index snapshot. */
+    public static String parseDocumentStrict(byte[] bytes,String name) throws IOException {
+        if(bytes==null) throw new IOException("Source file is unavailable");
+        String extension=getFileExtension(name==null?"":name).toLowerCase(java.util.Locale.ROOT);
+        return switch(extension) {
+            case "txt","md","markdown" -> decodeUtf8Strict(bytes);
+            case "docx" -> parseDocx(bytes);
+            case "doc" -> parseDoc(bytes);
+            case "pdf" -> {
+                String result=parsePdf(bytes);
+                if(result.isBlank()) throw new IOException("PDF has no extractable text");
+                yield result;
+            }
+            case "html","htm" -> parseHtml(bytes);
+            case "xml" -> parseXml(bytes);
+            case "jpg","jpeg","png","bmp","gif","tiff","tif" -> {
+                String result=parseImageOcr(bytes);
+                if(result.isBlank()) throw new IOException("OCR yielded no text");
+                yield result;
+            }
+            default -> throw new IOException("Unsupported file format");
+        };
+    }
+    private static String decodeUtf8Strict(byte[] bytes) throws IOException {
+        return StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+    }
 
     private static final Logger log = LoggerFactory.getLogger(DocumentParserUtil.class);
 

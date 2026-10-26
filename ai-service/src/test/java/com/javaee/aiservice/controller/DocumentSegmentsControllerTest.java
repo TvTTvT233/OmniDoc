@@ -29,6 +29,7 @@ class DocumentSegmentsControllerTest {
     static class Config {
         @Bean DocumentReadAccessClient access() { return mock(DocumentReadAccessClient.class); }
         @Bean DocumentSegmentReadService segments() { return mock(DocumentSegmentReadService.class); }
+        @Bean com.javaee.aiservice.consistency.CurrentGenerationRetrieval generations() { return mock(com.javaee.aiservice.consistency.CurrentGenerationRetrieval.class); }
     }
     @BeforeEach void setup() {
         context = new AnnotationConfigWebApplicationContext(); context.setServletContext(new MockServletContext());

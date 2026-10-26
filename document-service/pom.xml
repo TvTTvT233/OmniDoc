@@ -15,6 +15,11 @@
     <packaging>jar</packaging>
 
     <dependencies>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- 依赖公共组件 -->
         <dependency>
             <groupId>com.javaee</groupId>

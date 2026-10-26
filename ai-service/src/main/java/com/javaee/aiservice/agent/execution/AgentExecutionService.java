@@ -102,6 +102,9 @@ public class AgentExecutionService {
     private KnowledgeBase knowledgeBase;
 
     @Autowired
+    private com.javaee.aiservice.consistency.CurrentGenerationRetrieval currentGenerations;
+
+    @Autowired
     private KnowledgeIndexAgent knowledgeIndexAgent;
 
     @Autowired
@@ -456,7 +459,24 @@ public class AgentExecutionService {
             }
         }
 
-        String finalAnswer = synthesizeAnswer(request, plan, toolResults, context, requiresAction);
+        var finalReferences = collectDocumentReferences(toolResults);
+        boolean evidenceCurrent = currentGenerations == null || currentGenerations.validateReferences(finalReferences, userId,
+                valueOrDefault(request.getKnowledgeBaseId(), "default")).size() == finalReferences.size();
+        String finalAnswer = evidenceCurrent ? synthesizeAnswer(request, plan, toolResults, context, requiresAction)
+                : "文档已更新，当前回答依据已失效，请等待当前版本索引完成后重试。";
+        if (!evidenceCurrent || currentGenerations != null && currentGenerations.validateReferences(finalReferences, userId,
+                valueOrDefault(request.getKnowledgeBaseId(), "default")).size() != finalReferences.size()) {
+            finalAnswer = "文档已更新，当前回答依据已失效，请等待当前版本索引完成后重试。";
+            finalReferences = List.of();
+            stoppedReason = "document_evidence_invalidated";
+            for (AgentToolResult result : toolResults) {
+                if (Set.of("rag-answer", "rag-search").contains(result.getToolName())) {
+                    result.setStatus("error"); result.setMessage("文档依据已失效，请重新检索");
+                    result.setData(Map.of("errorCode", "DOCUMENT_EVIDENCE_INVALIDATED", "references", List.of()));
+                }
+            }
+            for (String key : List.of("retrieved", "sources", "results", "answer", "__stepResults__", "lastToolResults")) context.remove(key);
+        }
         conversationManager.appendMessagesForUser(
                 conversationId,
                 userId,
@@ -470,7 +490,7 @@ public class AgentExecutionService {
                         finalAnswer,
                         traceId,
                         null,
-                        Map.of("source", "agent"))));
+                        Map.of("source", "agent", "references", finalReferences))));
         if (conversationSummaryUpdater != null) {
             try {
                 conversationSummaryUpdater.maybeUpdate(conversationId, userId, request.getModel());
@@ -496,6 +516,7 @@ public class AgentExecutionService {
         response.put("reflections", Boolean.FALSE.equals(request.getReturnIntermediateSteps()) ? List.of() : reflections);
         response.put("timeline", Boolean.FALSE.equals(request.getReturnIntermediateSteps()) ? List.of() : timeline);
         response.put("answer", finalAnswer);
+        response.put("references", finalReferences);
         response.put("context", contextManager.getContext(conversationId));
         response.put("availableTools", toolRegistry.list());
         response.put("iterations", iterations);
@@ -1735,14 +1756,14 @@ public class AgentExecutionService {
                 params.putIfAbsent("question", request.getTask());
                 params.putIfAbsent("topK", 3);
                 params.putIfAbsent("rerankStrategy", firstNonBlank(asString(params.get("strategy")), "HYBRID"));
-                params.putIfAbsent("userId", context.get("userId"));
+                params.put("userId", request.getUserId());
                 params.putIfAbsent("knowledgeBaseId", context.getOrDefault("knowledgeBaseId", "default"));
             }
             case "rag-search" -> {
                 params.putIfAbsent("query", request.getTask());
                 params.putIfAbsent("topK", 5);
                 params.putIfAbsent("rerankStrategy", firstNonBlank(asString(params.get("strategy")), "HYBRID"));
-                params.putIfAbsent("userId", context.get("userId"));
+                params.put("userId", request.getUserId());
                 params.putIfAbsent("knowledgeBaseId", context.getOrDefault("knowledgeBaseId", "default"));
             }
             case "text-summarize" -> {
@@ -2154,6 +2175,7 @@ public class AgentExecutionService {
         List<Map<String, Object>> results = searchKnowledge(question, intValue(params.get("topK"), 3),
                 firstNonBlank(asString(params.get("rerankStrategy")), asString(params.get("strategy"))),
                 asString(params.get("userId")), asString(params.get("knowledgeBaseId")));
+        if (results.isEmpty()) return AgentToolResult.error("rag-answer", "未找到当前版本的可用文档依据，请检查索引状态或调整问题。");
         String retrievedContext = buildKnowledgeContext(results);
         String ragPolicy = promptEngineeringService.createRagAnswerPrompt(
                 "Answer the current user message from the bounded retrieved evidence below.",
@@ -2176,6 +2198,7 @@ public class AgentExecutionService {
         data.put("answer", answer);
         data.put("sources", results.stream().map(r -> r.get("id")).toList());
         data.put("retrieved", results);
+        data.put("references", currentGenerations == null ? List.of() : currentGenerations.references(results));
         return AgentToolResult.success("rag-answer", "知识库问答完成", data);
     }
 
@@ -2184,10 +2207,12 @@ public class AgentExecutionService {
         List<Map<String, Object>> results = searchKnowledge(query, intValue(params.get("topK"), 5),
                 firstNonBlank(asString(params.get("rerankStrategy")), asString(params.get("strategy"))),
                 asString(params.get("userId")), asString(params.get("knowledgeBaseId")));
+        if (results.isEmpty()) return AgentToolResult.error("rag-search", "未找到当前版本的可用文档依据，请检查索引状态或调整问题。");
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("query", query);
         data.put("results", results);
         data.put("sources", results.stream().map(r -> r.get("id")).toList());
+        data.put("references", currentGenerations == null ? List.of() : currentGenerations.references(results));
         return AgentToolResult.success("rag-search", "知识库检索完成", data);
     }
 
@@ -2544,6 +2569,11 @@ public class AgentExecutionService {
 
     private String synthesizeAnswer(AgentExecutionRequest request, List<AgentPlanStep> plan,
                                     List<AgentToolResult> results, Map<String, Object> context, boolean requiresAction) {
+        for (AgentToolResult result : results) {
+            if (("rag-search".equals(result.getToolName()) || "rag-answer".equals(result.getToolName()))
+                    && (!"success".equals(result.getStatus()) || (result.getData().get("sources") instanceof List<?> list && list.isEmpty())))
+                return "当前没有可用的文档检索依据，请检查文档索引状态或调整问题后重试。";
+        }
         List<String> mcpSources = collectMcpSources(results);
         AgentToolResult lastMcpResult = lastMcpResult(results);
         boolean lastResultIsMcp = lastMcpResult != null && !results.isEmpty()
@@ -2626,6 +2656,18 @@ public class AgentExecutionService {
             }
         }
         return List.copyOf(sources);
+    }
+
+    private List<com.javaee.aiservice.consistency.IndexContracts.Reference> collectDocumentReferences(List<AgentToolResult> results) {
+        if (currentGenerations == null) return List.of();
+        List<com.javaee.aiservice.consistency.IndexContracts.Reference> refs = new ArrayList<>();
+        for (AgentToolResult result : results) {
+            if ("success".equals(result.getStatus()) && Set.of("rag-answer", "rag-search").contains(result.getToolName()))
+                refs.addAll(com.javaee.aiservice.consistency.PublicDocumentReferences.from(result.getData().get("references")));
+        }
+        List<com.javaee.aiservice.consistency.IndexContracts.Reference> distinct = refs.stream().distinct().toList();
+        if (distinct.size() > 100) throw new com.javaee.aiservice.consistency.IndexConsistencyException("INDEX_REFERENCE_LIMIT");
+        return distinct;
     }
 
     private String enforceAllowedMcpSources(String answer, List<String> sources) {

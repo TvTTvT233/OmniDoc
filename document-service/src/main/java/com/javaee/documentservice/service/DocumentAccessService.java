@@ -82,7 +82,7 @@ public class DocumentAccessService {
     }
 
     private boolean canAccess(Document document, Long userId, Set<String> allowedRoles) {
-        if (document == null || userId == null) {
+        if (document == null || userId == null || !"active".equals(document.getStatus())) {
             return false;
         }
         if (isOwner(document, userId)) {

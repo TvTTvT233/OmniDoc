@@ -70,8 +70,9 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
             ChapterMatch chapter = chapters.get(i);
             int start = chapter.start;
             int end = (i < chapters.size() - 1) ? chapters.get(i + 1).start : content.length();
-
-            String chapterContent = content.substring(start, end).trim();
+            while (start < end && content.charAt(start) <= ' ') start++;
+            while (end > start && content.charAt(end - 1) <= ' ') end--;
+            String chapterContent = content.substring(start, end);
 
             if (chapterContent.length() < minChapterLength) {
                 log.debug("章节内容过短，跳过: {}", chapter.title);
@@ -81,6 +82,10 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
             if (chapterContent.length() > maxChapterLength) {
                 log.info("章节内容过长，进行子分段: {} (length={})", chapter.title, chapterContent.length());
                 List<Segment> subSegments = splitLargeChapter(documentId, chapter, chapterContent, segments.size());
+                for (Segment segment : subSegments) {
+                    segment.setStartOffset(segment.getStartOffset() + start);
+                    segment.setEndOffset(segment.getEndOffset() + start);
+                }
                 segments.addAll(subSegments);
             } else {
                 Segment segment = new Segment(
@@ -90,6 +95,8 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
                         segments.size(),
                         chapter.title
                 );
+                segment.setStartOffset(start);
+                segment.setEndOffset(end);
                 segments.add(segment);
                 log.debug("生成分段: segmentId={}, title={}, charCount={}",
                         segment.getSegmentId(), chapter.title, chapterContent.length());
@@ -145,6 +152,8 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
                     startIndex + i,
                     subTitle
             );
+            segment.setStartOffset(chunk.getStartOffset());
+            segment.setEndOffset(chunk.getEndOffset());
             subSegments.add(segment);
         }
 

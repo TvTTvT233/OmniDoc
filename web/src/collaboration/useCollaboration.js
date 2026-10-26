@@ -1,4 +1,5 @@
 import { ref, nextTick } from 'vue'
+import { docApi } from '../api/document'
 
 const USER_COLORS = [
   '#3370ff', '#f56c6c', '#67c23a', '#e6a23c', '#909399',
@@ -16,7 +17,7 @@ function getUserColor(userId) {
   return userColorMap[userId]
 }
 
-export function useCollaboration(documentId, userId, userName) {
+export function useCollaboration(documentId, userId, userName, documentState = {}) {
   const onlineUsers = ref([])
   const remoteCursors = ref([])
   const isConnected = ref(false)
@@ -30,6 +31,7 @@ export function useCollaboration(documentId, userId, userName) {
   let autoSaveTimer = null
   let lastKnownContent = ''
   let lastSavedContent = ''
+  let lastKnownVersion = null
   let inputHandler = null
   let compositionHandler = null
   let isComposing = false
@@ -42,19 +44,14 @@ export function useCollaboration(documentId, userId, userName) {
     if (content === lastSavedContent) return
 
     try {
-      const token = localStorage.getItem('accessToken') || ''
-      await fetch(`/api/documents/${documentId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({ content })
-      })
+      // The editor owns the saved version and CAS guard for both manual and automatic saves.
+      const saved = await documentState.saveDocument?.(content)
+      if (saved !== true) throw new Error('自动保存未完成，草稿已保留；请检查编辑器保存状态。')
       lastSavedContent = content
       lastSyncTime.value = Date.now()
+      connectionError.value = ''
     } catch (e) {
-      console.warn('[Collaboration] 自动保存失败', e)
+      connectionError.value = e.message || '自动保存失败，草稿已保留。'
     }
   }
 
@@ -66,31 +63,30 @@ export function useCollaboration(documentId, userId, userName) {
   async function pollChanges() {
     if (!isCollaborating.value || isDisposed) return
     try {
-      const token = localStorage.getItem('accessToken') || ''
-      const headers = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch(`/api/documents/${documentId}`, { headers })
-      const data = await res.json()
-      const docData = data.data || data
-      const remoteContent = docData.content || ''
+      const response = await docApi.getDocDetail(documentId)
+      if (isDisposed) return
+      const docData = response?.data
+      if (!Number.isInteger(docData?.version) || typeof docData.content !== 'string') throw new Error('远端文档版本未知，未替换正文。')
+      const remoteContent = docData.content
 
-      if (remoteContent !== lastKnownContent) {
-        const localContent = paperElement ? paperElement.innerHTML : ''
-        if (remoteContent !== localContent) {
-          isRemoteChange = true
-          if (paperElement) {
-            paperElement.innerHTML = remoteContent
-            paperElement.dispatchEvent(new Event('input', { bubbles: true }))
-          }
-          lastKnownContent = remoteContent
-          lastSavedContent = remoteContent
-          lastSyncTime.value = Date.now()
-          nextTick(() => { isRemoteChange = false })
-        } else {
-          lastKnownContent = remoteContent
+      if (remoteContent !== lastKnownContent || docData.version !== lastKnownVersion) {
+        if (documentState.acceptRemoteDocument?.(docData) !== true) {
+          connectionError.value = '远端同步暂停，本地草稿已保留；请检查文档版本。'
+          return
         }
+        lastKnownVersion = docData.version
+        // The editor applies the declared content format and updates its version/draft together.
+        // Never independently inject a raw PLAIN_TEXT response into innerHTML here.
+        isRemoteChange = true
+        await nextTick()
+        lastKnownContent = remoteContent
+        lastSavedContent = paperElement?.innerHTML || ''
+        lastSyncTime.value = Date.now()
+        isRemoteChange = false
+        connectionError.value = ''
       }
     } catch (e) {
+      connectionError.value = '读取协作文档失败，现有正文未替换。'
     }
   }
 

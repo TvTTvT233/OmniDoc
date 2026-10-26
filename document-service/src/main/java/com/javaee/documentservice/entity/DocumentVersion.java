@@ -25,6 +25,13 @@ public class DocumentVersion {
 
     private String content;
 
+    private Integer verifiedVersion;
+    private String contentFormat;
+    private String canonicalText;
+    private String contentHash;
+    private String normalizationVersion;
+    private String parserVersion;
+
     private String summary;
 
     private String keywords;

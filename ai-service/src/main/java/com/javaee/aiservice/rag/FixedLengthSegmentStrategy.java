@@ -55,10 +55,16 @@ public class FixedLengthSegmentStrategy implements SegmentStrategy {
                 }
             }
 
-            String chunkContent = content.substring(start, end).trim();
+            if (end < totalLength && Character.isLowSurrogate(content.charAt(end))) end--;
+            int left = start, right = end;
+            while (left < right && content.charAt(left) <= ' ') left++;
+            while (right > left && content.charAt(right - 1) <= ' ') right--;
+            String chunkContent = content.substring(left, right);
 
             if (!chunkContent.isEmpty()) {
                 Segment segment = new Segment(documentId, chunkContent, index);
+                segment.setStartOffset(left);
+                segment.setEndOffset(right);
                 segments.add(segment);
                 log.debug("生成分段: segmentId={}, charCount={}", segment.getSegmentId(), chunkContent.length());
                 index++;
@@ -73,6 +79,7 @@ public class FixedLengthSegmentStrategy implements SegmentStrategy {
                 nextStart = end;
             }
             start = nextStart;
+            if (start < totalLength && Character.isLowSurrogate(content.charAt(start))) start++;
         }
 
         log.info("固定长度分段完成: documentId={}, 生成{}个分段", documentId, segments.size());

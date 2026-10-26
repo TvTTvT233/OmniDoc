@@ -1,3 +1,5 @@
+import { normalizeDocumentReferences } from './documentReferences'
+
 export const CONVERSATION_STATUS = Object.freeze({
   ACTIVE: 'ACTIVE',
   ARCHIVED: 'ARCHIVED',
@@ -203,6 +205,7 @@ export function normalizeConversationMessage(value) {
     traceId: optionalString(source.traceId, 'conversation message traceId'),
     toolCallId: optionalString(source.toolCallId, 'conversation message toolCallId'),
     metadata,
+    references: Object.freeze(normalizeDocumentReferences(source.references)),
     createdAt: requireString(source.createdAt, 'conversation message createdAt'),
   })
 }

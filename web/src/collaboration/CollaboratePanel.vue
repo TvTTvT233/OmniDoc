@@ -93,7 +93,9 @@ import { useCollaboration } from './useCollaboration'
 const props = defineProps({
   documentId: { type: String, required: true },
   userId: { type: String, default: '1' },
-  userName: { type: String, default: 'User' }
+  userName: { type: String, default: 'User' },
+  saveDocument: { type: Function, default: null },
+  acceptRemoteDocument: { type: Function, default: null },
 })
 
 const visible = ref(true)
@@ -110,7 +112,10 @@ const {
   lastSyncTime,
   startCollaboration,
   stopCollaboration
-} = useCollaboration(props.documentId, props.userId, props.userName)
+} = useCollaboration(props.documentId, props.userId, props.userName, {
+  saveDocument: (content) => props.saveDocument?.(content),
+  acceptRemoteDocument: (data) => props.acceptRemoteDocument?.(data),
+})
 
 const statusTagType = computed(() => {
   if (!isConnected.value) return 'info'
