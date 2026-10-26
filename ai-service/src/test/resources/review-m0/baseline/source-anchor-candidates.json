@@ -1,0 +1,81 @@
+{
+  "contractStatus": "NON_FINAL_SUGGESTION_FOR_M0_00",
+  "intendedPlacement": "M0_00_SOURCE_REFS_SOURCE_LOCATOR",
+  "publicApiContract": false,
+  "purpose": "Freeze a testable candidate vocabulary without taking the final review contract decision.",
+  "sourceAnchorCandidate": {
+    "common": [
+      "sourceId",
+      "sourceVersion",
+      "mediaType",
+      "contentDigest",
+      "locatorKind",
+      "exactText",
+      "textDigest",
+      "anchorQuality"
+    ],
+    "pdf": [
+      "pageNumber",
+      "boundingBox",
+      "charStart",
+      "charEnd"
+    ],
+    "docx": [
+      "bodyElementIndex",
+      "paragraphIndex",
+      "tableIndex",
+      "rowIndex",
+      "cellIndex",
+      "runIndex"
+    ],
+    "xlsx": [
+      "sheetName",
+      "sheetIndex",
+      "cellReference",
+      "rowIndex",
+      "columnIndex",
+      "formula",
+      "formattedValue"
+    ],
+    "image": [
+      "pageNumber",
+      "blockIndex",
+      "boundingBox",
+      "ocrText",
+      "confidence",
+      "ocrEngine",
+      "ocrLanguage"
+    ],
+    "zip": [
+      "entryPath",
+      "entryIndex",
+      "entryDigest",
+      "containerDepth",
+      "parentArchiveAnchor"
+    ]
+  },
+  "anchorQuality": [
+    "EXACT",
+    "APPROXIMATE",
+    "TEXT_ONLY",
+    "UNAVAILABLE"
+  ],
+  "failureClassification": [
+    {"code": "EMPTY_INPUT", "stage": "INPUT", "retryable": false, "m000Disposition": "REQUEST_INVALID_OR_PARSE_FAILED"},
+    {"code": "UNSUPPORTED_FORMAT", "stage": "INPUT", "retryable": false, "m000Disposition": "HTTP_415_OR_ARCHIVE_ENTRY_UNSUPPORTED"},
+    {"code": "EXTENSION_CONTENT_MISMATCH", "stage": "INPUT", "retryable": false, "m000Disposition": "TYPE_MISMATCH"},
+    {"code": "MALFORMED_DOCUMENT", "stage": "PARSE", "retryable": false, "m000Disposition": "CORRUPTED_OR_PARSE_FAILED"},
+    {"code": "ENCRYPTED_OR_PASSWORD_PROTECTED", "stage": "PARSE", "retryable": false, "m000Disposition": "ENCRYPTED"},
+    {"code": "TEXT_NOT_EXTRACTABLE", "stage": "PARSE", "retryable": false, "m000Disposition": "PARSE_FAILED_OR_OCR_INSUFFICIENT"},
+    {"code": "OCR_RUNTIME_UNAVAILABLE", "stage": "DEPENDENCY", "retryable": true, "m000Disposition": "JOB_FAILED_SYSTEM_ERROR_NOT_CANNOT_CONFIRM"},
+    {"code": "OCR_LANGUAGE_DATA_MISSING", "stage": "DEPENDENCY", "retryable": true, "m000Disposition": "JOB_FAILED_SYSTEM_ERROR_NOT_CANNOT_CONFIRM"},
+    {"code": "OCR_FAILED", "stage": "PARSE", "retryable": true, "m000Disposition": "OCR_INSUFFICIENT_IF_INPUT_BOUND_OTHERWISE_JOB_FAILED"},
+    {"code": "ANCHOR_UNAVAILABLE", "stage": "LOCATE", "retryable": false, "m000Disposition": "DO_NOT_CONFIRM_EXTRACTED_CANDIDATE"},
+    {"code": "ARCHIVE_ENTRY_UNSAFE_PATH", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ARCHIVE_SAFETY_LIMIT_EXCEEDED"},
+    {"code": "ARCHIVE_LIMIT_EXCEEDED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ARCHIVE_SAFETY_LIMIT_EXCEEDED"},
+    {"code": "ARCHIVE_NESTING_LIMIT_EXCEEDED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "NESTED_ARCHIVE_NOT_ALLOWED"},
+    {"code": "ARCHIVE_ENCRYPTED_ENTRY_UNSUPPORTED", "stage": "ARCHIVE", "retryable": false, "m000Disposition": "ENCRYPTED"},
+    {"code": "IO_OR_DEPENDENCY_UNAVAILABLE", "stage": "DEPENDENCY", "retryable": true, "m000Disposition": "JOB_FAILED_SYSTEM_ERROR_NOT_CANNOT_CONFIRM"},
+    {"code": "PARTIAL_EXTRACTION", "stage": "PARSE", "retryable": true, "m000Disposition": "PARSE_FAILED_OR_FORMAT_SPECIFIC_CANNOT_CONFIRM"}
+  ]
+}

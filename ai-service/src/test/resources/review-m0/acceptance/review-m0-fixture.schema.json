@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/review-m0-fixtures.json",
+  "title": "OmniDoc Review M0 deterministic fixture manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "fixtureSetId",
+    "synthetic",
+    "containsRealUserData",
+    "requiredTargetIds",
+    "scenarios",
+    "formalFormats",
+    "zipBoundaries"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "fixtureSetId": {"const": "review-m0-p0-contract-v1"},
+    "synthetic": {"const": true},
+    "containsRealUserData": {"const": false},
+    "requiredTargetIds": {
+      "type": "array",
+      "minItems": 15,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^M0-P0-[0-9]{3}$"}
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 20,
+      "items": {"$ref": "#/$defs/scenario"}
+    },
+    "formalFormats": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/formalFormat"}
+    },
+    "zipBoundaries": {
+      "type": "array",
+      "minItems": 9,
+      "items": {"$ref": "#/$defs/zipBoundary"}
+    }
+  },
+  "$defs": {
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetId", "given", "expect"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^m0-[a-z0-9-]+$"},
+        "targetId": {"type": "string", "pattern": "^M0-P0-[0-9]{3}$"},
+        "given": {"type": "object"},
+        "expect": {"type": "object"}
+      }
+    },
+    "formalFormat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "extension", "mediaType", "signatureHex", "expectedDisposition", "containerOnly"],
+      "properties": {
+        "format": {"enum": ["PDF", "DOCX", "XLSX", "JPG", "PNG", "ZIP"]},
+        "extension": {"type": "string", "pattern": "^\\.[a-z0-9]+$"},
+        "mediaType": {"type": "string"},
+        "signatureHex": {"type": "string", "pattern": "^[0-9A-F]+$"},
+        "expectedDisposition": {"enum": ["ACCEPT", "CANNOT_CONFIRM"]},
+        "containerOnly": {"type": "boolean"},
+        "allowedLeafFormats": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {"enum": ["PDF", "DOCX", "XLSX", "JPG", "PNG"]}
+        },
+        "variant": {"type": "string"}
+      }
+    },
+    "zipBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "condition", "expectedDisposition", "reasonCode"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^zip-[a-z0-9-]+$"},
+        "condition": {"type": "string"},
+        "expectedDisposition": {"enum": ["ACCEPT", "REJECT", "CANNOT_CONFIRM"]},
+        "reasonCode": {
+          "enum": [
+            null,
+            "ENCRYPTED",
+            "TYPE_MISMATCH",
+            "NESTED_ARCHIVE_NOT_ALLOWED",
+            "ARCHIVE_SAFETY_LIMIT_EXCEEDED"
+          ]
+        }
+      }
+    }
+  }
+}

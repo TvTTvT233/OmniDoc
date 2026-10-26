@@ -75,12 +75,13 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
             String chapterContent = content.substring(start, end);
 
             if (chapterContent.length() < minChapterLength) {
-                log.debug("章节内容过短，跳过: {}", chapter.title);
+                log.debug("章节内容过短，跳过: titleChars={}", chapter.title.length());
                 continue;
             }
 
             if (chapterContent.length() > maxChapterLength) {
-                log.info("章节内容过长，进行子分段: {} (length={})", chapter.title, chapterContent.length());
+                log.info("章节内容过长，进行子分段: titleChars={}, contentChars={}",
+                        chapter.title.length(), chapterContent.length());
                 List<Segment> subSegments = splitLargeChapter(documentId, chapter, chapterContent, segments.size());
                 for (Segment segment : subSegments) {
                     segment.setStartOffset(segment.getStartOffset() + start);
@@ -98,8 +99,8 @@ public class ChapterSegmentStrategy implements SegmentStrategy {
                 segment.setStartOffset(start);
                 segment.setEndOffset(end);
                 segments.add(segment);
-                log.debug("生成分段: segmentId={}, title={}, charCount={}",
-                        segment.getSegmentId(), chapter.title, chapterContent.length());
+                log.debug("生成分段: segmentId={}, titleChars={}, charCount={}",
+                        segment.getSegmentId(), chapter.title.length(), chapterContent.length());
             }
         }
 

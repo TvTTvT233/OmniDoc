@@ -13,6 +13,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +27,8 @@ import com.javaee.aiservice.service.MinIOService;
 @RequestMapping("/api/skills")
 @Tag(name = "技能管理", description = "AI技能执行接口")
 public class SkillController {
+
+    private static final Logger log = LoggerFactory.getLogger(SkillController.class);
 
     private final SkillExecutorService skillExecutorService;
     private final MinIOService minIOService;
@@ -67,12 +71,9 @@ public class SkillController {
     public ResponseEntity<org.springframework.core.io.Resource> executeFileDownloadSkill(
             @Parameter(description = "对象名称") @RequestParam("objectName") String objectName,
             @Parameter(description = "存储桶名称（可选）") @RequestParam(required = false) String bucketName) {
-        System.out.println("接收到文件下载请求: objectName=" + objectName + ", bucketName=" + bucketName);
         try {
-            System.out.println("开始执行文件下载技能...");
             // 执行技能获取文件流和元数据
             Object result = skillExecutorService.executeSkill("File Download Skill", objectName, bucketName);
-            System.out.println("执行技能成功，获取到结果");
             
             // 检查结果类型
             if (!(result instanceof Object[])) {
@@ -90,12 +91,10 @@ public class SkillController {
             String originalObjectName = (String) resultArray[2];
             String bucketMessage = resultArray.length > 3 ? (String) resultArray[3] : null;
             String actualBucketName = resultArray.length > 4 ? (String) resultArray[4] : bucketName;
-            
-            // 打印桶消息
+
             if (bucketMessage != null) {
-                System.out.println("桶信息: " + bucketMessage);
+                log.debug("event=FILE_DOWNLOAD_BUCKET_METADATA_AVAILABLE");
             }
-            System.out.println("实际使用的桶: " + actualBucketName);
             
             // 提取文件名
             String filename = originalObjectName;
@@ -138,8 +137,6 @@ public class SkillController {
                 .contentType(mediaType)
                 .body(resource);
         } catch (Exception e) {
-            // 记录异常信息
-            e.printStackTrace();
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -231,7 +228,6 @@ public class SkillController {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
             return Result.fail("生成失败：" + e.getMessage());
         }
         return Result.fail("生成失败");
@@ -293,7 +289,6 @@ public class SkillController {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
         }
         return ResponseEntity.internalServerError().build();
     }

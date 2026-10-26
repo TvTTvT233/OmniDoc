@@ -64,22 +64,22 @@ public class FileServiceImpl implements FileService {
             if ("local".equals(fileStorageConfig.getStorageType())) {
                 // 本地存储
             Path storagePath = Paths.get(fileStorageConfig.getLocalPath(), storageFileName);
-            System.out.println("存储路径: " + storagePath);
+            System.out.println("存储路径已解析");
             try {
                 // 确保存储目录存在
                 Path storageDir = storagePath.getParent();
                 if (storageDir != null) {
                     if (!Files.exists(storageDir)) {
                         Files.createDirectories(storageDir);
-                        System.out.println("目录创建成功: " + storageDir);
+                        System.out.println("目录创建成功");
                     } else {
-                        System.out.println("目录已存在: " + storageDir);
+                        System.out.println("目录已存在");
                     }
                 }
                 
                 // 使用FileOutputStream保存文件
                 File destFile = storagePath.toFile();
-                System.out.println("目标文件: " + destFile.getAbsolutePath());
+                System.out.println("目标文件已解析");
                 System.out.println("目标文件是否存在: " + destFile.exists());
                 System.out.println("目标文件是否可写: " + destFile.canWrite());
                 
@@ -90,20 +90,17 @@ public class FileServiceImpl implements FileService {
                         fos.write(buffer, 0, bytesRead);
                     }
                     fos.flush();
-                    System.out.println("文件上传成功: " + storagePath);
+                    System.out.println("文件上传成功");
                 }
             } catch (Exception e) {
-                System.out.println("本地存储错误: " + e.getMessage());
-                e.printStackTrace();
+                System.out.println("本地存储错误");
                 throw e;
             }
             } else if ("minio".equals(fileStorageConfig.getStorageType())) {
                 // MinIO存储
                 System.out.println("=== 开始MinIO存储 ===");
-                System.out.println("存储桶名称: " + fileStorageConfig.getBucketName());
-                System.out.println("存储文件名: " + storageFileName);
+                System.out.println("存储位置已解析");
                 System.out.println("文件大小: " + file.getSize());
-                System.out.println("文件类型: " + file.getContentType());
                 try {
                     ensureBucketExists(fileStorageConfig.getBucketName());
                     System.out.println("存储桶检查/创建成功");
@@ -120,8 +117,7 @@ public class FileServiceImpl implements FileService {
                         System.out.println("文件上传到MinIO成功");
                     }
                 } catch (Exception e) {
-                    System.out.println("MinIO存储错误: " + e.getMessage());
-                    e.printStackTrace();
+                    System.out.println("MinIO存储错误");
                     throw e;
                 }
             }
@@ -142,7 +138,7 @@ public class FileServiceImpl implements FileService {
                 fileMetadataService.saveMetadata(fileMetadata);
             } catch (Exception e) {
                 // 数据库不可用时，继续执行，只记录日志
-                System.out.println("数据库不可用，跳过元数据保存: " + e.getMessage());
+                System.out.println("数据库不可用，跳过元数据保存");
             }
 
             return fileId;
@@ -264,7 +260,7 @@ public class FileServiceImpl implements FileService {
                 fileMetadataService.saveMetadata(fileMetadata);
             } catch (Exception e) {
                 // 数据库不可用时，忽略错误
-                System.out.println("数据库不可用，跳过元数据保存: " + e.getMessage());
+                System.out.println("数据库不可用，跳过元数据保存");
             }
 
             return fileId;
@@ -294,7 +290,7 @@ public class FileServiceImpl implements FileService {
                 }
             } catch (Exception e) {
                 // 数据库不可用时，尝试不同的文件扩展名
-                System.out.println("数据库不可用，尝试不同的文件扩展名: " + e.getMessage());
+                System.out.println("数据库不可用，尝试不同的文件扩展名");
                 // 尝试常见的文件扩展名
                 String[] extensions = {"", ".docx", ".pdf", ".txt", ".jpg", ".png", ".jpeg"};
                 for (String ext : extensions) {
@@ -310,7 +306,7 @@ public class FileServiceImpl implements FileService {
                         }
                     } catch (Exception ex) {
                         // 忽略错误，尝试下一个扩展名
-                        System.out.println("尝试扩展名失败: " + ext);
+                        System.out.println("尝试扩展名失败");
                     }
                 }
                 // 如果所有扩展名都失败，抛出异常
@@ -357,21 +353,21 @@ public class FileServiceImpl implements FileService {
                 fileMetadata = fileMetadataService.getMetadata(fileId);
                 if (fileMetadata != null) {
                     storageFileName = fileMetadata.getObjectKey();
-                    System.out.println("从数据库获取到文件元数据，存储文件名: " + storageFileName);
+                    System.out.println("从数据库获取到文件元数据");
                 } else {
-                    System.out.println("数据库中未找到文件元数据: " + fileId);
+                    System.out.println("数据库中未找到文件元数据");
                 }
             } catch (Exception e) {
                 // 数据库不可用时，尝试不同的文件扩展名
-                System.out.println("数据库不可用，尝试不同的文件扩展名: " + e.getMessage());
+                System.out.println("数据库不可用，尝试不同的文件扩展名");
                 // 尝试常见的文件扩展名
                 String[] extensions = {".docx", ".pdf", ".txt", ".jpg", ".png", ".jpeg", ""};
                 boolean deleted = false;
                 for (String ext : extensions) {
                     try {
                         String tempFileName = fileId + ext;
-                        System.out.println("尝试删除MinIO文件: " + tempFileName);
-                        System.out.println("MinIO配置: bucket=" + fileStorageConfig.getBucketName());
+                        System.out.println("尝试删除MinIO文件");
+                        System.out.println("MinIO配置已加载");
                         minioClient.removeObject(
                                 RemoveObjectArgs.builder()
                                         .bucket(fileStorageConfig.getBucketName())
@@ -379,11 +375,11 @@ public class FileServiceImpl implements FileService {
                                         .build()
                         );
                         deleted = true;
-                        System.out.println("成功删除文件: " + tempFileName);
+                        System.out.println("成功删除文件");
                         // 继续尝试其他扩展名，确保删除所有可能的文件
                     } catch (Exception ex) {
                         // 忽略错误，尝试下一个扩展名
-                        System.out.println("尝试扩展名失败: " + ext + ", 错误: " + ex.getMessage());
+                        System.out.println("尝试扩展名失败");
                     }
                 }
                 if (deleted) {
@@ -395,7 +391,7 @@ public class FileServiceImpl implements FileService {
             
             // 如果有存储文件名，直接删除
             if (storageFileName != null) {
-                System.out.println("使用存储文件名删除文件: " + storageFileName);
+                System.out.println("使用存储文件名删除文件");
                 if ("minio".equals(fileStorageConfig.getStorageType())) {
                     try {
                         minioClient.removeObject(
@@ -404,18 +400,18 @@ public class FileServiceImpl implements FileService {
                                         .object(storageFileName)
                                         .build()
                         );
-                        System.out.println("成功删除文件: " + storageFileName);
+                        System.out.println("成功删除文件");
                     } catch (Exception e) {
-                        System.out.println("删除文件失败: " + e.getMessage());
+                        System.out.println("删除文件失败");
                         throw new RuntimeException("文件删除失败: " + e.getMessage());
                     }
                 } else if ("local".equals(fileStorageConfig.getStorageType())) {
                     try {
                         Path storagePath = Paths.get(fileStorageConfig.getLocalPath(), storageFileName);
                         Files.deleteIfExists(storagePath);
-                        System.out.println("成功删除本地文件: " + storagePath);
+                        System.out.println("成功删除本地文件");
                     } catch (Exception e) {
-                        System.out.println("删除本地文件失败: " + e.getMessage());
+                        System.out.println("删除本地文件失败");
                         throw new RuntimeException("文件删除失败: " + e.getMessage());
                     }
                 } else {
@@ -436,17 +432,17 @@ public class FileServiceImpl implements FileService {
                                             .object(tempFileName)
                                             .build()
                             );
-                            System.out.println("成功删除MinIO文件: " + tempFileName);
+                            System.out.println("成功删除MinIO文件");
                         } else if ("local".equals(fileStorageConfig.getStorageType())) {
                             Path storagePath = Paths.get(fileStorageConfig.getLocalPath(), tempFileName);
                             Files.deleteIfExists(storagePath);
-                            System.out.println("成功删除本地文件: " + storagePath);
+                            System.out.println("成功删除本地文件");
                         }
                         deleted = true;
                         break; // 删除成功后退出循环
                     } catch (Exception ex) {
                         // 忽略错误，尝试下一个扩展名
-                        System.out.println("尝试删除失败: " + tempFileName + ", 错误: " + ex.getMessage());
+                        System.out.println("尝试删除失败");
                     }
                 }
                 if (!deleted) {
@@ -459,7 +455,7 @@ public class FileServiceImpl implements FileService {
                 fileMetadataService.deleteMetadata(fileId);
             } catch (Exception e) {
                 // 数据库不可用时，忽略错误
-                System.out.println("数据库不可用，跳过元数据删除: " + e.getMessage());
+                System.out.println("数据库不可用，跳过元数据删除");
             }
         } catch (Exception e) {
             throw new RuntimeException("文件删除失败: " + e.getMessage(), e);
@@ -481,7 +477,7 @@ public class FileServiceImpl implements FileService {
                 }
             } catch (Exception e) {
                 // 数据库不可用时，尝试不同的文件扩展名
-                System.out.println("数据库不可用，尝试不同的文件扩展名: " + e.getMessage());
+                System.out.println("数据库不可用，尝试不同的文件扩展名");
             }
             
             // 如果没有找到存储文件名，使用fileId作为默认值（去除扩展名）
@@ -557,13 +553,13 @@ public class FileServiceImpl implements FileService {
                                         .object(foundOldFileName)
                                         .build()
                         );
-                        System.out.println("MinIO文件重命名成功: " + foundOldFileName + " -> " + newStorageFileName);
+                        System.out.println("MinIO文件重命名成功");
                     } else {
-                        System.out.println("MinIO中未找到原文件: " + oldFileName);
+                        System.out.println("MinIO中未找到原文件");
                     }
                 } catch (Exception e) {
                     // 如果复制失败，尝试直接使用新名称上传（简化处理）
-                    System.out.println("MinIO复制失败，尝试直接使用新名称: " + e.getMessage());
+                    System.out.println("MinIO复制失败，尝试直接使用新名称");
                 }
             }
 
@@ -577,7 +573,7 @@ public class FileServiceImpl implements FileService {
                 }
             } catch (Exception e) {
                 // 数据库不可用时，忽略错误
-                System.out.println("数据库不可用，跳过元数据更新: " + e.getMessage());
+                System.out.println("数据库不可用，跳过元数据更新");
             }
         } catch (Exception e) {
             throw new RuntimeException("文件重命名失败: " + e.getMessage(), e);
@@ -596,13 +592,13 @@ public class FileServiceImpl implements FileService {
                 fileMetadata = fileMetadataService.getMetadata(fileId);
                 if (fileMetadata != null) {
                     storageFileName = fileMetadata.getObjectKey();
-                    System.out.println("从数据库获取到文件元数据，存储文件名: " + storageFileName);
+                    System.out.println("从数据库获取到文件元数据");
                 } else {
-                    System.out.println("数据库中未找到文件元数据: " + fileId);
+                    System.out.println("数据库中未找到文件元数据");
                 }
             } catch (Exception e) {
                 // 数据库不可用时，使用fileId作为默认值
-                System.out.println("数据库不可用: " + e.getMessage());
+                System.out.println("数据库不可用");
                 storageFileName = fileId;
             }
 
@@ -670,7 +666,7 @@ public class FileServiceImpl implements FileService {
                                         .object(foundStorageFileName)
                                         .build()
                         );
-                        System.out.println("MinIO文件移动成功: " + foundStorageFileName + " -> " + newStoragePath);
+                        System.out.println("MinIO文件移动成功");
                     } else {
                         throw new RuntimeException("文件不存在: " + storageFileName);
                     }
@@ -687,7 +683,7 @@ public class FileServiceImpl implements FileService {
                 }
             } catch (Exception e) {
                 // 数据库不可用时，忽略错误
-                System.out.println("更新文件元数据失败: " + e.getMessage());
+                System.out.println("更新文件元数据失败");
             }
         } catch (Exception e) {
             throw new RuntimeException("文件移动失败: " + e.getMessage(), e);
@@ -708,13 +704,13 @@ public class FileServiceImpl implements FileService {
                 if (fileMetadata != null) {
                     storageFileName = fileMetadata.getObjectKey();
                     fileName = fileMetadata.getFileName();
-                    System.out.println("从数据库获取到文件元数据，存储文件名: " + storageFileName);
+                    System.out.println("从数据库获取到文件元数据");
                 } else {
-                    System.out.println("数据库中未找到文件元数据: " + fileId);
+                    System.out.println("数据库中未找到文件元数据");
                 }
             } catch (Exception e) {
                 // 数据库不可用时，使用fileId作为默认值
-                System.out.println("数据库不可用: " + e.getMessage());
+                System.out.println("数据库不可用");
                 storageFileName = fileId;
             }
 
@@ -780,7 +776,7 @@ public class FileServiceImpl implements FileService {
                                         )
                                         .build()
                         );
-                        System.out.println("MinIO文件复制成功: " + foundStorageFileName + " -> " + newStoragePath);
+                        System.out.println("MinIO文件复制成功");
                     } else {
                         throw new RuntimeException("文件不存在: " + storageFileName);
                     }
@@ -807,7 +803,7 @@ public class FileServiceImpl implements FileService {
                 }
             } catch (Exception e) {
                 // 数据库不可用时，忽略错误
-                System.out.println("保存新文件元数据失败: " + e.getMessage());
+                System.out.println("保存新文件元数据失败");
             }
 
             return newFileId;

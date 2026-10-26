@@ -1,5 +1,6 @@
 package com.javaee.aiservice.async;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.agent.ChatService;
 import com.javaee.aiservice.agent.execution.AgentExecutionService;
@@ -55,7 +56,8 @@ public class AsyncAIJobListener {
             asyncAIJobService.markSuccess(message.getJobId(), result);
             log.info("异步AI任务执行成功: jobId={}", message.getJobId());
         } catch (Exception e) {
-            log.error("异步AI任务执行失败: jobId={}", message.getJobId(), e);
+            SafeDiagnosticLogger.error(log, "ASYNC_AI_JOB_FAILED", "ASYNC_AI_EXECUTION_FAILED",
+                    e, true, 0, 1, null, message.getJobId());
             asyncAIJobService.markFailed(message.getJobId(), e.getMessage());
         }
     }

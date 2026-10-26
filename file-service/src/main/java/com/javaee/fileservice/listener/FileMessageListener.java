@@ -21,7 +21,7 @@ public class FileMessageListener {
     @RabbitListener(queues = RabbitMQConfig.FILE_UPLOAD_QUEUE)
     public void handleFileUploadMessage(Map<String, Object> message) {
         log.info("=== 收到文件上传消息 ===");
-        log.info("消息内容: {}", message);
+        log.info("文件上传消息已接收");
         log.info("处理时间: {}", LocalDateTime.now());
         
         String fileId = (String) message.get("fileId");
@@ -29,7 +29,7 @@ public class FileMessageListener {
         Long fileSize = message.get("fileSize") instanceof Integer ? 
             ((Integer) message.get("fileSize")).longValue() : (Long) message.get("fileSize");
         
-        log.info("文件ID: {}, 文件名: {}, 文件大小: {} bytes", fileId, fileName, fileSize);
+        log.info("文件上传消息已解析: size={} bytes", fileSize);
         
         log.info("文件上传消息处理完成");
     }
@@ -40,13 +40,13 @@ public class FileMessageListener {
     @RabbitListener(queues = RabbitMQConfig.FILE_DOWNLOAD_QUEUE)
     public void handleFileDownloadMessage(Map<String, Object> message) {
         log.info("=== 收到文件下载消息 ===");
-        log.info("消息内容: {}", message);
+        log.info("文件下载消息已接收");
         log.info("处理时间: {}", LocalDateTime.now());
         
         String fileId = (String) message.get("fileId");
         String userId = (String) message.get("userId");
         
-        log.info("文件ID: {}, 用户ID: {}", fileId, userId);
+        log.info("文件下载消息已解析");
         
         log.info("文件下载消息处理完成");
     }
@@ -57,13 +57,13 @@ public class FileMessageListener {
     @RabbitListener(queues = RabbitMQConfig.FILE_PROCESS_QUEUE)
     public void handleFileProcessMessage(Map<String, Object> message) {
         log.info("=== 收到文件处理消息 ===");
-        log.info("消息内容: {}", message);
+        log.info("文件处理消息已接收");
         log.info("处理时间: {}", LocalDateTime.now());
         
         String fileId = (String) message.get("fileId");
         String processType = (String) message.get("processType");
         
-        log.info("文件ID: {}, 处理类型: {}", fileId, processType);
+        log.info("文件处理消息已解析");
         
         log.info("文件处理消息处理完成");
     }
@@ -74,13 +74,13 @@ public class FileMessageListener {
     @RabbitListener(queues = RabbitMQConfig.FILE_DELETE_QUEUE)
     public void handleFileDeleteMessage(Map<String, Object> message) {
         log.info("=== 收到文件删除消息 ===");
-        log.info("消息内容: {}", message);
+        log.info("文件删除消息已接收");
         log.info("处理时间: {}", LocalDateTime.now());
         
         String fileId = (String) message.get("fileId");
         String userId = (String) message.get("userId");
         
-        log.info("文件ID: {}, 用户ID: {}", fileId, userId);
+        log.info("文件删除消息已解析");
         
         log.info("文件删除消息处理完成");
     }

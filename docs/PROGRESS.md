@@ -101,10 +101,21 @@
 
 ## 状态快照
 
-- **更新日期**：2026-08-11
-- **当前阶段**：Memory V1 概念边界已冻结，M01-M07 已集成且最终确定性门禁 `AUTO_VERIFIED`；真实浏览器与外部依赖处于 `MANUAL_PENDING`
+- **更新日期**：2026-08-31
+- **当前阶段**：Review M0 A-FIX5 已在独立分支完成集成及同一最终 HEAD 全量自动回归，达到 `FIX5_INTEGRATION_READY`；尚未执行完整 A，也未启动 B/C/D
 - **首个专业场景**：奖学金申报材料审查 V1
-- **下一阶段**：由用户按 Memory V1 人工清单验证真实浏览器/JWT、MySQL、Redis 和模型；奖学金审查 Agent 仍保持独立规划，不纳入本轮 Memory 实现
+- **下一阶段**：以 `integration/review-m0-a-fix5-r1` 的最终唯一 HEAD 为输入执行 Review M0“完整重跑 A”；之后仍须按各人工清单验证浏览器、MinIO、Redis、模型及外部链路，自动门通过不等同于 `HUMAN_ACCEPTED`
+
+## Review M0 A-FIX5 集成及全量自动回归 R1
+
+- 状态：`FIX5_INTEGRATION_READY / A_AUTHORIZED`；只授权下一任务“完整重跑 A”，本任务不是完整 R4-A，未运行 B/C/D。
+- 固定基线 `84228b09cae2d3c0bfd5ae65c85d8af32422b23f`；依次无冲突集成 A-FIX5 实现 `d2bee5a6` 与 handoff `b81e4441`；已验证产品 HEAD `9c9731eac09eaf1564c1c5790c6ac609995c99e9`。
+- A-FIX5 完整生产 SecurityFilterChain/认证基线 56/56；A-FIX1～4 核心 64/64；M0-01 为 100 discovered / 87 passed / 13 frozen expected skip；默认/Integrated/adapter 分别 26/26、41/41、15/15。
+- 真实 MySQL 8 旧 runner 连续三轮各 2/2，新 concurrent runner seed/verify 各 1/1；原生 8/16/48 同键并发全部 201 且 body 唯一，500/503 为 0。
+- 七类缺失/无效认证均为冻结 401 envelope；owner 创建/读取 201/200，跨 owner/不存在 404/404，异载荷 409；停库三次均在约 5.0 秒返回 503，重启重放 201/body 不变。
+- ai/file fat Jar 均 HTTP ready，schema v3；最终日志扫描 SQL、stack-frame、Throwable、连接串、credential、JWT、objectKey、hash/body、generated password 全为 0，安全诊断 10。
+- Memory 187/187、MCP 80/80、QV04 112/112、Document 4/4、AllModels 1/1；四个远程模型 disabled，MCP 未创建远程客户端，保持 `LOCAL_ONLY`。
+- 交付：`docs/review-m0/handoffs/A-FIX5-INTEGRATION-FULL-REGRESSION-R1.md`。
 
 ## 已确认
 
@@ -138,6 +149,7 @@
 - Qdrant 用户人工验收、真实远程 Embedding/模型驱动的 RAG 闭环，以及生产 TLS、鉴权、容量、高可用、备份和灾备。
 - Memory V1 已完成最终确定性集成验收，但真实 MySQL/Redis/模型/浏览器联调和异步 job 提交后刷新恢复轮询仍未完成，最终状态不得写为 `HUMAN_ACCEPTED`。
 - Workspace Memory、User Memory、记忆候选、跨会话语义召回和记忆管理 UI 不属于 Memory V1，尚未实现。
+- Review M0 的真实 MySQL 8 冷启动/升级、真实 MinIO、双服务进程、真实 JWT、document/OCR 网络链、远程模型、浏览器页面与真实 Qdrant 均未运行；P-08 保持 `LOCAL_ONLY`，P-09 保持 `NOT_RUN / PENDING`。
 
 ## 后续运行基线验证
 
@@ -531,6 +543,49 @@
 - 完整服务回归发现并修复 Summary JDBC Store 的 Spring 代理启动缺陷；随后 `AllModelsTest` 应用上下文 1/1 通过，完整本地 `ai-service` 291 项无失败/错误，3 项仅因真实 Qdrant 未启用而跳过；
 - 报告明确记录真实浏览器/JWT、MySQL、Redis、模型、Qdrant 和远程 Embedding 未执行。详细交接见 `docs/memory/handoffs/M07-final.md`，人工清单见 `docs/memory/04-HUMAN_ACCEPTANCE.md`。
 
+## Review M0 R3 最终自动验收
+
+- 唯一候选 `a9c51c46687dd7800ee588a606eb31c6586800e6` 已在隔离 worktree 从零完成 R3 独立终验；候选 parent/tree、预期一父链、四项 stable patch-id 等价和 MCP/Qdrant/Memory 里程碑祖先关系均已核对。
+- 默认资产门为 `ASSET_VERIFIED`，26/26；Integrated 为 `AUTO_VERIFIED / MANUAL_PENDING`，41/41（资产 26 + 生产目标 15），Failures 0、Errors 0、Skipped 0、`readinessMissing=[]`，15 个冻结 P0 counter 全为 0；单独 adapter 15/15。
+- R1-A/R1-B/R1-C、M0-02..06、FIX1、Wave 2/3/recheck、file owner-aware、document mock 回归与双服务 compile 均通过；M0-01 精确冻结选择器为 100 discovered / 87 passed / 13 expected skipped，13 项均逐项记录为真实 OCR、真实 MySQL 或冻结 pending 边界。
+- Memory V1 187/187、MCP Search 80/80、QV04 asset 112/112 通过；QV04 只验证本地确定性资产，不代表真实 Qdrant。
+- 状态保持 `AUTO_VERIFIED / MANUAL_PENDING`。真实 MySQL 8、MinIO、双服务进程、JWT、document/OCR 网络链、远程模型、浏览器/页面、真实 Qdrant 和远程 Embedding 均为 `NOT_RUN`；P-08 为 `LOCAL_ONLY`，P-09 为 `NOT_RUN / PENDING`。
+- 未合并 `main`、未部署、未进行人工验收；详细命令、计数、expected skip 和外部边界见 `docs/review-m0/handoffs/M0-R3-FINAL-GATE.md`。
+
+## Review M0 A-FIX2 运行时安全日志
+
+- 从固定基线 `741a73bd2370a271c0386f3128a48077e55c95fc` 在独立 worktree 完成，不以失败证据提交作为代码起点；实现提交为 `eb57b799fbc8558f392bc0f6cdb67deef2b340c0`。
+- 默认/local 日志收紧至 INFO 并显式约束 SQL/事务/连接池，禁用异常展开；新增固定 reason code、request/correlation ID、白名单类别、retry/count 的安全事件，不记录 Throwable/message/body/远程响应。
+- AIOps 调度改为显式启用；Redis/调度失败被安全计数并限制在后台任务内。公共全局异常 handler 只改变日志，不改变返回 code/message 或 HTTP/API envelope。
+- 最终两组 fat Jar 覆盖 HTTP ready、请求失败、Redis 不可用、调度异常、MySQL 8 schema、4 路 DB 并发和停库；127 行日志中 SQL、Java stack、异常头、连接 URL、凭据/JWT/objectKey/hash/body/generated password 全为 0，安全 diagnostic 16。
+- 新增及相关合同最终 40/40；M0-01 为 100/87/13 expected skipped；默认 Review 门 26/26、`ASSET_VERIFIED`。未运行完整 A、Integrated、B/C/D、真实 MinIO/OCR/远程模型/MCP/浏览器。
+- A-FIX1 仍独占幂等算法；建议 A-FIX1 先集成，再解决本任务在 Review handler/filter 与公共 YAML 的日志冲突。详细交接见 `docs/review-m0/handoffs/A-FIX2-RUNTIME-SAFE-LOGGING-R1.md`。
+
+## Review M0 A-FIX3 store 并发合同
+
+- 从失败集成候选 `cb1ded9b9dfcf762e28a1c1064bd58f85e40b957` 在独立 worktree 审计全部生产 `ReviewM0IdempotencyStore.claim` 调用；所有生产路径均由 `ReviewM0ApiIdempotency` 的完整 `REQUIRES_NEW` 重试事务拥有，没有直接依赖 store 内层并发重试的生产调用。
+- 真实 MySQL 8 复现旧门 2 项中 1 error：旧验收并发直调 store，在 `SELECT ... FOR UPDATE` 发生 deadlock。冻结意图是长 scope、并发唯一性、完整碰撞和 V003/check，而直接 store 是偶然实现绑定。
+- 旧真实 MySQL 验收迁移到正式事务入口，保留 8 路并发、长字段和全部碰撞/约束断言，并在同一事务加入真实业务行；新增确定性测试证明瞬态失败为完整 `ROLLED_BACK`，下一尝试为全新 `COMMITTED`，失败不留 claim、业务行或快照。生产代码未改。
+- 修复后的既有 MySQL 门连续 3 轮均 2/2；新 concurrent runner 的 seed/verify 均 1/1，继续覆盖双实例、8/16/48、回滚接管、异载荷 409、owner 隔离和重启重放；A-FIX1 直接相关 60/60、默认门 26/26、Integrated 41/41。
+- A-FIX4 与本任务直接冲突 `ReviewM0ApiIdempotencySnapshotTest.java`，且语义上会修改生产重试策略；集成须同时保留 A-FIX4 的 DB-unavailable 分类/预算和本任务完整事务回滚证明。详细交接见 `docs/review-m0/handoffs/A-FIX3-STORE-CONCURRENCY-CONTRACT-R1.md`。
+
+## Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2
+
+- 从失败候选 `cb1ded9b9dfcf762e28a1c1064bd58f85e40b957` 新建隔离分支/worktree，按 A-FIX3 实现与 handoff、A-FIX4 实现与 handoff 的固定顺序集成；四个输入 ancestry 和清洁状态均已核对。
+- 唯一冲突 `ReviewM0ApiIdempotencySnapshotTest.java` 由独立提交语义合并，同时保留 A-FIX3 完整事务回滚证明和 A-FIX4 contention/storage-unavailable 分类、预算与 envelope 合同；未删除测试、降低断言或改变 skip。
+- 合并专项 63/63、安全/API 40/40；旧 MySQL 8 runner 连续三轮各 2/2，新并发 runner seed/verify 各 1/1；原生 ai fat Jar 在 8/16/48 同键并发下全部 201 且 body 唯一，停库三次均在 5.02-5.04 秒返回 503 / `REVIEW_M0_STORAGE_UNAVAILABLE`，500 为 0，敏感日志禁项全为 0。
+- Review 全量门通过：M0-01 100/87/13 frozen expected skip、默认 26/26、Integrated 41/41、adapter 15/15、M0-02..06、Wave 2/3/recheck、FIX1、R1-C 和 file F3/F4 均无失败/错误。
+- 旧能力通过：Memory 187/187、MCP 80/80、QV04 112/112、Document 4/4、AllModels 1/1；远程模型/MCP 保持 disabled/LOCAL_ONLY。未执行完整 A，未启动 B/C/D；详细交接见 `docs/review-m0/handoffs/A-FIX34-INTEGRATION-FULL-REGRESSION-R2.md`。
+
+## Review M0 A-FIX5 JWT 401 认证入口
+
+- 从固定产品基线 `84228b09cae2d3c0bfd5ae65c85d8af32422b23f` 创建独立分支/worktree；失败证据提交 `291c0e1249b9a245e0c7063626ec4ffd701def40` 仅用于读取 A 的失败记录，未作为代码基线。实现提交为 `d2bee5a6c6e9f99e85e339bc19275bab2b06cf8b`。
+- ai-service 生产 `SecurityFilterChain` 现在只为 `/api/review-m0/**` 显式委派冻结认证入口：缺失或任意无效 JWT 统一返回 401、`AUTHENTICATION_REQUIRED`、四字段 JSON envelope 和稳定 requestId；异常原因、token 与敏感 details 不进入响应或日志。common `JwtAuthenticationFilter` 未修改。
+- 非 Review 受保护路由保持原有 403，授权成功后的权限不足处理器未改；合法 JWT 跨 owner 和不存在资源均保持 404，合法 JWT 下存储不可用保持 503。permitAll matcher 清单与公开面均未修改。
+- 完整生产安全链测试 12/12；与 Review API/Conversation/认证基线、A-FIX2 安全日志及 503 envelope 的组合门 56/56；默认 acceptance 26/26、Integrated 41/41（adapter 15/15）、M0-01 100 discovered / 87 passed / 13 frozen expected skipped、A-FIX1～4 核心选择器 64/64。
+- 结果源码构建的 ai-service fat Jar 在隔离 MySQL 8、真实 `JwtUtils`/JWT secret/生产安全链下完成原生 HTTP 门：7 类缺失/无效认证均为 401，同一冻结错误码/envelope；owner 成功 201/200，跨 owner 与不存在资源均 404，停库为 503；静态/API docs 为 200，非 Review 受保护路由为 403。正式日志 46 行，JWT/token、SQL、Java stack-frame、Throwable header、credential/body/connection URL/generated password 均为 0，白名单 diagnostic 为 2。
+- 全程 `LOCAL_ONLY`，远程模型和 MCP disabled；未做修复集成、完整 A 或 B/C/D。详细交接见 `docs/review-m0/handoffs/A-FIX5-JWT-401-ENTRYPOINT-R1.md`。
+
 ## 维护规则
 
 每次任务完成后更新本文件，至少记录：
@@ -552,6 +607,11 @@
 
 | 日期 | 阶段 | 记录 |
 | --- | --- | --- |
+| 2026-08-31 | Review M0 A-FIX5 JWT 401 认证入口 | Review 路由缺失/无效 JWT 由原生 403 修复为冻结 401 envelope；生产链 12/12、组合门 56/56、默认 26/26、Integrated 41/41、M0-01 100/87/13、A-FIX1～4 核心 64/64；真实 fat Jar + MySQL 8 HTTP/日志门通过，状态 `HANDOFF_READY`，未集成或运行完整 A/B/C/D |
+| 2026-08-30 | Review M0 A-FIX3/A-FIX4 修复集成及全量自动回归 R2 | 唯一冲突语义合并；组合 63/63、安全 40/40、旧 MySQL 三轮各 2/2、新并发 seed/verify 各 1/1；原生并发/停库/日志门、Review 全量及 Memory 187/MCP 80/QV04 112 全过，状态 `FIX_INTEGRATION_R2_READY`，仅授权完整重跑 A |
+| 2026-08-30 | Review M0 A-FIX3 store 并发合同 | 生产 claim 调用全部归属完整 `REQUIRES_NEW` 重试事务；旧 MySQL 直调 store 门迁移到正式入口并保留全部强度/断言；旧门连续 3 轮 2/2、新 runner seed/verify 全过、直接相关 60/60、默认 26/26、Integrated 41/41 |
+| 2026-08-29 | Review M0 A-FIX2 运行时安全日志 | 默认 INFO/SQL guards/无堆栈，AIOps 显式启用和安全后台诊断；fat Jar Redis/MySQL/DB 并发与停库日志 127 行禁项全 0；专项 40/40、M0-01 100/87/13、默认门 26/26；待 A-FIX1 后集成 |
+| 2026-08-23 | Review M0 R3 最终自动验收 | 独立核对唯一候选拓扑/patch 等价与全部自动门；默认 26/26、Integrated 41/41、adapter 15/15，Review/旧能力回归无失败错误；状态 `AUTO_VERIFIED / MANUAL_PENDING`，真实环境与人工验收保持 `NOT_RUN` |
 | 2026-08-11 | Memory M07 最终自动验收 | 独立门禁与前端验收合入主分支；统一入口 187/187、失败/错误/跳过均为 0，异步轮询 2/2、Web 构建通过，状态 `AUTO_VERIFIED / MANUAL_PENDING` |
 | 2026-08-11 | Memory M06-C 前端会话体验 | Global/Editor 接管结构化会话历史、新建、分页、归档/恢复/删除和 `clientRequestId`，移除临时/默认 ID 与伪回复；前端契约 25/25、翻转回归 6/6、独立验收 0/11→11/11、构建通过，真实浏览器与服务联调待验收 |
 | 2026-08-11 | Memory M05 Structured Summary | 实现 V002 Summary 存储、连续增量滚动摘要、规范 digest、严格来源/状态校验、CAS、独立超时和失败保留；相关组合回归 79/79，真实模型与最终验收仍待执行 |

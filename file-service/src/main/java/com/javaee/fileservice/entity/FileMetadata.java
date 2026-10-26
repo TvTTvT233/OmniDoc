@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -30,6 +31,18 @@ public class FileMetadata {
     private long fileSize;
 
     private String md5;
+
+    @JsonIgnore
+    private String ownerId;
+
+    @JsonIgnore
+    private String sha256;
+
+    @JsonIgnore
+    private String storageVersion;
+
+    @JsonIgnore
+    private String contentSignature;
 
     private String storageType;
 

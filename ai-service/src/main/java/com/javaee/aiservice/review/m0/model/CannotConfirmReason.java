@@ -1,0 +1,13 @@
+package com.javaee.aiservice.review.m0.model;
+
+public enum CannotConfirmReason {
+    PARSE_FAILED,
+    ENCRYPTED,
+    CORRUPTED,
+    OCR_INSUFFICIENT,
+    TYPE_MISMATCH,
+    NESTED_ARCHIVE_NOT_ALLOWED,
+    ARCHIVE_ENTRY_UNSUPPORTED,
+    ARCHIVE_SAFETY_LIMIT_EXCEEDED,
+    SOURCE_FILE_UNAVAILABLE
+}

@@ -29,7 +29,7 @@ public class AlertService {
         long now = System.currentTimeMillis();
         Long previous = lastSentAt.get(record.getFingerprint());
         if (previous != null && now - previous < cooldownMs) {
-            log.debug("告警处于冷却期，跳过发送: fingerprint={}", record.getFingerprint());
+            log.debug("告警处于冷却期，跳过发送: faultId={}", record.getFaultId());
             return false;
         }
 
@@ -42,7 +42,8 @@ public class AlertService {
         alertParams.put("status", record.getStatus());
         alertParams.put("timestamp", now);
 
-        log.warn("发送 AIOps 告警: {}", alertParams);
+        log.warn("发送 AIOps 告警: faultId={}, type={}, status={}",
+                record.getFaultId(), record.getType(), record.getStatus());
         internalService.sendAlert(alertParams);
         return true;
     }

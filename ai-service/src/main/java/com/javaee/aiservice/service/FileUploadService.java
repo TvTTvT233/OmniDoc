@@ -46,7 +46,7 @@ public class FileUploadService {
      * @return 文件上传结果
      */
     public FileUploadVO uploadFile(MultipartFile file, FileUploadDTO dto) {
-        log.info("开始上传文件: filename={}", file.getOriginalFilename());
+        log.info("开始上传文件");
 
         try {
             // 确定存储桶名称
@@ -57,11 +57,11 @@ public class FileUploadService {
             String objectName = dto.getObjectName() != null ? dto.getObjectName() : generateObjectName(file);
 
             // 调用MinIOService上传文件
-            log.info("调用MinIO上传文件: bucket={}, object={}", bucketName, objectName);
+            log.info("调用MinIO上传文件");
             String fileUrl = minIOService.uploadFile(file, bucketName, objectName);
 
             // 创建文件版本记录
-            log.info("创建文件版本记录: bucket={}, object={}", bucketName, objectName);
+            log.info("创建文件版本记录");
             String versionId = fileVersionService.createVersion(
                 bucketName, objectName, requestUserContext.getRequiredUserId(), file.getSize(), "文件上传");
 
@@ -75,11 +75,11 @@ public class FileUploadService {
             vo.setContentType(file.getContentType());
             vo.setUploadTime(System.currentTimeMillis());
 
-            log.info("文件上传成功: url={}, versionId={}", fileUrl, versionId);
+            log.info("文件上传成功");
             return vo;
 
         } catch (Exception e) {
-            log.error("文件上传失败", e);
+            log.error("文件上传失败");
             throw new RuntimeException("文件上传失败: " + e.getMessage(), e);
         }
     }

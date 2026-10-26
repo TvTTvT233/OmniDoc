@@ -64,8 +64,7 @@ public class FileDeleteService {
     }
 
     public FileDeleteVO deleteFile(FileDeleteDTO dto, String deleter) {
-        log.info("Start deleting file: documentId={}, bucket={}, object={}, deleter={}",
-                dto.getDocumentId(), dto.getBucketName(), dto.getObjectName(), deleter);
+        log.info("Start deleting file");
 
         try {
             if (dto.getConfirmationToken() != null) {
@@ -82,22 +81,20 @@ public class FileDeleteService {
             }
 
             if (deleter == null || !deleter.startsWith("agent-approved:")) {
-                log.warn("Refuse direct delete without confirmation: documentId={}, bucket={}, object={}, deleter={}",
-                        target.documentId(), target.bucketName(), target.objectName(), deleter);
+                log.warn("Refuse direct delete without confirmation");
                 return requestConfirmation(target, deleter);
             }
 
             return deleteDirectly(target, deleter);
 
         } catch (Exception e) {
-            log.error("Delete file failed", e);
+            log.error("Delete file failed");
             throw new RuntimeException("删除文件失败: " + e.getMessage(), e);
         }
     }
 
     private FileDeleteVO requestConfirmation(DeleteTarget target, String deleter) {
-        log.info("Request delete confirmation: documentId={}, bucket={}, object={}",
-                target.documentId(), target.bucketName(), target.objectName());
+        log.info("Request delete confirmation");
 
         String confirmationToken = UUID.randomUUID().toString();
         long createTime = System.currentTimeMillis();
@@ -121,12 +118,12 @@ public class FileDeleteService {
         vo.setConfirmationExpiry(expiryTime);
         vo.setMessage("请确认永久删除操作，token在" + confirmationTimeout + "秒内有效");
 
-        log.info("Delete confirmation request created: token={}", confirmationToken);
+        log.info("Delete confirmation request created");
         return vo;
     }
 
     private FileDeleteVO confirmDelete(FileDeleteDTO dto) throws Exception {
-        log.info("Confirm delete: token={}", dto.getConfirmationToken());
+        log.info("Confirm delete");
 
         String confirmationToken = dto.getConfirmationToken();
         String key = DELETE_CONFIRM_PREFIX + confirmationToken;
@@ -152,8 +149,7 @@ public class FileDeleteService {
     }
 
     private FileDeleteVO deleteDirectly(DeleteTarget target, String deleter) throws Exception {
-        log.info("Execute direct delete: documentId={}, bucket={}, object={}, deleter={}",
-                target.documentId(), target.bucketName(), target.objectName(), deleter);
+        log.info("Execute direct delete");
 
         if (target.documentScoped()) {
             documentServiceClient.deleteDocument(target.documentId());
@@ -165,13 +161,12 @@ public class FileDeleteService {
         vo.setStatus("deleted");
         vo.setMessage(target.documentScoped() ? "文档已永久删除" : "文件已永久删除");
 
-        log.info("Direct delete completed: documentId={}, bucket={}, object={}",
-                target.documentId(), target.bucketName(), target.objectName());
+        log.info("Direct delete completed");
         return vo;
     }
 
     public FileRestoreVO restoreFile(FileRestoreDTO dto) {
-        log.info("Restore file: recycleId={}", dto.getRecycleId());
+        log.info("Restore file");
 
         try {
             String newObjectName = recycleBinService.restoreFromRecycleBin(
@@ -186,11 +181,11 @@ public class FileDeleteService {
             vo.setObjectName(newObjectName);
             vo.setMessage("文件恢复成功");
 
-            log.info("File restored: bucket={}, object={}", bucketName, newObjectName);
+            log.info("File restored");
             return vo;
 
         } catch (Exception e) {
-            log.error("Restore file failed", e);
+            log.error("Restore file failed");
             throw new RuntimeException("恢复文件失败: " + e.getMessage(), e);
         }
     }
@@ -213,7 +208,7 @@ public class FileDeleteService {
             log.info("Expired delete confirmations cleaned: removed={}", removedCount);
 
         } catch (Exception e) {
-            log.error("Clean expired delete confirmations failed", e);
+            log.error("Clean expired delete confirmations failed");
         }
     }
 

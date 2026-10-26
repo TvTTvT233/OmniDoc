@@ -20,7 +20,7 @@ spring:
       minimum-idle: 1
       idle-timeout: 30000
       max-lifetime: 300000
-      connection-timeout: 10000
+      connection-timeout: ${AI_DB_CONNECTION_TIMEOUT_MS:5000}
 
   cloud:
     compatibility-verifier:
@@ -80,6 +80,11 @@ spring:
 
 # AI配置
 ai:
+  review-m0:
+    runtime:
+      idempotency-maximum-transaction-attempts: ${AI_REVIEW_M0_IDEMPOTENCY_MAX_ATTEMPTS:24}
+      idempotency-total-wait-budget: ${AI_REVIEW_M0_IDEMPOTENCY_TOTAL_WAIT_BUDGET:8s}
+      idempotency-transaction-timeout: ${AI_REVIEW_M0_IDEMPOTENCY_TRANSACTION_TIMEOUT:8s}
   memory:
     enabled: ${AI_MEMORY_ENABLED:true}
     api:
@@ -154,6 +159,8 @@ ai:
       batch-size: 100
       checkpoint-path: ${VECTOR_MIGRATION_CHECKPOINT_PATH:var/qdrant-migration/checkpoint.json}
   aiops:
+    scheduling:
+      enabled: ${AI_AIOPS_SCHEDULING_ENABLED:false}
     metrics:
       retention-ms: 900000
       persist-interval-ms: 60000
@@ -209,11 +216,20 @@ document:
 
 # 日志配置
 logging:
+  exception-conversion-word: "%nopex"
   level:
-    com.javaee.aiservice: debug
+    root: info
+    com.javaee.aiservice: info
     io.modelcontextprotocol: off
+    org.hibernate.SQL: off
+    org.mybatis: warn
     org.springframework.ai: info
+    org.springframework.jdbc.core.JdbcTemplate: warn
+    org.springframework.jdbc.core.StatementCreatorUtils: warn
+    org.springframework.jdbc.datasource.init.ScriptUtils: warn
     org.springframework.security: info
+    org.springframework.transaction: warn
+    com.zaxxer.hikari: warn
 
 agent:
   mcp:

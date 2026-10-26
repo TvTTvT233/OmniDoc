@@ -52,7 +52,7 @@ public class FileVersionService {
      * @return 新版本号
      */
     public String createVersion(String bucketName, String objectName, String uploader, Long fileSize, String remark) {
-        log.info("创建文件版本: bucket={}, object={}", bucketName, objectName);
+        log.info("创建文件版本");
 
         try {
             String actualBucket = resolveBucketName(bucketName);
@@ -85,11 +85,11 @@ public class FileVersionService {
             versions.add(0, versionInfo);
             saveVersions(key, versions);
 
-            log.info("文件版本创建成功: versionId={}", versionId);
+            log.info("文件版本创建成功");
             return versionId;
 
         } catch (Exception e) {
-            log.error("创建文件版本失败", e);
+            log.error("创建文件版本失败");
             throw new RuntimeException("创建文件版本失败: " + e.getMessage(), e);
         }
     }
@@ -101,7 +101,7 @@ public class FileVersionService {
      * @return 文件版本信息
      */
     public FileVersionVO getVersions(FileVersionDTO dto) {
-        log.info("获取文件版本列表: bucket={}, object={}", dto.getBucketName(), dto.getObjectName());
+        log.info("获取文件版本列表");
 
         try {
             String bucketName = resolveBucketName(dto.getBucketName());
@@ -129,7 +129,7 @@ public class FileVersionService {
             return vo;
 
         } catch (Exception e) {
-            log.error("获取文件版本列表失败", e);
+            log.error("获取文件版本列表失败");
             throw new RuntimeException("获取文件版本列表失败: " + e.getMessage(), e);
         }
     }
@@ -141,8 +141,7 @@ public class FileVersionService {
      * @return 切换后的版本信息
      */
     public FileVersionVO.VersionInfo switchVersion(FileVersionSwitchDTO dto) {
-        log.info("切换文件版本: bucket={}, object={}, targetVersion={}", 
-            dto.getBucketName(), dto.getObjectName(), dto.getTargetVersionId());
+        log.info("切换文件版本");
 
         try {
             String bucketName = resolveBucketName(dto.getBucketName());
@@ -177,11 +176,11 @@ public class FileVersionService {
             targetVersion.setIsCurrent(true);
             saveVersions(key, versions);
             
-            log.info("文件版本切换成功: versionId={}", targetVersionId);
+            log.info("文件版本切换成功");
             return targetVersion;
 
         } catch (Exception e) {
-            log.error("切换文件版本失败", e);
+            log.error("切换文件版本失败");
             throw new RuntimeException("切换文件版本失败: " + e.getMessage(), e);
         }
     }
@@ -193,8 +192,7 @@ public class FileVersionService {
      * @return 版本信息
      */
     public FileVersionVO.VersionInfo getVersionInfo(FileVersionDTO dto) {
-        log.info("获取文件版本信息: bucket={}, object={}, version={}", 
-            dto.getBucketName(), dto.getObjectName(), dto.getVersionId());
+        log.info("获取文件版本信息");
 
         try {
             String bucketName = resolveBucketName(dto.getBucketName());
@@ -217,7 +215,7 @@ public class FileVersionService {
             throw new IllegalArgumentException("版本不存在: " + versionId);
 
         } catch (Exception e) {
-            log.error("获取文件版本信息失败", e);
+            log.error("获取文件版本信息失败");
             throw new RuntimeException("获取文件版本信息失败: " + e.getMessage(), e);
         }
     }

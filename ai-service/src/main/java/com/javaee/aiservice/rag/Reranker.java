@@ -1,5 +1,6 @@
 package com.javaee.aiservice.rag;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -240,9 +241,11 @@ public class Reranker {
             return new CrossEncoderScores(parseDashScopeScores(response.body(), candidates.size()), rerankModel);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("真实重排请求被中断，降级到本地重排: {}", e.getMessage());
+            SafeDiagnosticLogger.warn(log, "RERANK_DEGRADED", "REMOTE_RERANK_INTERRUPTED",
+                    e, true, 0, 1);
         } catch (Exception e) {
-            log.warn("真实重排调用失败，降级到本地重排: {}", e.getMessage());
+            SafeDiagnosticLogger.warn(log, "RERANK_DEGRADED", "REMOTE_RERANK_FAILED",
+                    e, true, 0, 1);
         }
         return new CrossEncoderScores(computeLocalCrossEncoderScores(query, candidates), "local-fallback");
     }

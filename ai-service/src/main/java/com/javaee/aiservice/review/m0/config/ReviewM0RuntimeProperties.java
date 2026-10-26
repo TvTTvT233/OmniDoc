@@ -1,0 +1,110 @@
+package com.javaee.aiservice.review.m0.config;
+
+import com.javaee.aiservice.review.m0.archive.ArchiveSafetyLimits;
+import com.javaee.aiservice.review.m0.api.ReviewM0IdempotencyRetryPolicy;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.time.Duration;
+import java.net.URI;
+
+/** Review-only typed operational limits. */
+@ConfigurationProperties(prefix = "ai.review-m0.runtime")
+public final class ReviewM0RuntimeProperties {
+    private int maximumArchiveEntries = ArchiveSafetyLimits.DEFAULT_MAXIMUM_ENTRIES;
+    private long maximumEntryUncompressedBytes = ArchiveSafetyLimits.DEFAULT_MAXIMUM_ENTRY_UNCOMPRESSED_BYTES;
+    private long maximumTotalUncompressedBytes = ArchiveSafetyLimits.DEFAULT_MAXIMUM_TOTAL_UNCOMPRESSED_BYTES;
+    private double maximumCompressionRatio = ArchiveSafetyLimits.DEFAULT_MAXIMUM_COMPRESSION_RATIO;
+    private int maximumArchiveNameUtf8Bytes = ArchiveSafetyLimits.DEFAULT_MAXIMUM_NAME_UTF8_BYTES;
+    private int maximumArchiveDirectoryDepth = ArchiveSafetyLimits.DEFAULT_MAXIMUM_DIRECTORY_DEPTH;
+    private Duration maximumArchiveProcessingTime = ArchiveSafetyLimits.DEFAULT_MAXIMUM_PROCESSING_TIME;
+    private Duration regexTimeout = Duration.ofMillis(100);
+    private URI fileServiceBaseUri = URI.create("http://file:8082");
+    private Duration fileServiceConnectTimeout = Duration.ofSeconds(2);
+    private Duration fileServiceRequestTimeout = Duration.ofSeconds(10);
+    private int idempotencyMaximumTransactionAttempts =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_MAXIMUM_TRANSACTION_ATTEMPTS;
+    private Duration idempotencyTotalWaitBudget =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_TOTAL_WAIT_BUDGET;
+    private Duration idempotencyTransactionTimeout =
+            ReviewM0IdempotencyRetryPolicy.DEFAULT_TRANSACTION_TIMEOUT;
+
+    public ArchiveSafetyLimits archiveSafetyLimits() {
+        return new ArchiveSafetyLimits(
+                maximumArchiveEntries, maximumEntryUncompressedBytes,
+                maximumTotalUncompressedBytes, maximumCompressionRatio,
+                maximumArchiveNameUtf8Bytes, maximumArchiveDirectoryDepth,
+                maximumArchiveProcessingTime);
+    }
+
+    public Duration validatedRegexTimeout() {
+        if (regexTimeout == null || regexTimeout.isZero() || regexTimeout.isNegative()
+                || regexTimeout.compareTo(Duration.ofSeconds(5)) > 0) {
+            throw new IllegalStateException("Review M0 regex timeout is invalid");
+        }
+        return regexTimeout;
+    }
+
+    public URI validatedFileServiceBaseUri() {
+        if (fileServiceBaseUri == null || fileServiceBaseUri.getScheme() == null
+                || !("http".equalsIgnoreCase(fileServiceBaseUri.getScheme())
+                || "https".equalsIgnoreCase(fileServiceBaseUri.getScheme()))
+                || fileServiceBaseUri.getHost() == null) {
+            throw new IllegalStateException("Review M0 file-service base URI is invalid");
+        }
+        return fileServiceBaseUri;
+    }
+
+    public Duration validatedFileServiceConnectTimeout() {
+        return validateFileServiceTimeout(fileServiceConnectTimeout, "connect");
+    }
+
+    public Duration validatedFileServiceRequestTimeout() {
+        return validateFileServiceTimeout(fileServiceRequestTimeout, "request");
+    }
+
+    public ReviewM0IdempotencyRetryPolicy idempotencyRetryPolicy() {
+        return new ReviewM0IdempotencyRetryPolicy(
+                idempotencyMaximumTransactionAttempts,
+                idempotencyTotalWaitBudget,
+                idempotencyTransactionTimeout);
+    }
+
+    private static Duration validateFileServiceTimeout(Duration value, String name) {
+        if (value == null || value.isZero() || value.isNegative()
+                || value.compareTo(Duration.ofSeconds(30)) > 0) {
+            throw new IllegalStateException("Review M0 file-service " + name + " timeout is invalid");
+        }
+        return value;
+    }
+
+    public int getMaximumArchiveEntries() { return maximumArchiveEntries; }
+    public void setMaximumArchiveEntries(int value) { maximumArchiveEntries = value; }
+    public long getMaximumEntryUncompressedBytes() { return maximumEntryUncompressedBytes; }
+    public void setMaximumEntryUncompressedBytes(long value) { maximumEntryUncompressedBytes = value; }
+    public long getMaximumTotalUncompressedBytes() { return maximumTotalUncompressedBytes; }
+    public void setMaximumTotalUncompressedBytes(long value) { maximumTotalUncompressedBytes = value; }
+    public double getMaximumCompressionRatio() { return maximumCompressionRatio; }
+    public void setMaximumCompressionRatio(double value) { maximumCompressionRatio = value; }
+    public int getMaximumArchiveNameUtf8Bytes() { return maximumArchiveNameUtf8Bytes; }
+    public void setMaximumArchiveNameUtf8Bytes(int value) { maximumArchiveNameUtf8Bytes = value; }
+    public int getMaximumArchiveDirectoryDepth() { return maximumArchiveDirectoryDepth; }
+    public void setMaximumArchiveDirectoryDepth(int value) { maximumArchiveDirectoryDepth = value; }
+    public Duration getMaximumArchiveProcessingTime() { return maximumArchiveProcessingTime; }
+    public void setMaximumArchiveProcessingTime(Duration value) { maximumArchiveProcessingTime = value; }
+    public Duration getRegexTimeout() { return regexTimeout; }
+    public void setRegexTimeout(Duration value) { regexTimeout = value; }
+    public URI getFileServiceBaseUri() { return fileServiceBaseUri; }
+    public void setFileServiceBaseUri(URI value) { fileServiceBaseUri = value; }
+    public Duration getFileServiceConnectTimeout() { return fileServiceConnectTimeout; }
+    public void setFileServiceConnectTimeout(Duration value) { fileServiceConnectTimeout = value; }
+    public Duration getFileServiceRequestTimeout() { return fileServiceRequestTimeout; }
+    public void setFileServiceRequestTimeout(Duration value) { fileServiceRequestTimeout = value; }
+    public int getIdempotencyMaximumTransactionAttempts() { return idempotencyMaximumTransactionAttempts; }
+    public void setIdempotencyMaximumTransactionAttempts(int value) {
+        idempotencyMaximumTransactionAttempts = value;
+    }
+    public Duration getIdempotencyTotalWaitBudget() { return idempotencyTotalWaitBudget; }
+    public void setIdempotencyTotalWaitBudget(Duration value) { idempotencyTotalWaitBudget = value; }
+    public Duration getIdempotencyTransactionTimeout() { return idempotencyTransactionTimeout; }
+    public void setIdempotencyTransactionTimeout(Duration value) { idempotencyTransactionTimeout = value; }
+}

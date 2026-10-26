@@ -1,5 +1,6 @@
 package com.javaee.aiservice.agent;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.javaee.aiservice.model.ModelType;
@@ -77,7 +78,8 @@ public class OpenAIAIService implements AIService {
             throw new RuntimeException("API返回结果为空或格式不正确");
 
         } catch (Exception e) {
-            log.error("调用{}失败", modelType.getName(), e);
+            SafeDiagnosticLogger.error(log, "MODEL_CALL_FAILED", "REMOTE_MODEL_CALL_FAILED",
+                    e, true, 0, 1, null, null);
             throw new RuntimeException("调用" + modelType.getName() + "失败: " + e.getMessage(), e);
         }
     }

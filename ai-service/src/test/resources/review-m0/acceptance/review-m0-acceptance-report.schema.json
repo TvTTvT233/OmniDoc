@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/review-m0-acceptance-report.json",
+  "title": "OmniDoc Review M0 acceptance report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractVersion",
+    "gateType",
+    "mode",
+    "status",
+    "manualStatus",
+    "finalAcceptance",
+    "baselineCommit",
+    "startedAt",
+    "finishedAt",
+    "counts",
+    "p0",
+    "external",
+    "readinessMissing",
+    "unverified"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "REVIEW_M0_ACCEPTANCE_REPORT_V1"},
+    "contractVersion": {"const": "REVIEW_M0_CONTRACT_V1"},
+    "gateType": {"const": "FINAL_ACCEPTANCE"},
+    "mode": {"enum": ["ASSET", "INTEGRATED"]},
+    "status": {"enum": ["ASSET_VERIFIED", "PENDING_INTEGRATION", "AUTO_VERIFIED"]},
+    "manualStatus": {"enum": ["NOT_READY", "MANUAL_PENDING"]},
+    "finalAcceptance": {"type": "boolean"},
+    "baselineCommit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "finishedAt": {"type": "string", "format": "date-time"},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tests", "passed", "failed", "errors", "skipped"],
+      "properties": {
+        "tests": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "errors": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "p0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "missingBeforeUploadConfirmation",
+        "deterministicFindingsWithoutRuleEvidence",
+        "deterministicFindingsWithoutMaterialEvidence",
+        "systemErrorsReportedAsMissing",
+        "cannotConfirmReportedAsMissing",
+        "originalFileMutations",
+        "objectKeyMutations",
+        "remoteSendsWithoutMatchingConsent",
+        "candidateChecklistsUsedForReview",
+        "nestedArchivesAccepted",
+        "crossUserSuccessfulReads",
+        "duplicatePublishedReports",
+        "staleReportsMarkedCurrent",
+        "readyReportsWithIgnoredFindings",
+        "incrementalFullMismatches"
+      ],
+      "properties": {
+        "missingBeforeUploadConfirmation": {"$ref": "#/$defs/nullableCount"},
+        "deterministicFindingsWithoutRuleEvidence": {"$ref": "#/$defs/nullableCount"},
+        "deterministicFindingsWithoutMaterialEvidence": {"$ref": "#/$defs/nullableCount"},
+        "systemErrorsReportedAsMissing": {"$ref": "#/$defs/nullableCount"},
+        "cannotConfirmReportedAsMissing": {"$ref": "#/$defs/nullableCount"},
+        "originalFileMutations": {"$ref": "#/$defs/nullableCount"},
+        "objectKeyMutations": {"$ref": "#/$defs/nullableCount"},
+        "remoteSendsWithoutMatchingConsent": {"$ref": "#/$defs/nullableCount"},
+        "candidateChecklistsUsedForReview": {"$ref": "#/$defs/nullableCount"},
+        "nestedArchivesAccepted": {"$ref": "#/$defs/nullableCount"},
+        "crossUserSuccessfulReads": {"$ref": "#/$defs/nullableCount"},
+        "duplicatePublishedReports": {"$ref": "#/$defs/nullableCount"},
+        "staleReportsMarkedCurrent": {"$ref": "#/$defs/nullableCount"},
+        "readyReportsWithIgnoredFindings": {"$ref": "#/$defs/nullableCount"},
+        "incrementalFullMismatches": {"$ref": "#/$defs/nullableCount"}
+      }
+    },
+    "external": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["realMysql", "realFileService", "realDocumentService", "realRemoteModel", "realBrowser"],
+      "properties": {
+        "realMysql": {"$ref": "#/$defs/externalStatus"},
+        "realFileService": {"$ref": "#/$defs/externalStatus"},
+        "realDocumentService": {"$ref": "#/$defs/externalStatus"},
+        "realRemoteModel": {"$ref": "#/$defs/externalStatus"},
+        "realBrowser": {"$ref": "#/$defs/externalStatus"}
+      }
+    },
+    "readinessMissing": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "unverified": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+  },
+  "$defs": {
+    "nullableCount": {"type": ["integer", "null"], "minimum": 0},
+    "externalStatus": {"enum": ["NOT_RUN", "PASSED", "FAILED"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "ASSET_VERIFIED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "mode": {"const": "ASSET"},
+          "manualStatus": {"const": "NOT_READY"},
+          "finalAcceptance": {"const": false},
+          "counts": {"properties": {"failed": {"const": 0}, "errors": {"const": 0}, "skipped": {"const": 0}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "PENDING_INTEGRATION"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "mode": {"const": "INTEGRATED"},
+          "manualStatus": {"const": "NOT_READY"},
+          "finalAcceptance": {"const": false},
+          "counts": {"properties": {"failed": {"const": 0}, "errors": {"const": 0}, "skipped": {"const": 0}}},
+          "readinessMissing": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "AUTO_VERIFIED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "mode": {"const": "INTEGRATED"},
+          "manualStatus": {"const": "MANUAL_PENDING"},
+          "finalAcceptance": {"const": true},
+          "counts": {"properties": {"failed": {"const": 0}, "errors": {"const": 0}, "skipped": {"const": 0}}},
+          "p0": {
+            "properties": {
+              "missingBeforeUploadConfirmation": {"const": 0},
+              "deterministicFindingsWithoutRuleEvidence": {"const": 0},
+              "deterministicFindingsWithoutMaterialEvidence": {"const": 0},
+              "systemErrorsReportedAsMissing": {"const": 0},
+              "cannotConfirmReportedAsMissing": {"const": 0},
+              "originalFileMutations": {"const": 0},
+              "objectKeyMutations": {"const": 0},
+              "remoteSendsWithoutMatchingConsent": {"const": 0},
+              "candidateChecklistsUsedForReview": {"const": 0},
+              "nestedArchivesAccepted": {"const": 0},
+              "crossUserSuccessfulReads": {"const": 0},
+              "duplicatePublishedReports": {"const": 0},
+              "staleReportsMarkedCurrent": {"const": 0},
+              "readyReportsWithIgnoredFindings": {"const": 0},
+              "incrementalFullMismatches": {"const": 0}
+            }
+          },
+          "readinessMissing": {"maxItems": 0}
+        }
+      }
+    }
+  ]
+}

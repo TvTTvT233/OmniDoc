@@ -3,13 +3,16 @@ package com.javaee.fileservice;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.core.env.Environment;
 
 /**
  * 文件服务应用启动类
  */
-@SpringBootApplication(scanBasePackages = {"com.javaee.fileservice", "com.javaee.common"})
+@SpringBootApplication(
+        scanBasePackages = {"com.javaee.fileservice", "com.javaee.common"},
+        exclude = UserDetailsServiceAutoConfiguration.class)
 @EnableDiscoveryClient
 @MapperScan(basePackages = "com.javaee.fileservice.mapper")
 public class FileServiceApplication {

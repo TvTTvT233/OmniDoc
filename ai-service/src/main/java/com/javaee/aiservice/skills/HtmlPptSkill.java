@@ -1,5 +1,6 @@
 package com.javaee.aiservice.skills;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.javaee.aiservice.agent.ChatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,7 +77,7 @@ public class HtmlPptSkill implements Skill {
     }
 
     private List<Slide> generateSlidesWithAI(String outline, String title, String model) throws Exception {
-        log.info("开始生成PPT，接收到的大纲：[{}]，使用模型：[{}]", outline, model);
+        log.info("开始生成PPT: outlineChars={}, model={}", outline == null ? 0 : outline.length(), model);
         List<Slide> slides = new ArrayList<>();
         
         slides.add(new Slide("cover", title, "", "", generateCoverNotes(title)));
@@ -97,14 +98,14 @@ public class HtmlPptSkill implements Skill {
                 %s
                 """, outline);
             
-            log.info("调用AI生成内容，提示词：[{}]", prompt);
+            log.info("调用AI生成PPT内容: promptChars={}", prompt.length());
             String aiResponse;
             if (model != null && !model.isEmpty()) {
                 aiResponse = chatService.callChatApiWithModelCode(prompt, model);
             } else {
                 aiResponse = chatService.callChatApi(prompt);
             }
-            log.info("AI响应结果：[{}]", aiResponse);
+            log.info("AI生成PPT内容完成: responseChars={}", aiResponse == null ? 0 : aiResponse.length());
             
             String[] lines = aiResponse.split("\n");
             for (String line : lines) {
@@ -140,13 +141,15 @@ public class HtmlPptSkill implements Skill {
                             cleanNotes = "这一页主要讲 " + slideTitle + "，接下来详细介绍...";
                         }
                         
-                        log.info("解析出一页：标题[{}]，内容[{}]", slideTitle, cleanContent);
+                        log.debug("PPT页面解析完成: titleChars={}, contentChars={}",
+                                slideTitle.length(), cleanContent.length());
                         slides.add(new Slide("content", slideTitle, "", cleanContent, cleanNotes));
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("调用AI生成内容失败，使用fallback方法：", e);
+            SafeDiagnosticLogger.warn(log, "PPT_GENERATION_DEGRADED", "REMOTE_MODEL_CALL_FAILED",
+                    e, true, 0, 1);
         }
         
         if (slides.size() <= 1) {
@@ -173,7 +176,7 @@ public class HtmlPptSkill implements Skill {
     }
 
     private List<Slide> parseOutlineFallback(String outline, String title) {
-        log.info("使用fallback方法解析，原始大纲：[{}]", outline);
+        log.info("使用fallback方法解析: outlineChars={}", outline == null ? 0 : outline.length());
         List<Slide> slides = new ArrayList<>();
         
         slides.add(new Slide("cover", title, "", "", generateCoverNotes(title)));
@@ -198,7 +201,7 @@ public class HtmlPptSkill implements Skill {
             }
         }
         
-        log.info("解析出的条目数量：{}，内容：{}", items.size(), items);
+        log.info("fallback条目解析完成: itemCount={}", items.size());
         
         if (!items.isEmpty()) {
             int slideSize = 3;
@@ -219,7 +222,8 @@ public class HtmlPptSkill implements Skill {
                 String slideTitle = items.get(i);
                 String notes = "这一页主要讲 " + slideTitle + "，接下来详细介绍...";
                 
-                log.info("创建幻灯片：标题[{}]，内容[{}]", slideTitle, cleanContent);
+                log.debug("fallback页面创建完成: titleChars={}, contentChars={}",
+                        slideTitle.length(), cleanContent.length());
                 slides.add(new Slide("content", slideTitle, "", cleanContent, notes));
             }
         }
@@ -242,7 +246,8 @@ public class HtmlPptSkill implements Skill {
             }
             return sb.toString();
         } catch (Exception e) {
-            log.warn("读取资源失败 {}: {}", path, e.getMessage());
+            SafeDiagnosticLogger.warn(log, "PPT_RESOURCE_READ_DEGRADED", "RESOURCE_READ_FAILED",
+                    e, false, 0, 1);
             return "";
         }
     }

@@ -964,7 +964,7 @@ public class AgentExecutionService {
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("模型补充规划失败，结束自动重规划: {}", e.getMessage());
+            log.warn("模型补充规划失败，结束自动重规划");
         }
         return List.of();
     }
@@ -1077,7 +1077,7 @@ public class AgentExecutionService {
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
-            log.debug("完成度评估失败，默认结束当前Agent循环: {}", e.getMessage());
+            log.debug("完成度评估失败，默认结束当前Agent循环");
             return false;
         }
     }
@@ -1202,7 +1202,7 @@ public class AgentExecutionService {
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("模型规划失败，使用规则兜底规划: {}", e.getMessage());
+            log.warn("模型规划失败，使用规则兜底规划");
         }
         return fallbackPlan(request, context);
     }
@@ -1856,7 +1856,7 @@ public class AgentExecutionService {
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
-            log.error("工具执行失败: tool={}, step={}", step.getToolName(), step.getDescription(), e);
+            log.error("工具执行失败");
             return AgentToolResult.error(step.getToolName(), e.getMessage());
         }
     }
@@ -2437,7 +2437,7 @@ public class AgentExecutionService {
                 return parsed;
             }
         } catch (Exception e) {
-            log.debug("前端写入结构化JSON解析失败，按普通正文处理: {}", e.getMessage());
+            log.debug("前端写入结构化JSON解析失败，按普通正文处理");
         }
         return fallback;
     }
@@ -2624,7 +2624,7 @@ public class AgentExecutionService {
             String answer = chatService.callChatApiWithModelCode(prompt, request.getModel());
             return lastMcpResult == null ? answer : enforceAllowedMcpSources(answer, mcpSources);
         } catch (Exception e) {
-            log.warn("最终回答生成失败，使用规则总结: {}", e.getMessage());
+            log.warn("最终回答生成失败，使用规则总结");
             String answer = fallbackSummary(results, requiresAction);
             return lastMcpResult == null ? answer : enforceAllowedMcpSources(answer, mcpSources);
         }

@@ -1,5 +1,6 @@
 package com.javaee.aiservice.rag;
 
+import com.javaee.aiservice.logging.SafeDiagnosticLogger;
 import com.alibaba.dashscope.embeddings.TextEmbedding;
 import com.alibaba.dashscope.embeddings.TextEmbeddingParam;
 import com.alibaba.dashscope.embeddings.TextEmbeddingResult;
@@ -99,7 +100,8 @@ public class DocumentVectorizer {
             throw new RuntimeException("Embedding API返回结果为空");
 
         } catch (ApiException | NoApiKeyException e) {
-            log.error("调用Embedding API失败", e);
+            SafeDiagnosticLogger.error(log, "EMBEDDING_CALL_FAILED", "REMOTE_EMBEDDING_FAILED",
+                    e, true, 0, 1, null, null);
             throw new RuntimeException("文档向量化失败: " + e.getMessage(), e);
         }
     }
@@ -120,7 +122,8 @@ public class DocumentVectorizer {
             log.info("批量向量化完成");
             return result;
         } catch (Exception e) {
-            log.error("批量向量化失败", e);
+            SafeDiagnosticLogger.error(log, "EMBEDDING_BATCH_FAILED", "REMOTE_EMBEDDING_FAILED",
+                    e, true, 0, 1, null, null);
             throw new RuntimeException("批量向量化失败: " + e.getMessage(), e);
         }
     }
@@ -134,7 +137,8 @@ public class DocumentVectorizer {
             float[] sample = vectorize("test");
             return sample.length;
         } catch (Exception e) {
-            log.warn("获取向量维度失败，使用默认值", e);
+            SafeDiagnosticLogger.warn(log, "EMBEDDING_DIMENSION_DEGRADED",
+                    "REMOTE_EMBEDDING_FAILED", e, true, 0, 1);
             return dimension;
         }
     }

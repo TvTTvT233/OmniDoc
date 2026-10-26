@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omnidoc.local/schemas/review-m0-integrated-evidence.json",
+  "title": "OmniDoc Review M0 integrated aggregate evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contractVersion", "adapterId", "targetResults", "p0"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "contractVersion": {"const": "REVIEW_M0_CONTRACT_V1"},
+    "adapterId": {"type": "string"},
+    "targetResults": {
+      "type": "object",
+      "minProperties": 15,
+      "maxProperties": 15,
+      "propertyNames": {"pattern": "^M0-P0-[0-9]{3}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "assertions"],
+        "properties": {
+          "status": {"const": "PASS"},
+          "assertions": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "p0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "missingBeforeUploadConfirmation",
+        "deterministicFindingsWithoutRuleEvidence",
+        "deterministicFindingsWithoutMaterialEvidence",
+        "systemErrorsReportedAsMissing",
+        "cannotConfirmReportedAsMissing",
+        "originalFileMutations",
+        "objectKeyMutations",
+        "remoteSendsWithoutMatchingConsent",
+        "candidateChecklistsUsedForReview",
+        "nestedArchivesAccepted",
+        "crossUserSuccessfulReads",
+        "duplicatePublishedReports",
+        "staleReportsMarkedCurrent",
+        "readyReportsWithIgnoredFindings",
+        "incrementalFullMismatches"
+      ],
+      "properties": {
+        "missingBeforeUploadConfirmation": {"const": 0},
+        "deterministicFindingsWithoutRuleEvidence": {"const": 0},
+        "deterministicFindingsWithoutMaterialEvidence": {"const": 0},
+        "systemErrorsReportedAsMissing": {"const": 0},
+        "cannotConfirmReportedAsMissing": {"const": 0},
+        "originalFileMutations": {"const": 0},
+        "objectKeyMutations": {"const": 0},
+        "remoteSendsWithoutMatchingConsent": {"const": 0},
+        "candidateChecklistsUsedForReview": {"const": 0},
+        "nestedArchivesAccepted": {"const": 0},
+        "crossUserSuccessfulReads": {"const": 0},
+        "duplicatePublishedReports": {"const": 0},
+        "staleReportsMarkedCurrent": {"const": 0},
+        "readyReportsWithIgnoredFindings": {"const": 0},
+        "incrementalFullMismatches": {"const": 0}
+      }
+    }
+  }
+}

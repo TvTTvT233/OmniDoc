@@ -33,7 +33,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             FileMetadata metadata = fileMetadataMapper.selectByFileId(fileId);
             return isCurrentBucketMetadata(metadata) ? metadata : null;
         } catch (Exception e) {
-            System.out.println("获取元数据失败: " + e.getMessage());
+            System.out.println("获取元数据失败");
             return null;
         }
     }
@@ -46,7 +46,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             fileMetadata.setStatus("ACTIVE");
             fileMetadataMapper.insert(fileMetadata);
         } catch (Exception e) {
-            System.out.println("保存元数据失败: " + e.getMessage());
+            System.out.println("保存元数据失败");
         }
     }
 
@@ -59,7 +59,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             applyCurrentBucketFilter(wrapper);
             fileMetadataMapper.update(fileMetadata, wrapper);
         } catch (Exception e) {
-            System.out.println("更新元数据失败: " + e.getMessage());
+            System.out.println("更新元数据失败");
         }
     }
 
@@ -71,7 +71,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             applyCurrentBucketFilter(wrapper);
             fileMetadataMapper.delete(wrapper);
         } catch (Exception e) {
-            System.out.println("删除元数据失败: " + e.getMessage());
+            System.out.println("删除元数据失败");
         }
     }
 
@@ -96,7 +96,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             Page<FileMetadata> result = fileMetadataMapper.selectPage(pageObj, wrapper);
             return result.getRecords();
         } catch (Exception e) {
-            System.out.println("获取文件列表失败: " + e.getMessage());
+            System.out.println("获取文件列表失败");
             return new ArrayList<>();
         }
     }
@@ -117,12 +117,15 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             Page<FileMetadata> result = fileMetadataMapper.selectPage(pageObj, wrapper);
             return result.getRecords();
         } catch (Exception e) {
-            System.out.println("搜索文件失败: " + e.getMessage());
+            System.out.println("搜索文件失败");
             return new ArrayList<>();
         }
     }
 
     private void applyCurrentBucketFilter(QueryWrapper<FileMetadata> wrapper) {
+        // Frozen legacy APIs may continue serving historical owner-null rows, but must never
+        // expose records created by the authenticated owner-aware boundary.
+        wrapper.isNull("owner_id");
         if ("minio".equals(fileStorageConfig.getStorageType())) {
             wrapper.eq("bucket_name", fileStorageConfig.getBucketName());
         }
@@ -130,6 +133,9 @@ public class FileMetadataServiceImpl implements FileMetadataService {
 
     private boolean isCurrentBucketMetadata(FileMetadata metadata) {
         if (metadata == null) {
+            return false;
+        }
+        if (metadata.getOwnerId() != null) {
             return false;
         }
         if (!"minio".equals(fileStorageConfig.getStorageType())) {
@@ -166,7 +172,7 @@ public class FileMetadataServiceImpl implements FileMetadataService {
             
             return structure;
         } catch (Exception e) {
-            System.out.println("获取目录结构失败: " + e.getMessage());
+            System.out.println("获取目录结构失败");
             // 返回空的目录结构
             Map<String, Object> structure = new HashMap<>();
             structure.put("directories", new ArrayList<>());
