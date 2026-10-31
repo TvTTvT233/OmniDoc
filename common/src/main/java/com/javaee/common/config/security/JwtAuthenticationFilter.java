@@ -23,6 +23,13 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        // Stateless async redispatch has a fresh SecurityContext; validate the original
+        // request's bearer again instead of treating a completed stream as anonymous.
+        return false;
+    }
+
+    @Override
     protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response, jakarta.servlet.FilterChain chain) 
             throws ServletException, IOException {
         try {

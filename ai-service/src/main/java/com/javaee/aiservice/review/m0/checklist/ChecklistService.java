@@ -147,10 +147,14 @@ public class ChecklistService {
             if (reviewCase.version() != expectedCaseVersion) {
                 throw conflict("Review case changed concurrently");
             }
-            ChecklistDraftView draft = checklistStore.findLatestDraftOwned(ownerId, caseId)
+            ChecklistDraftView draft = checklistStore.findLatestRevisionOwned(ownerId, caseId)
                     .orElseThrow(() -> new ReviewM0Exception(
                             ReviewM0ErrorCode.REVIEW_M0_CHECKLIST_NOT_CONFIRMED,
                             "A candidate checklist draft is required"));
+            if (draft.lifecycle() != ChecklistLifecycle.CANDIDATE_DRAFT) {
+                throw new ReviewM0Exception(ReviewM0ErrorCode.REVIEW_M0_CHECKLIST_NOT_CONFIRMED,
+                        "The latest checklist revision must be a candidate before publication");
+            }
             if (draft.revision() != expectedChecklistRevision) {
                 throw conflict("Checklist draft revision changed concurrently");
             }
@@ -214,7 +218,7 @@ public class ChecklistService {
 
     public ChecklistDraftView requireLatestDraftOwned(String ownerId, String caseId) {
         requireCase(ownerId, caseId);
-        return checklistStore.findLatestDraftOwned(ownerId, caseId)
+        return checklistStore.findLatestRevisionOwned(ownerId, caseId)
                 .orElseThrow(() -> resourceNotFound("Checklist draft was not found"));
     }
 

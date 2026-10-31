@@ -36,6 +36,16 @@ public class OwnerAwareFileController {
                 .body(files.upload(owners.requireOwnerId(), file));
     }
 
+    @GetMapping
+    public com.javaee.fileservice.dto.OwnedFileListDTO list(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        if (page < 1 || page > 10000 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("Invalid file pagination");
+        }
+        return files.list(owners.requireOwnerId(), page, size);
+    }
+
     @GetMapping("/{fileId}/metadata")
     public OwnedFileMetadataDTO metadata(@PathVariable String fileId) {
         return files.getMetadata(owners.requireOwnerId(), fileId);
@@ -44,6 +54,10 @@ public class OwnerAwareFileController {
     @GetMapping("/{fileId}/content")
     public ResponseEntity<InputStreamResource> content(@PathVariable String fileId) {
         OwnerAwareFileService.OwnedFileStream stream = files.open(owners.requireOwnerId(), fileId);
+        return contentResponse(stream);
+    }
+
+    static ResponseEntity<InputStreamResource> contentResponse(OwnerAwareFileService.OwnedFileStream stream) {
         OwnedFileMetadataDTO metadata = stream.metadata();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(mediaType(metadata.declaredContentType()));

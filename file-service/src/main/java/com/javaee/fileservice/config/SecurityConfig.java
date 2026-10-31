@@ -11,6 +11,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.javaee.fileservice.security.InternalReviewFileAuthenticationFilter;
 
 /**
  * 文件服务安全配置
@@ -18,6 +21,9 @@ import org.springframework.http.HttpStatus;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig extends BaseSecurityConfig {
+
+    @Value("${omnidoc.review.internal-token:${OMNIDOC_REVIEW_INTERNAL_TOKEN:}}")
+    private String internalReviewToken;
 
     /**
      * 构造函数注入JWT认证过滤器
@@ -59,6 +65,7 @@ public class SecurityConfig extends BaseSecurityConfig {
         http
             // 授权配置
             .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers("/internal/review-files/**").permitAll()
                 // 确保Swagger相关路径的匹配规则在最前面
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/v3/api-docs").permitAll()
                 // Owner-aware endpoints always require a verified JWT principal. This rule
@@ -76,7 +83,9 @@ public class SecurityConfig extends BaseSecurityConfig {
                 .anyRequest().authenticated()
             )
             .exceptionHandling(exceptions -> exceptions
-                    .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
+                    .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+            .addFilterBefore(new InternalReviewFileAuthenticationFilter(internalReviewToken),
+                    UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

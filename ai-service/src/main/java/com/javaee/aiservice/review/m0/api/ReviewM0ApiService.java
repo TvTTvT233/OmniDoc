@@ -115,6 +115,48 @@ public final class ReviewM0ApiService {
         return mapper.reviewCase(requireCase(owner, caseId));
     }
 
+    /** The cursor identifies an owned immutable creation boundary, never an authorization grant. */
+    public CaseListResponse listCases(String owner, int limit, String cursor) {
+        requireText(owner, "owner");
+        if (limit < 1 || limit > 100) invalid("limit must be between 1 and 100");
+        ReviewCase boundary = null;
+        if (cursor != null) {
+            if (cursor.isBlank() || cursor.length() > 128) invalid("Invalid case cursor");
+            try {
+                byte[] decoded = Base64.getUrlDecoder().decode(cursor);
+                String caseId = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
+                if (!caseId.matches("[A-Za-z0-9_-]{1,64}")
+                        || !Base64.getUrlEncoder().withoutPadding().encodeToString(decoded).equals(cursor)) {
+                    invalid("Invalid case cursor");
+                }
+                boundary = cases.findOwned(owner, caseId).orElse(null);
+                if (boundary == null) invalid("Invalid case cursor");
+            } catch (IllegalArgumentException error) {
+                invalid("Invalid case cursor");
+            }
+        }
+        List<String> ids;
+        if (boundary == null) {
+            ids = jdbc.queryForList("""
+                    SELECT case_id FROM review_m0_case WHERE user_id = ?
+                    ORDER BY created_at DESC, case_id DESC LIMIT ?
+                    """, String.class, owner, limit + 1);
+        } else {
+            java.sql.Timestamp createdAt = java.sql.Timestamp.from(boundary.createdAt());
+            ids = jdbc.queryForList("""
+                    SELECT case_id FROM review_m0_case WHERE user_id = ?
+                    AND (created_at < ? OR (created_at = ? AND case_id < ?))
+                    ORDER BY created_at DESC, case_id DESC LIMIT ?
+                    """, String.class, owner, createdAt, createdAt, boundary.caseId(), limit + 1);
+        }
+        boolean hasMore = ids.size() > limit;
+        List<String> pageIds = ids.subList(0, Math.min(limit, ids.size()));
+        List<CaseResponse> items = pageIds.stream().map(id -> getCase(owner, id)).toList();
+        String next = hasMore ? Base64.getUrlEncoder().withoutPadding().encodeToString(
+                pageIds.get(pageIds.size() - 1).getBytes(java.nio.charset.StandardCharsets.UTF_8)) : null;
+        return new CaseListResponse(items, next);
+    }
+
     public ReviewM0ApiIdempotency.Result<OfficialBasisResponse> attachBasis(
             String owner, String caseId, String key, AttachBasisRequest request
     ) {

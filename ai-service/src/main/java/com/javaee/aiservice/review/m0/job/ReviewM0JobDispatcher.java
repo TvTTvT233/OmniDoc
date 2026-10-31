@@ -93,6 +93,11 @@ public class ReviewM0JobDispatcher implements SmartLifecycle, AutoCloseable {
             return Optional.empty();
         }
         ReviewJob leased = acquired.get();
+        if (leased.attempt() > maximumAttempts) {
+            return Optional.of(jobStore.fail(leased.jobId(), workerId,
+                    new ReviewJobError(ReviewM0ErrorCode.REVIEW_M0_INTERNAL_ERROR, false,
+                            "Review M0 execution attempt limit exceeded"), now));
+        }
         ReviewM0JobHandler handler = handlers.find(leased.jobType()).orElse(null);
         if (handler == null) {
             return Optional.of(jobStore.fail(

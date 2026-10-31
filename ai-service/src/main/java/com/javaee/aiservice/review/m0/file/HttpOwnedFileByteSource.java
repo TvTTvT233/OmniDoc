@@ -22,6 +22,7 @@ public final class HttpOwnedFileByteSource implements OwnedFileByteSource {
     private final HttpClient client;
     private final ObjectMapper json;
     private final FileServiceRequestAuthentication authentication;
+    private String internalToken = "";
 
     public HttpOwnedFileByteSource(
             URI serviceBaseUri,
@@ -31,6 +32,12 @@ public final class HttpOwnedFileByteSource implements OwnedFileByteSource {
         this(serviceBaseUri, requestTimeout,
                 HttpClient.newBuilder().connectTimeout(connectTimeout).build(),
                 new ObjectMapper(), new FileServiceRequestAuthentication());
+    }
+
+    public HttpOwnedFileByteSource(URI serviceBaseUri, Duration connectTimeout,
+                                  Duration requestTimeout, String internalToken) {
+        this(serviceBaseUri, connectTimeout, requestTimeout);
+        this.internalToken = internalToken == null ? "" : internalToken;
     }
 
     HttpOwnedFileByteSource(
@@ -50,8 +57,7 @@ public final class HttpOwnedFileByteSource implements OwnedFileByteSource {
 
     @Override
     public FileArtifactSnapshot getOwnedFile(String ownerId, String fileId) {
-        String bearer = authentication.requireBearerForOwner(ownerId);
-        HttpRequest request = request(fileId, "metadata", bearer, "application/json");
+        HttpRequest request = request(ownerId, fileId, "metadata", "application/json");
         try {
             HttpResponse<InputStream> response = client.send(
                     request, HttpResponse.BodyHandlers.ofInputStream());
@@ -92,8 +98,7 @@ public final class HttpOwnedFileByteSource implements OwnedFileByteSource {
         if (expectedSnapshot == null || !fileId.equals(expectedSnapshot.fileId())) {
             throw integrity("Owned file snapshot does not match the requested fileId", null);
         }
-        String bearer = authentication.requireBearerForOwner(ownerId);
-        HttpRequest request = request(fileId, "content", bearer, "application/octet-stream");
+        HttpRequest request = request(ownerId, fileId, "content", "application/octet-stream");
         try {
             HttpResponse<InputStream> response = client.send(
                     request, HttpResponse.BodyHandlers.ofInputStream());
@@ -125,19 +130,27 @@ public final class HttpOwnedFileByteSource implements OwnedFileByteSource {
         }
     }
 
-    private HttpRequest request(String fileId, String suffix, String bearer, String accept) {
-        return HttpRequest.newBuilder(resourceUri(fileId, suffix))
-                .timeout(requestTimeout)
-                .header("Authorization", bearer)
-                .header("Accept", accept)
-                .GET()
-                .build();
+    private HttpRequest request(String ownerId, String fileId, String suffix, String accept) {
+        boolean background = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() == null
+                && org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() == null;
+        if (background) {
+            if (internalToken.length() < 32 || internalToken.length() > 1024
+                    || ownerId == null || !ownerId.matches("[A-Za-z0-9_-]{1,64}")) {
+                throw unavailable("Authenticated background file-service delegation is unavailable");
+            }
+            return HttpRequest.newBuilder(resourceUri(fileId, suffix, "/internal/review-files/"))
+                    .timeout(requestTimeout).header("X-OmniDoc-Review-Token", internalToken)
+                    .header("X-OmniDoc-Review-OwnerId", ownerId).header("Accept", accept).GET().build();
+        }
+        String bearer = authentication.requireBearerForOwner(ownerId);
+        return HttpRequest.newBuilder(resourceUri(fileId, suffix, "/api/files/owned/"))
+                .timeout(requestTimeout).header("Authorization", bearer).header("Accept", accept).GET().build();
     }
 
-    private URI resourceUri(String fileId, String suffix) {
+    private URI resourceUri(String fileId, String suffix, String prefix) {
         String encodedFileId = java.net.URLEncoder.encode(fileId, StandardCharsets.UTF_8)
                 .replace("+", "%20");
-        return URI.create(serviceBaseUri.toString() + "/api/files/owned/"
+        return URI.create(serviceBaseUri.toString() + prefix
                 + encodedFileId + "/" + suffix);
     }
 

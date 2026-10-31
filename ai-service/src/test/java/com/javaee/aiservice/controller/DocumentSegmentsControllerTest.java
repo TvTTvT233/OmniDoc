@@ -25,8 +25,10 @@ class DocumentSegmentsControllerTest {
     DocumentReadAccessClient access; DocumentSegmentReadService segments;
     String token;
     @Configuration @EnableWebMvc
-    @Import({SecurityConfig.class,JwtAuthenticationFilter.class,DocumentSegmentsController.class,RequestUserContext.class})
+    @Import({SecurityConfig.class,JwtAuthenticationFilter.class,DocumentSegmentsController.class,RequestUserContext.class,
+            com.javaee.aiservice.review.m0.api.ReviewM0AuthenticationEntryPoint.class})
     static class Config {
+        @Bean com.fasterxml.jackson.databind.ObjectMapper json() { return new com.fasterxml.jackson.databind.ObjectMapper(); }
         @Bean DocumentReadAccessClient access() { return mock(DocumentReadAccessClient.class); }
         @Bean DocumentSegmentReadService segments() { return mock(DocumentSegmentReadService.class); }
         @Bean com.javaee.aiservice.consistency.CurrentGenerationRetrieval generations() { return mock(com.javaee.aiservice.consistency.CurrentGenerationRetrieval.class); }

@@ -32,6 +32,8 @@ public final class ReviewM0ApiDtos {
             Instant createdAt, Instant updatedAt
     ) {}
 
+    public record CaseListResponse(List<CaseResponse> items, String nextCursor) {}
+
     @JsonIgnoreProperties(ignoreUnknown = false)
     public record AttachBasisRequest(String fileId, OfficialBasisRole role) implements StrictRequest {}
 

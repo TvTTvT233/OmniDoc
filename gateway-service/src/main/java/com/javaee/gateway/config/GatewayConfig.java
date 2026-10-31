@@ -43,6 +43,9 @@ public class GatewayConfig {
                 // Agent/Skill 独立接口路由
                 .route("ai-skills", r -> r.path("/api/skills/**")
                         .uri(aiServiceUri))
+                // 材料预审独立资源复用 AI 服务及其所有者校验
+                .route("review-m0", r -> r.path("/api/review-m0/**")
+                        .uri(aiServiceUri))
                 // Agent 工作台 WebSocket 路由
                 .route("ai-agent-ws", r -> r.path("/ws/agent/**")
                         .uri(aiWebSocketUri))

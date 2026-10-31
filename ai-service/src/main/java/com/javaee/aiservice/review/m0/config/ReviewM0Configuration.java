@@ -78,11 +78,12 @@ public class ReviewM0Configuration {
 
     @Bean
     @ConditionalOnMissingBean(OwnedFileByteSource.class)
-    OwnedFileByteSource reviewM0OwnedFileByteSource(ReviewM0RuntimeProperties properties) {
+    OwnedFileByteSource reviewM0OwnedFileByteSource(ReviewM0RuntimeProperties properties,
+            @org.springframework.beans.factory.annotation.Value("${omnidoc.review.internal-token:${OMNIDOC_REVIEW_INTERNAL_TOKEN:}}") String internalToken) {
         return new HttpOwnedFileByteSource(
                 properties.validatedFileServiceBaseUri(),
                 properties.validatedFileServiceConnectTimeout(),
-                properties.validatedFileServiceRequestTimeout());
+                properties.validatedFileServiceRequestTimeout(), internalToken);
     }
 
     @Bean

@@ -61,6 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         JwtAuthenticationFilter.class,
         ReviewM0AuthenticationEntryPoint.class,
         ReviewM0RequestIdConfiguration.class,
+        com.javaee.common.config.WebMvcConfig.class,
         RequestUserContext.class
 })
 class ReviewM0SecurityFilterChainTest {
@@ -128,6 +129,50 @@ class ReviewM0SecurityFilterChainTest {
         assertThat(downloadResult.getResponse().getHeader("ETag")).isNull();
         assertThat(downloadResult.getResponse().getHeader("Digest")).isNull();
         assertThat(downloadResult.getResponse().getHeader("X-Content-SHA256")).isNull();
+    }
+
+    @Test
+    void browserPatchPreflightAndRequestPreserveAuthenticationAndOwnerIsolation() throws Exception {
+        String origin = "http://localhost:5173";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options(REVIEW_CASE)
+                        .header("Origin", origin).header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "authorization,content-type,idempotency-key"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Access-Control-Allow-Origin", origin))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Access-Control-Allow-Methods", org.hamcrest.Matchers.containsString("PATCH")));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(REVIEW_CASE)
+                        .header("Origin", origin).header("Authorization", bearer(101L)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.owner").value("101"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(REVIEW_CASE)
+                        .header("Origin", origin))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(REVIEW_CASE)
+                        .header("Origin", origin).header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(REVIEW_CASE)
+                        .header("Origin", origin).header("Authorization", bearer(202L)))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options(REVIEW_CASE)
+                        .header("Origin", origin).header("Access-Control-Request-Method", "CONNECT"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void streamingDownloadRemainsAuthenticatedOnAsyncRedispatch() throws Exception {
+        MvcResult initial = mvc.perform(get(REVIEW_DOWNLOAD).header("Authorization", bearer(101L)))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.request().asyncStarted())
+                .andReturn();
+        initial.getAsyncResult(5000);
+        SecurityContextHolder.clearContext();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch(initial))
+                .andExpect(status().isOk())
+                .andExpect(content().string("owned-stream"));
+        mvc.perform(get(REVIEW_DOWNLOAD).header("Authorization", bearer(202L)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(REVIEW_CASE).header("Authorization", bearer(101L)))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -210,6 +255,14 @@ class ReviewM0SecurityFilterChainTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void documentSegmentEndpointKeepsItsExisting401EnvelopeAlongsideReview() throws Exception {
+        mvc.perform(get("/api/ai/rag/document/doc-owned/segments"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(401))
+                .andExpect(jsonPath("$.message").value("请先登录"));
+    }
+
     private static Stream<Arguments> invalidAuthentication() throws Exception {
         return Stream.of(
                 Arguments.of("missing Authorization header", null),
@@ -271,6 +324,17 @@ class ReviewM0SecurityFilterChainTest {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.ok(Map.of("caseId", caseId, "owner", owner));
+        }
+
+        @org.springframework.web.bind.annotation.PatchMapping("/api/review-m0/security-probe/cases/{caseId}")
+        ResponseEntity<Map<String, String>> patchCase(@PathVariable String caseId) {
+            return getCase(caseId);
+        }
+
+        @GetMapping("/api/review-m0/cases/{caseId}/materials/{materialId}/download")
+        ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> download() {
+            if (!"101".equals(users.getRequiredUserId())) return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(output -> output.write("owned-stream".getBytes(StandardCharsets.UTF_8)));
         }
     }
 }

@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Param;
  */
 public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 
+    java.util.List<FileMetadata> selectOwnedActivePage(
+            @Param("ownerId") String ownerId, @Param("offset") int offset, @Param("limit") int limit);
+
     /**
      * 根据文件ID获取文件元数据
      */

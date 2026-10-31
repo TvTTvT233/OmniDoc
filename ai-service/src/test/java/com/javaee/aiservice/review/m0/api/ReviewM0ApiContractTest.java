@@ -57,7 +57,7 @@ class ReviewM0ApiContractTest {
     }
 
     @Test
-    void controllerExposesOnlyTheThirtyFrozenMethodPathPairs() {
+    void controllerExposesFrozenPairsAndOwnerCaseListExtension() {
         Set<String> actual = new TreeSet<>();
         RequestMapping base = AnnotatedElementUtils.findMergedAnnotation(ReviewM0Controller.class, RequestMapping.class);
         assertThat(base).isNotNull();
@@ -70,6 +70,7 @@ class ReviewM0ApiContractTest {
         }
         assertThat(actual).containsExactlyElementsOf(new TreeSet<>(List.of(
                 "POST /api/review-m0/cases",
+                "GET /api/review-m0/cases",
                 "GET /api/review-m0/cases/{caseId}",
                 "POST /api/review-m0/cases/{caseId}/official-bases",
                 "DELETE /api/review-m0/cases/{caseId}/official-bases/{basisId}",
@@ -137,6 +138,59 @@ class ReviewM0ApiContractTest {
                 .andExpect(jsonPath("$.title").value("mutated-after-first-response"));
         assertThat(context.getBean(JdbcTemplate.class).queryForObject(
                 "SELECT COUNT(*) FROM review_m0_case", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void caseListUsesOwnedStableCreationCursorAcrossUpdatesAndReopening() throws Exception {
+        setup(false);
+        authenticate(OWNER);
+        List<String> owned = new ArrayList<>(List.of(
+                createCase("list-a", "a"), createCase("list-b", "b"), createCase("list-c", "c")));
+        context.getBean(JdbcTemplate.class).update(
+                "UPDATE review_m0_case SET created_at = ? WHERE user_id = ?",
+                java.sql.Timestamp.from(Instant.parse("2026-10-27T00:00:00Z")), OWNER);
+        owned.sort(Comparator.reverseOrder());
+        authenticate(OTHER);
+        String foreign = createCase("list-other", "foreign");
+        authenticate(OWNER);
+        JsonNode first = json.readTree(mvc.perform(get("/api/review-m0/cases")
+                        .param("limit", "2").param("userId", OTHER))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(first.path("items").size()).isEqualTo(2);
+        assertThat(first.path("items").get(0).path("caseId").asText()).isEqualTo(owned.get(0));
+        assertThat(first.path("items").get(1).path("caseId").asText()).isEqualTo(owned.get(1));
+        assertThat(first.toString()).doesNotContain(foreign);
+        String cursor = first.path("nextCursor").asText();
+        context.getBean(JdbcTemplate.class).update(
+                "UPDATE review_m0_case SET updated_at = ? WHERE case_id = ?",
+                java.sql.Timestamp.from(Instant.parse("2026-10-28T00:00:00Z")), owned.get(2));
+        JsonNode second = json.readTree(mvc.perform(get("/api/review-m0/cases")
+                        .param("limit", "2").param("cursor", cursor))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(second.path("items").size()).isEqualTo(1);
+        assertThat(second.path("items").get(0).path("caseId").asText()).isEqualTo(owned.get(2));
+        assertThat(second.path("nextCursor").isNull()).isTrue();
+        mvc.perform(get("/api/review-m0/cases")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3));
+        authenticate(OTHER);
+        assertError(mvc.perform(get("/api/review-m0/cases").param("cursor", cursor)),
+                400, "REVIEW_M0_REQUEST_INVALID");
+    }
+
+    @Test
+    void caseListRejectsInvalidBoundsAndNoncanonicalOrUnknownCursors() throws Exception {
+        setup(false);
+        authenticate(OWNER);
+        mvc.perform(get("/api/review-m0/cases")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty()).andExpect(jsonPath("$.nextCursor").isEmpty());
+        for (String limit : List.of("0", "101", "-1")) {
+            assertError(mvc.perform(get("/api/review-m0/cases").param("limit", limit)),
+                    400, "REVIEW_M0_REQUEST_INVALID");
+        }
+        for (String cursor : List.of("", "%%", "YQ==", "bm90LWEtY2FzZQ", "x".repeat(129))) {
+            assertError(mvc.perform(get("/api/review-m0/cases").param("cursor", cursor)),
+                    400, "REVIEW_M0_REQUEST_INVALID");
+        }
     }
 
     @Test
@@ -587,6 +641,7 @@ class ReviewM0ApiContractTest {
     private static List<MockHttpServletRequestBuilder> unauthenticatedRequests() {
         String jsonType = "application/json";
         return List.of(
+                get("/api/review-m0/cases"),
                 post("/api/review-m0/cases").header("Idempotency-Key", "k").contentType(jsonType)
                         .content("{\"title\":\"x\",\"processingMode\":\"LOCAL_ONLY\"}"),
                 get("/api/review-m0/cases/c"),

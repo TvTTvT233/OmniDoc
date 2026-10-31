@@ -33,6 +33,14 @@ public final class ReviewM0Controller {
         return response(service.createCase(owner(), key, request));
     }
 
+    @GetMapping("/cases")
+    public CaseListResponse listCases(
+            @RequestParam(defaultValue = "20") int limit,
+            @RequestParam(required = false) String cursor
+    ) {
+        return service.listCases(owner(), limit, cursor);
+    }
+
     @GetMapping("/cases/{caseId}")
     public CaseResponse getCase(@PathVariable String caseId) {
         return service.getCase(owner(), caseId);

@@ -10,6 +10,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -170,6 +173,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private Mono<Void> unauthorized(ServerWebExchange exchange) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        String path = exchange.getRequest().getPath().value();
+        if (path.equals("/api/review-m0") || path.startsWith("/api/review-m0/")) {
+            response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+            String body = "{\"errorCode\":\"AUTHENTICATION_REQUIRED\","
+                    + "\"message\":\"Authentication is required\","
+                    + "\"requestId\":\"" + UUID.randomUUID() + "\",\"details\":{}}";
+            return response.writeWith(Mono.just(response.bufferFactory()
+                    .wrap(body.getBytes(StandardCharsets.UTF_8))));
+        }
         return response.setComplete();
     }
 

@@ -37,6 +37,28 @@ public class OwnerAwareFileServiceImpl implements OwnerAwareFileService {
     }
 
     @Override
+    public com.javaee.fileservice.dto.OwnedFileListDTO list(String ownerId, int page, int size) {
+        requireOwner(ownerId);
+        if (page < 1 || page > 10000 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("Invalid file pagination");
+        }
+        final java.util.List<FileMetadata> records;
+        try {
+            records = metadataMapper.selectOwnedActivePage(ownerId, (page - 1) * size, size + 1);
+        } catch (Exception error) {
+            throw new OwnedFileUnavailableException("Owned file metadata is unavailable", error);
+        }
+        // Keep the owner boundary fail-closed even if a future mapper changes its predicate.
+        if (records.stream().anyMatch(row -> !ownerId.equals(row.getOwnerId())
+                || !"ACTIVE".equals(row.getStatus()))) {
+            throw new OwnedFileUnavailableException("Owned file metadata integrity cannot be verified");
+        }
+        return new com.javaee.fileservice.dto.OwnedFileListDTO(
+                records.stream().limit(size).map(OwnerAwareFileServiceImpl::snapshot).toList(),
+                records.size() > size);
+    }
+
+    @Override
     public OwnedFileMetadataDTO upload(String ownerId, MultipartFile file) {
         requireOwner(ownerId);
         if (file == null) {

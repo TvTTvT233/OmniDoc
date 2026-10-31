@@ -14,7 +14,9 @@ const routes = [
     { path: '/ppt-runtime', name: 'pptRuntime', component: () => import('../views/dashboard/PptRuntime.vue')},
     { path: '/aiops', component: () => import('../views/aiops/AIOpsView.vue') },
     { path: '/editor/:id', component: () => import('../views/editor/EditorView.vue') },
-    { path: '/agent-workbench', component: () => import('../views/agent/AgentWorkbench.vue') }
+    { path: '/agent-workbench', component: () => import('../views/agent/AgentWorkbench.vue') },
+    { path: '/review-m0', component: () => import('../views/review/ReviewM0List.vue') },
+    { path: '/review-m0/:caseId', component: () => import('../views/review/ReviewM0Case.vue') }
 ]
 
 const router = createRouter({

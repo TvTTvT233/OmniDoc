@@ -5,10 +5,11 @@
 - 契约版本：`REVIEW_M0_CONTRACT_V1`
 - 冻结任务：`M0-00`
 - 基线提交：`d289cf03fe57e81f78cab9ece9e2e47d84bf1474`
-- 本目录状态：`CONTRACT_FROZEN / IMPLEMENTATION_NOT_STARTED`
+- 初始契约冻结状态：`CONTRACT_FROZEN / IMPLEMENTATION_NOT_STARTED`（历史）
+- 当前集成状态（2026-10-31）：LOCAL_ONLY 手工规则流程与前端接入已完成本轮自动/真实运行验收，保留 AUTO_VERIFIED/MANUAL_PENDING。总报告见[RESULT-2026-10-30.md](RESULT-2026-10-30.md)（10/31完成），方案见[PLAN-2026-10-27.md](PLAN-2026-10-27.md)。官方自动提取尚未接通，main未更新、未推送。
 - 适用范围：奖学金申报材料审查 V1 的 Review M0 阶段
 
-本目录只冻结产品边界、领域模型、API、存储、状态机、错误、任务拆分和验收契约，不证明任何 Review M0 生产能力已经实现或通过运行验证。
+本目录中的初始契约冻结产品边界、领域模型、API、存储、状态机、错误与验收要求，契约本身不证明实现或运行通过。当前能力与运行结论以最新总报告及原始证据为准。
 
 ## 文档优先级
 

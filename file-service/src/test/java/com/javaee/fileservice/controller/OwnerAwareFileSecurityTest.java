@@ -33,6 +33,27 @@ class OwnerAwareFileSecurityTest {
     @MockBean FileMetadataMapper metadataMapper;
 
     @Test
+    void ownedListUsesOnlyJwtOwnerAndValidatesPagination() throws Exception {
+        when(files.list("42", 1, 20)).thenReturn(new com.javaee.fileservice.dto.OwnedFileListDTO(
+                java.util.List.of(metadata("file-a")), false));
+        mvc.perform(get("/api/files/owned").header("X-User-Id", "42"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/files/owned").param("ownerId", "99").param("userId", "99")
+                        .header("Authorization", bearer(42L)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].fileId").value("file-a"))
+                .andExpect(jsonPath("$.hasMore").value(false));
+        verify(files).list("42", 1, 20);
+        for (String value : java.util.List.of("0", "-1", "10001", "abc", "2147483648")) {
+            mvc.perform(get("/api/files/owned").param("page", value).header("Authorization", bearer(42L)))
+                    .andExpect(status().isBadRequest());
+        }
+        for (String value : java.util.List.of("0", "-1", "101", "abc")) {
+            mvc.perform(get("/api/files/owned").param("size", value).header("Authorization", bearer(42L)))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void forgedUserHeaderWithoutBearerCannotReadOrUpload() throws Exception {
         mvc.perform(get("/api/files/owned/file-a/metadata").header("X-User-Id", "42"))
                 .andExpect(status().isUnauthorized());

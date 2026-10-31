@@ -7,14 +7,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CurrentDocumentServiceFailureBaselineTest {
 
     @Test
-    void documentCreationSwallowsFileAndParserFailuresAndKeepsMetadataOnly() {
+    void documentCreationRecordsExplicitParseFailureAndOnlySnapshotsReadyContent() {
         String implementation = RepositorySourceEvidence.read(
                 "document-service/src/main/java/com/javaee/documentservice/service/impl/DocumentServiceImpl.java");
 
         assertThat(implementation)
-                .contains("content = DocumentParserUtil.parseDocument(fileContent, fileName)")
-                .contains("文件已上传，但文档内容解析失败，将仅创建文档元数据")
-                .contains("saveVersion(document, \"初始版本\", content)")
+                .contains("content = DocumentParserUtil.parseDocumentStrict(fileContent, fileName)")
+                .contains("document.setParseState(\"FAILED\")")
+                .contains("if (\"READY\".equals(document.getParseState()))")
+                .contains("indexService.snapshotAndSchedule(document")
                 .contains("vo.setContent(content)");
     }
 

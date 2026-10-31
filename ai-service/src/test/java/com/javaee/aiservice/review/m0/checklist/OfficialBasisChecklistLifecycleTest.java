@@ -25,6 +25,40 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OfficialBasisChecklistLifecycleTest {
     @Test
+    void publishedLatestRevisionRemainsReadableWithDisabledItemsAndOldDraftCannotRepublish() {
+        M003TestFixture fixture = new M003TestFixture();
+        fixture.createCase("case-latest", "owner", ProcessingMode.LOCAL_ONLY);
+        ChecklistDraftView first = fixture.checklistService().addUserRequirementOwned(
+                "owner", "case-latest", "First", true, RequirementApplicability.APPLIES, 1,
+                new FileNameRule(FileNameRuleKind.NONE, null, null));
+        ChecklistDraftView latest = fixture.checklistService().addUserRequirementOwned(
+                "owner", "case-latest", "Disabled second", false, RequirementApplicability.APPLIES, 1,
+                new FileNameRule(FileNameRuleKind.NONE, null, null));
+        String activeId = first.items().get(0).requirementId();
+        long version = fixture.caseStore().findOwned("owner", "case-latest").orElseThrow().version();
+        fixture.checklistService().publishOwned("owner", "case-latest", version, latest.revision(), Set.of(activeId));
+        ChecklistDraftView read = fixture.checklistService().requireLatestDraftOwned("owner", "case-latest");
+        assertThat(read.checklistRevisionId()).isEqualTo(latest.checklistRevisionId());
+        assertThat(read.lifecycle()).isEqualTo(ChecklistLifecycle.CONFIRMED);
+        assertThat(read.items()).hasSize(2).containsExactlyElementsOf(latest.items());
+        long publishedVersion = fixture.caseStore().findOwned("owner", "case-latest").orElseThrow().version();
+        assertThatThrownBy(() -> fixture.checklistService().publishOwned(
+                "owner", "case-latest", publishedVersion, first.revision(), Set.of(activeId)))
+                .isInstanceOf(ReviewM0Exception.class)
+                .extracting(error -> ((ReviewM0Exception) error).errorCode())
+                .isEqualTo(ReviewM0ErrorCode.REVIEW_M0_CHECKLIST_NOT_CONFIRMED);
+        ChecklistDraftItem disabled = read.items().get(1);
+        ChecklistDraftView edited = fixture.checklistService().editRequirementOwned(
+                "owner", "case-latest", disabled.requirementId(), new ChecklistItemEdit(
+                        disabled.itemVersion(), disabled.displayName(), true, disabled.applicability(),
+                        disabled.minimumCount(), disabled.fileNameRule()));
+        assertThat(edited.lifecycle()).isEqualTo(ChecklistLifecycle.CANDIDATE_DRAFT);
+        assertThat(edited.items()).hasSize(2).allMatch(ChecklistDraftItem::enabled);
+        assertThat(fixture.checklistService().requireLatestDraftOwned("owner", "case-latest").checklistRevisionId())
+                .isEqualTo(edited.checklistRevisionId());
+    }
+
+    @Test
     void officialExtractionUserRewriteUserAdditionAndDisableKeepImmutableLineage() {
         M003TestFixture fixture = new M003TestFixture();
         fixture.createCase("case-lineage", "owner", ProcessingMode.LOCAL_ONLY);

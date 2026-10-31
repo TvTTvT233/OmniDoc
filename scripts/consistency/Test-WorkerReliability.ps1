@@ -13,7 +13,13 @@ $checks=[Collections.Generic.List[object]]::new()
 $fixture=@{kind='REAL_WORKER_RELIABILITY';createdAtUtc=[DateTime]::UtcNow.ToString('o');redisDatabase=11}
 $status='FAILED';$failure=$null
 function Api([string]$Method,[string]$Path,[object]$Body){
-    $p=@{Method=$Method;Uri='http://127.0.0.1:8080'+$Path;Headers=@{Authorization='Bearer '+$token};SkipHttpErrorCheck=$true;TimeoutSec=30}
+    $p=@{
+        Method=$Method
+        Uri='http://127.0.0.1:8080'+$Path
+        Headers=@{Authorization='Bearer '+$token}
+        SkipHttpErrorCheck=$true
+        TimeoutSec=30
+    }
     if($null -ne $Body){$p.ContentType='application/json; charset=utf-8';$p.Body=$Body|ConvertTo-Json -Depth 10 -Compress}
     $r=Invoke-WebRequest @p;return @{http=[int]$r.StatusCode;body=($r.Content|ConvertFrom-Json)}
 }

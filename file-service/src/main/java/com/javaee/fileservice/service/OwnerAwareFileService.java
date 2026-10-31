@@ -6,6 +6,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 
 public interface OwnerAwareFileService {
+    com.javaee.fileservice.dto.OwnedFileListDTO list(String ownerId, int page, int size);
+
     OwnedFileMetadataDTO upload(String ownerId, MultipartFile file);
 
     OwnedFileMetadataDTO getMetadata(String ownerId, String fileId);

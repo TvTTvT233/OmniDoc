@@ -31,6 +31,16 @@ spring:
 minio:
   endpoint: ${MINIO_LOCAL_ENDPOINT:http://localhost:9000}
 
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
 logging:
+  exception-conversion-word: "%nopex"
   level:
+    root: info
     com.javaee.fileservice: info
+    org.apache.ibatis: warn
+    com.baomidou.mybatisplus: warn
+    org.mybatis: warn
+    org.springframework.jdbc: warn

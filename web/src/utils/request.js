@@ -115,7 +115,7 @@ service.interceptors.response.use(
             localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
             localStorage.removeItem(STORAGE_KEYS.USER_INFO)
             router.push('/login')
-        } else {
+        } else if (!(error.config?.allowEmptyReviewDraft && error.response?.status === 404 && error.response?.data?.errorCode === 'REVIEW_M0_RESOURCE_NOT_FOUND')) {
             ElMessage.error('服务器开了小差，请稍后再试')
         }
         return Promise.reject(error)

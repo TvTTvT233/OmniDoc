@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
 
-@RestControllerAdvice(assignableTypes = OwnerAwareFileController.class)
+@RestControllerAdvice(assignableTypes = {OwnerAwareFileController.class, InternalReviewFileController.class})
 public class OwnerAwareFileExceptionHandler {
     @ExceptionHandler(OwnedFileNotFoundException.class)
     ResponseEntity<Map<String, String>> notFound() {
@@ -29,7 +29,7 @@ public class OwnerAwareFileExceptionHandler {
                 .body(Map.of("errorCode", "AUTHENTICATION_REQUIRED", "message", "Authentication is required"));
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
+    @ExceptionHandler({IllegalArgumentException.class, org.springframework.web.bind.MissingRequestHeaderException.class})
     ResponseEntity<Map<String, String>> invalidRequest() {
         return ResponseEntity.badRequest()
                 .body(Map.of("errorCode", "OWNED_FILE_REQUEST_INVALID", "message", "Owned file request is invalid"));

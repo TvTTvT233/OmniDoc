@@ -46,6 +46,8 @@ class HttpOwnedFileByteSourceTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/api/files/owned/file-1/metadata", this::metadata);
         server.createContext("/api/files/owned/file-1/content", this::content);
+        server.createContext("/internal/review-files/file-1/metadata", this::metadata);
+        server.createContext("/internal/review-files/file-1/content", this::content);
         server.start();
         authenticate("42", "Bearer trusted-token");
     }
@@ -70,6 +72,42 @@ class HttpOwnedFileByteSourceTest {
         }
         // Explicit metadata, pre-read snapshot, content, and post-read immutable-facts check.
         assertThat(requests).hasValue(4);
+    }
+
+    @Test
+    void backgroundWithoutUserRequestUsesIndependentReadOnlyServiceChannel() throws Exception {
+        RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+        var access = new VerifiedReviewM0FileAccess(new HttpOwnedFileByteSource(baseUri(),
+                Duration.ofSeconds(1), Duration.ofSeconds(2), "synthetic-independent-review-token-12345"),
+                new ZipArchiveEntryOpener(ArchiveSafetyLimits.secureDefaults()));
+        assertThat(access.getOwnedFile("42", "file-1").contentDigest()).isEqualTo(digest);
+        try (var input = access.openFile("42", "file-1")) {
+            assertThat(input.readAllBytes()).isEqualTo(bytes);
+        }
+        assertThat(requests).hasValue(4);
+    }
+
+    @Test
+    void configuredServiceTokenNeverRescuesInvalidPublicRequestOrOwnerMismatch() {
+        var access = new VerifiedReviewM0FileAccess(new HttpOwnedFileByteSource(baseUri(),
+                Duration.ofSeconds(1), Duration.ofSeconds(2), "synthetic-independent-review-token-12345"),
+                new ZipArchiveEntryOpener(ArchiveSafetyLimits.secureDefaults()));
+        assertThatThrownBy(() -> access.getOwnedFile("43", "file-1"))
+                .isInstanceOf(OwnedFileAccessException.class);
+        SecurityContextHolder.clearContext();
+        assertThatThrownBy(() -> access.getOwnedFile("42", "file-1"))
+                .isInstanceOf(OwnedFileAccessException.class);
+        assertThat(requests).hasValue(0);
+    }
+
+    @Test
+    void backgroundWithoutConfiguredServiceCredentialFailsClosedBeforeNetwork() {
+        RequestContextHolder.resetRequestAttributes();
+        SecurityContextHolder.clearContext();
+        assertThatThrownBy(() -> access(baseUri()).getOwnedFile("42", "file-1"))
+                .isInstanceOf(OwnedFileAccessException.class);
+        assertThat(requests).hasValue(0);
     }
 
     @Test
@@ -151,7 +189,7 @@ class HttpOwnedFileByteSourceTest {
 
     private void metadata(HttpExchange exchange) throws IOException {
         requests.incrementAndGet();
-        if (!"Bearer trusted-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+        if (!authenticated(exchange)) {
             exchange.sendResponseHeaders(401, -1);
             exchange.close();
             return;
@@ -173,11 +211,26 @@ class HttpOwnedFileByteSourceTest {
 
     private void content(HttpExchange exchange) throws IOException {
         requests.incrementAndGet();
+        if (!authenticated(exchange)) {
+            exchange.sendResponseHeaders(401, -1);
+            exchange.close();
+            return;
+        }
         exchange.getResponseHeaders().set("X-Content-SHA256", digest);
         exchange.getResponseHeaders().set("X-Content-Type-Signature", contentSignature);
         exchange.sendResponseHeaders(200, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
+    }
+
+    private boolean authenticated(HttpExchange exchange) {
+        if (exchange.getRequestURI().getPath().startsWith("/internal/")) {
+            return "synthetic-independent-review-token-12345".equals(
+                    exchange.getRequestHeaders().getFirst("X-OmniDoc-Review-Token"))
+                    && "42".equals(exchange.getRequestHeaders().getFirst("X-OmniDoc-Review-OwnerId"))
+                    && exchange.getRequestHeaders().getFirst("Authorization") == null;
+        }
+        return "Bearer trusted-token".equals(exchange.getRequestHeaders().getFirst("Authorization"));
     }
 
     private static void authenticate(String owner, String bearer) {
