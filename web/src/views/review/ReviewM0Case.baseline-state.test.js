@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({ api: Object.fromEntries(['case','bases','draft
 vi.mock('../../api/reviewM0', () => ({ reviewM0Api: mocks.api, reviewError: failure => ({ code: failure?.response?.data?.errorCode || 'FAILED', message: '读取或保存失败，请重试' }) }))
 vi.mock('vue-router', () => ({ useRoute: () => mocks.route, useRouter: () => ({ replace: mocks.replace }) }))
 vi.mock('./ReviewFilePicker.vue', () => ({ default: { template: '<div>文件选择</div>' } }))
+vi.mock('../components/TaskRunPanel.vue', () => ({ default: { template: '<div data-testid="task-run-projection" />' } }))
 import ReviewCase from './ReviewM0Case.vue'
 const item = (overrides = {}) => ({ requirementId: 'req1', displayName: '申请表', enabled: true, applicability: 'APPLIES', minimumCount: 1, fileNameRule: { kind: 'EXACT', pattern: 'application.pdf', caseSensitive: true }, origin: 'USER_ADDED', authorship: 'USER_REWRITTEN', itemVersion: 0, sourceRefs: [], ...overrides })
 let wrapper

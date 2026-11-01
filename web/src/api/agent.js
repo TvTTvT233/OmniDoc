@@ -3,9 +3,10 @@ import { createAsyncJobRunner } from './asyncJob.js'
 
 const wrapResult = (data) => ({ code: 200, message: 'success', data })
 const getAsyncJob = (jobId) => request.get(`/ai/async/jobs/${jobId}`)
-const runAsyncAgentJob = (data) => createAsyncJobRunner({
+const runAsyncAgentJob = (data, onSubmitted) => createAsyncJobRunner({
     submit: () => request.post('/ai/async/agent/execute', data),
     getJob: getAsyncJob,
+    onSubmitted,
     timeoutMs: 300000
 }).runAsyncJob().then(wrapResult)
 
@@ -17,7 +18,7 @@ export const agentApi = {
     getTools: () => request.get('/ai/agent/tools'),
 
     // 执行 Agent 任务（核心交互）
-    executeTask: (data) => runAsyncAgentJob(data),
+    executeTask: (data, onSubmitted) => runAsyncAgentJob(data, onSubmitted),
 
     executeTaskSync: (data) => request.post('/ai/agent/execute', data),
 

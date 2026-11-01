@@ -173,7 +173,16 @@ public class AgentExecutionService {
     @Value("${agent.mcp.servers.web-search.max-result-chars:30000}")
     private int mcpMaxResultChars;
 
+    private record RunScope(String traceId, String executionId) {}
+    private final ThreadLocal<RunScope> protocolScope = new ThreadLocal<>();
+
     public Map<String, Object> execute(AgentExecutionRequest request) {
+        return execute(request, null, null);
+    }
+
+    /** Server-only association; never deserialized from the request body. */
+    public Map<String, Object> execute(AgentExecutionRequest request, String asyncJobId,
+            java.util.function.Consumer<String> onTraceCreated) {
         validateRequest(request);
 
         long startedAt = System.currentTimeMillis();
@@ -267,6 +276,12 @@ public class AgentExecutionService {
             stoppedReason = "completed";
         }
 
+        String executionId = taskRegistry.beginRun(traceId, Map.of(
+                "userId", userId, "conversationId", conversationId), asyncJobId);
+        RunScope previousScope = protocolScope.get();
+        protocolScope.set(new RunScope(traceId, executionId));
+        try {
+        if (onTraceCreated != null) onTraceCreated.accept(traceId);
         String memoryClientRequestId = isBlank(request.getClientRequestId())
                 ? UUID.randomUUID().toString()
                 : request.getClientRequestId();
@@ -507,7 +522,8 @@ public class AgentExecutionService {
         Map<String, Object> pendingApproval = requiresAction ? pendingApprovalFrom(plan, toolResults) : Map.of();
         Map<String, Object> pendingUserInput = requiresAction ? pendingUserInputFrom(plan, toolResults, traceId) : Map.of();
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", requiresAction ? "action_required" : resolveStatus(toolResults));
+        response.put("status", "cancelled".equals(stoppedReason) ? "cancelled"
+                : requiresAction ? "action_required" : resolveStatus(toolResults));
         response.put("traceId", traceId);
         response.put("conversationId", conversationId);
         response.put("task", request.getTask());
@@ -530,6 +546,7 @@ public class AgentExecutionService {
             response.put("pendingUserInput", pendingUserInput);
         }
         taskRegistry.save(traceId, response);
+        taskRegistry.finishRun(traceId, executionId, String.valueOf(response.get("status")));
         if (requiresAction) {
             publishTaskEvent("task_waiting_user", traceId, userId, String.valueOf(response.get("status")), 95,
                     "Agent 任务等待用户确认或补充信息", response);
@@ -538,6 +555,12 @@ public class AgentExecutionService {
                     "Agent 任务结束: " + stoppedReason, response);
         }
         return response;
+        } catch (RuntimeException error) {
+            taskRegistry.finishRun(traceId, executionId, "error");
+            throw error;
+        } finally {
+            if (previousScope == null) protocolScope.remove(); else protocolScope.set(previousScope);
+        }
     }
 
     public List<AgentToolDefinition> listTools() {
@@ -600,6 +623,10 @@ public class AgentExecutionService {
         snapshot.put("pendingApproval", null);
         snapshot.put("cancelledAt", System.currentTimeMillis());
         taskRegistry.save(asString(snapshot.get("traceId")), snapshot);
+        Map<String, Object> runMetadata = com.javaee.aiservice.taskrun.TaskRunMetadata.map(
+                snapshot.get(com.javaee.aiservice.taskrun.TaskRunMetadata.KEY));
+        taskRegistry.finishRun(asString(snapshot.get("traceId")),
+                com.javaee.aiservice.taskrun.TaskRunMetadata.text(runMetadata.get("executionId")), "cancelled");
         publishTaskEvent("task_cancelled", asString(snapshot.get("traceId")), authenticatedUserId, "cancelled", 100,
                 "用户已否定高危操作，Agent 任务取消", snapshot);
         return true;
@@ -820,6 +847,10 @@ public class AgentExecutionService {
         if (snapshot == null || snapshot.isEmpty()) {
             return Map.of("status", "not_found", "traceId", traceId);
         }
+        assertSnapshotAndConversationOwner(snapshot, requestUserContext.getRequiredUserId(), "无权重试该任务");
+        if (!Set.of("success", "error", "cancelled").contains(asString(snapshot.get("status")))) {
+            return Map.of("status", "not_terminal", "traceId", traceId);
+        }
         Object planObj = snapshot.get("plan");
         if (!(planObj instanceof List<?> planList)) {
             return Map.of("status", "no_plan", "traceId", traceId);
@@ -846,7 +877,16 @@ public class AgentExecutionService {
                 : new HashMap<>();
         long started = System.currentTimeMillis();
         target.setStatus(AgentStepStatus.RUNNING.value());
-        AgentToolResult result = executeStep(target, request, ctx);
+        String retryCallId = taskRegistry.beginTool(traceId, UUID.randomUUID().toString(),
+                "retry:" + stepId, target.getToolName(), target.getAttempts() + 1);
+        AgentToolResult result;
+        try {
+            result = executeStep(target, request, ctx);
+            taskRegistry.finishTool(traceId, retryCallId, result.getStatus());
+        } catch (RuntimeException error) {
+            taskRegistry.finishTool(traceId, retryCallId, "error");
+            throw error;
+        }
         decorateResult(result, target, started);
         target.setStatus(normalizeStatus(result, target));
         target.setObservation(result.getMessage());
@@ -860,6 +900,8 @@ public class AgentExecutionService {
         retryInfo.put("attempts", target.getAttempts());
         retryInfo.put("retriedAt", System.currentTimeMillis());
         snapshot.put("singleStepRetry", retryInfo);
+        snapshot.put(com.javaee.aiservice.taskrun.TaskRunMetadata.KEY,
+                taskRegistry.get(traceId).get(com.javaee.aiservice.taskrun.TaskRunMetadata.KEY));
         taskRegistry.save(traceId, snapshot);
 
         Map<String, Object> response = new LinkedHashMap<>(retryInfo);
@@ -1291,7 +1333,16 @@ public class AgentExecutionService {
             step.setAttempts(attempt);
             long stepStartedAt = System.currentTimeMillis();
             step.setStatus(AgentStepStatus.RUNNING.value());
-            AgentToolResult result = executeStep(step, request, context);
+            RunScope scope = protocolScope.get();
+            String callId = scope == null ? null : taskRegistry.beginTool(scope.traceId(), scope.executionId(),
+                    scope.executionId() + ":" + step.getId(), step.getToolName(), attempt);
+            AgentToolResult result;
+            try {
+                result = executeStep(step, request, context);
+            } catch (RuntimeException error) {
+                if (scope != null) taskRegistry.finishTool(scope.traceId(), callId, "error");
+                throw error;
+            }
             decorateResult(result, step, stepStartedAt);
             step.setStatus(normalizeStatus(result, step));
             step.setObservation(result.getMessage());
@@ -1307,6 +1358,7 @@ public class AgentExecutionService {
                     step.setThought("结果未达到 successCriteria，准备重试或 replan: " + unmet);
                     timeline.add(timelineEvent(iteration, step, downgraded));
                     lastResult = downgraded;
+                    if (scope != null) taskRegistry.finishTool(scope.traceId(), callId, "error");
                     if ("none".equalsIgnoreCase(step.getRetryPolicy()) || attempt >= maxAttempts) {
                         step.setLastError(downgraded.getMessage());
                         return downgraded;
@@ -1320,6 +1372,7 @@ public class AgentExecutionService {
             step.setThought(buildThought(step, result, attempt, maxAttempts));
             timeline.add(timelineEvent(iteration, step, result));
             lastResult = result;
+            if (scope != null) taskRegistry.finishTool(scope.traceId(), callId, result.getStatus());
 
             if (!"error".equals(result.getStatus()) || result.isRequiresAction()) {
                 return result;

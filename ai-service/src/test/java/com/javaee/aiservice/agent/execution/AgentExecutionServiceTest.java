@@ -129,6 +129,14 @@ class AgentExecutionServiceTest {
                 .containsEntry("resumeMode", "continue_trace");
         assertThat(response).containsKey("pendingUserInput");
         assertThat(response).doesNotContainKey("pendingApproval");
+        AgentTaskRegistry taskRuns = (AgentTaskRegistry) ReflectionTestUtils.getField(service, "taskRegistry");
+        var run = new com.javaee.aiservice.taskrun.AgentTaskRunAdapter(taskRuns)
+                .findOwned("user-1", String.valueOf(response.get("traceId"))).orElseThrow();
+        assertThat(run.status()).isEqualTo("WAITING_INPUT");
+        assertThat(run.toolCalls()).hasSize(1);
+        assertThat(run.steps()).hasSize(1);
+        assertThat(run.events()).extracting(com.javaee.aiservice.taskrun.TaskRunView.Event::type)
+                .containsExactly("RUN_STARTED", "TOOL_STARTED", "TOOL_FINISHED", "RUN_WAITING");
     }
 
     @SuppressWarnings("unchecked")

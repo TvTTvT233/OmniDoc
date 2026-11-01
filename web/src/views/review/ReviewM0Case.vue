@@ -63,6 +63,7 @@
           <div v-if="!uploadConfirmation" class="notice warn">运行前请在“材料与分配”确认当前轮上传完毕。刷新页面后需重新确认，服务端会复用相同材料的确认记录。</div>
           <div class="inline"><button class="primary" data-testid="run-review" :disabled="!uploadConfirmation || assignmentsDirty || jobRunning" @click="startReview('FULL')">运行完整审查</button><select v-if="report?.reportId" v-model="changedMaterialId" aria-label="选择单文件复审材料"><option value="">选择本次修改的单份材料</option><option v-for="m in materials.filter(m => m.status !== 'REMOVED')" :key="m.materialId" :value="m.materialId">{{ m.submissionFileName }}</option></select><button v-if="report?.reportId" :disabled="!changedMaterialId || !uploadConfirmation || assignmentsDirty || jobRunning" @click="startReview('INCREMENTAL', [changedMaterialId])">单文件复审</button></div>
           <div v-if="job" class="notice" data-testid="job-state"><strong>任务：{{ jobLabels[job.status] || job.status }}</strong><p>已完成 {{ job.progress?.completedUnits || 0 }} / {{ job.progress?.totalUnits || 0 }} 项 · 第 {{ job.attempt }} 次尝试</p><p v-if="job.error" class="notice error">任务失败：{{ job.error.errorCode }}。未生成新的审查结论。</p><div class="inline"><button @click="resumePoll">刷新任务状态</button><button v-if="jobRunning && job.status !== 'CANCEL_REQUESTED'" @click="cancel">取消任务</button></div></div>
+          <TaskRunPanel v-if="job" :run-id="`review:${job.jobId}`" :case-id="current.caseId" :refresh-key="`${job.status}:${report?.freshness}:${report?.reportId}`" />
           <template v-if="report?.findings">
             <div :class="['notice', report.freshness === 'OUTDATED' ? 'warn' : ready ? 'success' : 'warn']" data-testid="report-assessment"><strong>{{ loadFailed ? '状态读取失败，暂无法确认报告是否仍有效' : report.freshness === 'OUTDATED' ? '历史报告已过期，请重新审查' : ready ? '本轮材料齐全性与命名检查通过' : '本轮仍有待处理事项' }}</strong><p>{{ formatTime(report.createdAt) }} · 材料版本 {{ report.materialSetRevision }}<span v-if="report.baseReportId"> · 单文件复审结果</span></p></div>
             <div class="report-summary"><span>缺失 {{ report.summary.missingCount }}</span><span>命名问题 {{ report.summary.fileNameNoncompliantCount }}</span><span>需人工确认 {{ report.summary.cannotConfirmCount }}</span><span>已忽略 {{ report.summary.ignoredCount }}</span></div>
@@ -90,6 +91,7 @@ import { reviewM0Api as api, reviewError } from '../../api/reviewM0'
 import { runningJob, useReviewM0 } from '../../composables/useReviewM0'
 import FilePicker from './ReviewFilePicker.vue'
 import ReviewEvidence from './ReviewEvidence.vue'
+import TaskRunPanel from '../components/TaskRunPanel.vue'
 import './reviewM0.css'
 const route = useRoute(), router = useRouter()
 const state = useReviewM0(api, values => router.replace({ query: { ...route.query, ...values } }))

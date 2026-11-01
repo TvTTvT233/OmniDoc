@@ -47,7 +47,7 @@ OmniDoc 定位为：
 
 ## 当前阶段
 
-- **当前阶段（2026-10-31）**：文档—索引—引用一致性之后，Review M0 手工确认规则全流程与前端接入已完成本轮自动和真实运行验收。用户选择的官方自动提取仍留待下一步讨论。当前在 `integration/core-baseline` 保存本地检查点，Git `main` 尚未更新，未推送远端；机器验收不代替用户亲自操作确认。
+- **当前阶段（2026-11-01）**：在文档一致性和 Review M0 手工流程基线上，完成统一任务运行协议 V1，覆盖 Agent、Async AI 和 Review 的公共状态、步骤/调用、结果引用与 owner-only 查询，并接入前端。受影响回归、真实 HTTP、页面和重启后快照读取已验证，详见 `docs/task-runtime/RESULT-2026-11-01.md`；不代表已具备完整通用任务恢复、幂等副作用或真实模型评测。官方自动提取仍留待讨论。在 `integration/core-baseline` 保存本地检查点，Git `main` 尚未更新，未推送远端；机器验收不代替用户亲自操作确认。
 - **已验证范围**：基线与分段403修复见 `docs/baseline/RESULT-2026-10-15.md`、`RESULT-2026-10-17.md`。本轮回归、真实worker/HTTP/MySQL/Redis/基线VectorStore、五阶段Edge页面及26项故障矩阵见 `docs/consistency/RESULT-2026-10-26.md`；成功链仅Embedding/Chat采用明确标记的测试替身。原M07的187/187对应旧业务提交 `5cdcd0fcde90325d61aa0e0b3ee278a3944eb2af`，不冒称本轮再次运行。
 - **Review 已验证范围**：最终 Integrated 41/41、B Formal 454 项、真实手工 HTTP 与内部权限、隔离 MySQL、七阶段 Edge 页面及原件保持检查通过，外部模型全程禁用。总报告 `docs/review-m0/RESULT-2026-10-30.md` 更新至 10/31，保留 AUTO_VERIFIED/MANUAL_PENDING 和初始失败记录。
 - **当前边界与后续阶段**：Review M0仅做材料齐全性和命名；手工规则保留用户来源，官方自动提取仍未接通。计划和契约见 `docs/review-m0/PLAN-2026-10-27.md`、`UI-CONTRACT-2026-10-27.md`。真实模型/Embedding/Tavily、真实Qdrant本轮端到端、全部OCR质量和生产容量仍未验证；旧文件兼容接口的权限不由Review owner-aware通道的通过结论替代。

@@ -22,4 +22,5 @@ public class AsyncAIJobVO implements Serializable {
     private Long finishedAt;
     private Object result;
     private String error;
+    private String traceId;
 }

@@ -89,6 +89,15 @@ class ReviewM0SecurityFilterChainTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidAuthentication")
+    void unifiedTaskRunRequiresAuthentication(String scenario, String authorization) throws Exception {
+        MockHttpServletRequestBuilder request = get("/api/ai/task-runs/agent:test-trace");
+        if (authorization != null) request.header("Authorization", authorization);
+        mvc.perform(request).andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidAuthentication")
     void everyMissingOrInvalidAuthenticationFormUsesTheSameFrozen401Envelope(
             String scenario,
             String authorization

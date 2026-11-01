@@ -105,7 +105,8 @@ public class AsyncAIJobListener {
         ));
         SecurityContextHolder.setContext(jobContext);
         try {
-            return agentExecutionService.execute(request);
+            return agentExecutionService.execute(request, message.getJobId(),
+                    traceId -> asyncAIJobService.bindTrace(message.getJobId(), traceId));
         } finally {
             SecurityContextHolder.clearContext();
             if (previousContext != null && previousContext.getAuthentication() != null) {

@@ -1,6 +1,7 @@
 package com.javaee.aiservice.agent.execution.task;
 
 import com.javaee.aiservice.conversation.runtime.RuntimeStateException;
+import com.javaee.aiservice.taskrun.TaskRunMetadata;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -36,14 +37,19 @@ public class AgentTaskRegistry {
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
 
-    public void save(String traceId, Map<String, Object> snapshot) {
+    public synchronized void save(String traceId, Map<String, Object> snapshot) {
         if (traceId == null || snapshot == null) {
             return;
         }
         Map<String, Object> stored = new LinkedHashMap<>(snapshot);
+        Map<String, Object> prior = tasks.get(traceId);
+        if (prior != null && prior.containsKey(TaskRunMetadata.KEY)) {
+            stored.putIfAbsent(TaskRunMetadata.KEY, prior.get(TaskRunMetadata.KEY));
+        }
         stored.putIfAbsent("traceId", traceId);
         stored.putIfAbsent("savedAt", System.currentTimeMillis());
         tasks.put(traceId, stored);
+        evictionOrder.remove(traceId);
         evictionOrder.addLast(traceId);
         persist(traceId, stored);
         while (evictionOrder.size() > MAX_TASKS) {
@@ -106,24 +112,108 @@ public class AgentTaskRegistry {
         return matched;
     }
 
-    public boolean cancel(String traceId) {
-        Map<String, Object> snapshot = tasks.get(traceId);
-        if (snapshot == null) {
+    public synchronized boolean cancel(String traceId) {
+        Map<String, Object> snapshot = get(traceId);
+        if (snapshot == null || snapshot.isEmpty()) {
             return false;
         }
         Object status = snapshot.get("status");
         if ("success".equals(status) || "cancelled".equals(status) || "error".equals(status)) {
             return false;
         }
-        snapshot.put("status", "cancelled");
-        snapshot.put("cancelledAt", System.currentTimeMillis());
+        Map<String, Object> metadata = TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY));
+        metadata.put("cancellationRequested", true);
+        TaskRunMetadata.event(metadata, "CANCELLATION_REQUESTED", null, null, TaskRunMetadata.status(String.valueOf(status)));
+        snapshot.put(TaskRunMetadata.KEY, metadata);
         persist(traceId, snapshot);
+        if ("action_required".equals(status) || "planned".equals(status)) {
+            finishRun(traceId, TaskRunMetadata.text(metadata.get("executionId")), "cancelled");
+        }
         return true;
     }
 
     public boolean isCancelled(String traceId) {
         Map<String, Object> snapshot = tasks.get(traceId);
-        return snapshot != null && "cancelled".equals(snapshot.get("status"));
+        return snapshot != null && ("cancelled".equals(snapshot.get("status"))
+                || Boolean.TRUE.equals(TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY)).get("cancellationRequested")));
+    }
+
+    /** New protocol reads never turn a Redis failure into a false 404. Local fallback is explicit. */
+    public synchronized Map<String, Object> getForProtocol(String traceId) {
+        Map<String, Object> local = tasks.get(traceId);
+        if (local != null) return new LinkedHashMap<>(local);
+        if (redisTemplate == null) return Map.of();
+        Object persisted = redisTemplate.opsForValue().get(TASK_KEY_PREFIX + traceId);
+        return TaskRunMetadata.map(persisted);
+    }
+
+    public synchronized String beginRun(String traceId, Map<String, Object> initial, String asyncJobId) {
+        Map<String, Object> snapshot = new LinkedHashMap<>(get(traceId));
+        snapshot.putAll(initial);
+        snapshot.put("status", "running");
+        Map<String, Object> metadata = TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY));
+        long now = System.currentTimeMillis();
+        String executionId = java.util.UUID.randomUUID().toString();
+        metadata.putIfAbsent("createdAt", now);
+        metadata.put("startedAt", now);
+        metadata.remove("finishedAt");
+        metadata.put("executionId", executionId);
+        Integer priorAttempt = TaskRunMetadata.integer(metadata.get("attempt"));
+        metadata.put("attempt", priorAttempt == null ? 1 : priorAttempt + 1);
+        metadata.put("status", "running");
+        metadata.put("cancellationRequested", false);
+        if (asyncJobId != null) metadata.put("asyncJobId", asyncJobId);
+        TaskRunMetadata.event(metadata, "RUN_STARTED", null, null, "RUNNING");
+        snapshot.put(TaskRunMetadata.KEY, metadata);
+        save(traceId, snapshot);
+        return executionId;
+    }
+
+    public synchronized void finishRun(String traceId, String executionId, String status) {
+        Map<String, Object> snapshot = new LinkedHashMap<>(get(traceId));
+        if (snapshot.isEmpty()) return;
+        Map<String, Object> metadata = TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY));
+        if (!java.util.Objects.equals(executionId, metadata.get("executionId"))) return;
+        metadata.put("status", status);
+        if ("WAITING_INPUT".equals(TaskRunMetadata.status(status))) metadata.remove("finishedAt");
+        else metadata.put("finishedAt", System.currentTimeMillis());
+        snapshot.put("status", status);
+        TaskRunMetadata.event(metadata, "WAITING_INPUT".equals(TaskRunMetadata.status(status))
+                ? "RUN_WAITING" : "RUN_FINISHED", null, null, TaskRunMetadata.status(status));
+        snapshot.put(TaskRunMetadata.KEY, metadata);
+        save(traceId, snapshot);
+    }
+
+    public synchronized String beginTool(String traceId, String executionId, String stepId, String toolName, int attempt) {
+        String callId = executionId + ":" + java.util.UUID.randomUUID();
+        Map<String, Object> snapshot = new LinkedHashMap<>(get(traceId));
+        Map<String, Object> metadata = TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY));
+        List<Map<String, Object>> calls = TaskRunMetadata.rows(metadata.get("toolCalls"));
+        Map<String, Object> call = new LinkedHashMap<>();
+        call.put("toolCallId", callId); call.put("stepId", stepId); call.put("toolName", toolName);
+        call.put("attempt", attempt); call.put("status", "running");
+        call.put("startedAt", System.currentTimeMillis());
+        calls.add(call);
+        if (calls.size() > TaskRunMetadata.LIMIT) { calls.remove(0); metadata.put("historyTruncated", true); }
+        metadata.put("toolCalls", calls);
+        TaskRunMetadata.event(metadata, "TOOL_STARTED", stepId, callId, "RUNNING");
+        snapshot.put(TaskRunMetadata.KEY, metadata);
+        save(traceId, snapshot);
+        return callId;
+    }
+
+    public synchronized void finishTool(String traceId, String callId, String status) {
+        Map<String, Object> snapshot = new LinkedHashMap<>(get(traceId));
+        Map<String, Object> metadata = TaskRunMetadata.map(snapshot.get(TaskRunMetadata.KEY));
+        List<Map<String, Object>> calls = TaskRunMetadata.rows(metadata.get("toolCalls"));
+        for (Map<String, Object> call : calls) if (callId.equals(call.get("toolCallId"))) {
+            call.put("status", status); call.put("finishedAt", System.currentTimeMillis());
+            TaskRunMetadata.event(metadata, "TOOL_FINISHED", (String) call.get("stepId"), callId, TaskRunMetadata.status(status));
+            break;
+        }
+        metadata.put("toolCalls", calls);
+        snapshot.put(TaskRunMetadata.KEY, metadata);
+        save(traceId, snapshot);
     }
 
     /**

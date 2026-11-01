@@ -80,6 +80,18 @@ public class AsyncAIJobService {
         save(job);
     }
 
+    public java.util.Optional<AsyncAIJobVO> findOwned(String jobId, String userId) {
+        AsyncAIJobVO job = load(jobId);
+        return job != null && userId != null && userId.equals(job.getUserId())
+                ? java.util.Optional.of(job) : java.util.Optional.empty();
+    }
+
+    public void bindTrace(String jobId, String traceId) {
+        AsyncAIJobVO job = requireJob(jobId);
+        job.setTraceId(traceId);
+        save(job);
+    }
+
     public void markSuccess(String jobId, Object result) {
         AsyncAIJobVO job = requireJob(jobId);
         job.setStatus("success");

@@ -22,6 +22,7 @@ function isRunning(status) {
 export function createAsyncJobRunner({
   submit,
   getJob,
+  onSubmitted,
   delay = delayMs,
   pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   timeoutMs = DEFAULT_TIMEOUT_MS
@@ -29,6 +30,7 @@ export function createAsyncJobRunner({
   return {
     async runAsyncJob(...args) {
       const jobId = requireJobId(await submit(...args))
+      onSubmitted?.(jobId)
       const startedAt = Date.now()
 
       while (Date.now() - startedAt <= timeoutMs) {

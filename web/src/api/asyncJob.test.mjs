@@ -33,3 +33,14 @@ test('runAsyncJob throws failed job error', async () => {
 
   await assert.rejects(() => runner.runAsyncJob(), /model unavailable/)
 })
+
+test('announces job identity before polling without changing an inner failure', async () => {
+  const order = []
+  const runner = createAsyncJobRunner({
+    submit: async () => ({ data: { jobId: 'j' } }),
+    onSubmitted: id => order.push(id),
+    getJob: async () => { order.push('poll'); return { data: { status: 'success', result: { status: 'error' } } } },
+  })
+  assert.deepEqual(await runner.runAsyncJob(), { status: 'error' })
+  assert.deepEqual(order, ['j', 'poll'])
+})

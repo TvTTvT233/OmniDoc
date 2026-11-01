@@ -75,6 +75,7 @@
                 </el-button>
               </div>
 
+              <TaskRunPanel :run-id="activeRunId" :refresh-key="executionResult?.status" />
               <!-- 执行结果用 el-scrollbar -->
               <div class="result-viewer" v-if="executionResult">
                 <h4>执行结果 / Timeline</h4>
@@ -121,6 +122,8 @@ import { ref, onMounted } from 'vue'
 import { agentApi } from '../../api/agent'
 import { ElMessage } from 'element-plus'
 import DocumentReferences from '../components/DocumentReferences.vue'
+import TaskRunPanel from '../components/TaskRunPanel.vue'
+import { agentOutcome } from '../../api/taskRunState'
 
 // 数据状态
 const loading = ref(false)
@@ -134,6 +137,8 @@ const agentPrompt = ref('')
 const approvalToken = ref('')
 const approvalContext = ref('')
 const executionResult = ref(null)
+const activeRunId = ref('')
+const showOutcome = status => { const outcome = agentOutcome(status); ElMessage[outcome.type](outcome.message) }
 
 // 1. 获取全局大盘数据
 const fetchOverview = async () => {
@@ -156,20 +161,20 @@ const executeAgent = async () => {
 
   executing.value = true
   executionResult.value = null
+  activeRunId.value = ''
   try {
     const res = await agentApi.executeTask({
       task: agentPrompt.value,
       context: {}
-    })
+    }, jobId => { activeRunId.value = `async:${jobId}` })
     executionResult.value = res.data
+    if (res.data.traceId) activeRunId.value = `agent:${res.data.traceId}`
 
     // 如果需要审批
     if (res.data.status === 'action_required') {
-      ElMessage.warning('触发高危操作，请在左侧面板进行审批！')
-      approvalToken.value = res.data.approvalToken // 自动填入 token 方便测试
-    } else {
-      ElMessage.success('执行完毕')
+      approvalToken.value = res.data.pendingApproval?.agentApprovalToken || ''
     }
+    showOutcome(res.data.status)
 
     fetchOverview() // 刷新列表
   } catch (e) {
@@ -192,8 +197,9 @@ const handleConfirmApproval = async () => {
       approvalToken: approvalToken.value,
       context: ctx
     })
-    ElMessage.success('审批已确认，任务继续执行！')
+    showOutcome(res.data?.status)
     executionResult.value = res.data
+    if (res.data?.traceId) activeRunId.value = `agent:${res.data.traceId}`
     approvalToken.value = ''
     fetchOverview()
   } catch (e) {
@@ -221,6 +227,7 @@ const viewTaskDetail = async (traceId) => {
   try {
     const res = await agentApi.getTaskHistory(traceId)
     executionResult.value = res.data // 直接在右侧的 JSON 框里展示快照
+    activeRunId.value = `agent:${traceId}`
     ElMessage.success('已加载任务快照')
   } catch (e) {}
 }

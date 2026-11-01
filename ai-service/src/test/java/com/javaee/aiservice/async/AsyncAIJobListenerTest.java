@@ -29,8 +29,11 @@ class AsyncAIJobListenerTest {
 
         doAnswer(invocation -> {
             assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isEqualTo("user-1");
+            java.util.function.Consumer<String> link = invocation.getArgument(2);
+            link.accept("trace-created-before-return");
             return Map.of("status", "success", "answer", "done");
-        }).when(agentExecutionService).execute(org.mockito.ArgumentMatchers.any(AgentExecutionRequest.class));
+        }).when(agentExecutionService).execute(org.mockito.ArgumentMatchers.any(AgentExecutionRequest.class),
+                org.mockito.ArgumentMatchers.eq("job-1"), org.mockito.ArgumentMatchers.any());
 
         ReflectionTestUtils.setField(listener, "asyncAIJobService", asyncAIJobService);
         ReflectionTestUtils.setField(listener, "aiService", aiService);
@@ -52,7 +55,9 @@ class AsyncAIJobListenerTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         ArgumentCaptor<AgentExecutionRequest> requestCaptor = ArgumentCaptor.forClass(AgentExecutionRequest.class);
-        verify(agentExecutionService).execute(requestCaptor.capture());
+        verify(agentExecutionService).execute(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("job-1"),
+                org.mockito.ArgumentMatchers.any());
+        verify(asyncAIJobService).bindTrace("job-1", "trace-created-before-return");
         AgentExecutionRequest request = requestCaptor.getValue();
         assertThat(request.getTask()).isEqualTo("总结当前文档");
         assertThat(request.getModel()).isEqualTo("qwen3.7-max-2026-05-20");

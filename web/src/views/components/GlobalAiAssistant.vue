@@ -185,6 +185,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { agentApi } from '../../api/agent'
+import { agentOutcome } from '../../api/taskRunState'
 import { aiApi } from '../../api/ai'
 import { docApi } from '../../api/document.js'
 import {
@@ -309,11 +310,15 @@ const handleSend = async () => {
       },
     })
     const agentResult = res.data
+    if (['error', 'failed', 'blocked', 'planned', 'cancelled'].includes(agentResult?.status)) {
+      const outcome = agentOutcome(agentResult.status)
+      ElMessage[outcome.type](outcome.message)
+    }
     latestActionResult.value = parseToolResults(agentResult?.toolResults)
     pendingPreview.value = null
     const completion = await conversationWorkspace.completeSubmission(submission.clientRequestId)
     if (completion.historyReloadFailed) {
-      ElMessage.warning('任务已完成，但历史暂时未刷新；重新打开会话后可再次加载。')
+      ElMessage.warning('本次请求已返回，但历史暂时未刷新；重新打开会话后可再次加载。')
     }
     scrollToBottom()
 
@@ -420,7 +425,8 @@ const executeApproval = async (approval, agentResult, extraParams = {}) => {
     })
     latestActionResult.value = parseToolResults(confirmRes.data?.toolResults)
     await conversationWorkspace.reloadMessages()
-    ElMessage.success('操作已完成')
+    const outcome = agentOutcome(confirmRes.data?.status)
+    ElMessage[outcome.type](outcome.message)
     scrollToBottom()
   } catch (error) {
     ElMessage.error(error.response?.data?.message || error.message || '操作失败')

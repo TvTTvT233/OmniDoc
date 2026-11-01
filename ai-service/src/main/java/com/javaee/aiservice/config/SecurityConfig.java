@@ -61,6 +61,13 @@ public class SecurityConfig {
 
     private AuthenticationEntryPoint authenticationEntryPoint() {
         LinkedHashMap<RequestMatcher, AuthenticationEntryPoint> entryPoints = new LinkedHashMap<>();
+        entryPoints.put(new AntPathRequestMatcher("/api/ai/task-runs/**"),
+                (request, response, exception) -> {
+                    response.setStatus(401);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.setHeader("Cache-Control", "no-store");
+                    response.getWriter().write("{\"errorCode\":\"AUTHENTICATION_REQUIRED\",\"message\":\"请先登录\"}");
+                });
         entryPoints.put(new AntPathRequestMatcher("/api/ai/rag/document/*/segments", "GET"),
                 (request, response, exception) -> {
                     response.setStatus(401);
