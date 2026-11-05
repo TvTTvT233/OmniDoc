@@ -23,7 +23,7 @@ public class InternalService {
     @Autowired
     private RequestUserContext requestUserContext;
 
-    private static final Set<String> DESTRUCTIVE_SKILLS = Set.of("file-restore", "file-version-switch");
+    private static final Set<String> DESTRUCTIVE_SKILLS = Set.of("file-delete", "file-restore", "file-version-switch");
 
     /**
      * 检查权限

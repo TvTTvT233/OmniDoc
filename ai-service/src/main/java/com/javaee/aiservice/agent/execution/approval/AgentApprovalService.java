@@ -38,16 +38,11 @@ public class AgentApprovalService {
             return ApprovalResult.MISSING;
         }
         String key = PREFIX + token;
-        Object expected = redisTemplate.opsForValue().get(key);
-        if (expected == null) {
-            return ApprovalResult.EXPIRED_OR_USED;
-        }
         String actual = fingerprint(userId, toolName, params);
-        if (!expected.toString().equals(actual)) {
-            return ApprovalResult.PARAMS_MISMATCH;
-        }
-        redisTemplate.delete(key);
-        return ApprovalResult.OK;
+        Long result=redisTemplate.execute(new org.springframework.data.redis.core.script.DefaultRedisScript<>(
+                "local v=redis.call('GET',KEYS[1]); if not v then return 0 end; if v~=ARGV[1] then return 2 end; redis.call('DEL',KEYS[1]); return 1",Long.class),
+                java.util.List.of(key),actual);
+        return Long.valueOf(1).equals(result)?ApprovalResult.OK:Long.valueOf(2).equals(result)?ApprovalResult.PARAMS_MISMATCH:ApprovalResult.EXPIRED_OR_USED;
     }
 
     public boolean verifyAndConsume(String token, String userId, String toolName, Map<String, Object> params) {
@@ -62,10 +57,7 @@ public class AgentApprovalService {
     }
 
     private String fingerprint(String userId, String toolName, Map<String, Object> params) {
-        String objectName = String.valueOf(params.getOrDefault("objectName", ""));
-        String targetVersionId = String.valueOf(params.getOrDefault("targetVersionId", ""));
-        String recycleId = String.valueOf(params.getOrDefault("recycleId", ""));
-        String raw = userId + "|" + toolName + "|" + objectName + "|" + targetVersionId + "|" + recycleId;
+        String raw = com.javaee.aiservice.taskrun.recovery.RecoveryJson.json(Map.of("owner",userId,"tool",toolName,"params",params));
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(raw.getBytes(StandardCharsets.UTF_8)));

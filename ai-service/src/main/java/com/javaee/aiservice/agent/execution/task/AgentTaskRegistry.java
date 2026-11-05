@@ -36,6 +36,20 @@ public class AgentTaskRegistry {
 
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
+    @Autowired(required=false)
+    private com.javaee.aiservice.taskrun.recovery.AgentRunStore durableStore;
+
+    private Map<String,Object> durableSnapshot(String traceId) {
+        if(durableStore==null) return Map.of();
+        return durableStore.find(traceId).map(run -> {
+            Map<String,Object> out=new LinkedHashMap<>(run.result().isEmpty()?run.checkpoint():run.result());
+            out.put("traceId",run.id()); out.put("userId",run.owner()); out.put("conversationId",run.conversationId());
+            out.put("status",switch(run.status()) { case "SUCCEEDED"->"success"; case "FAILED"->"error"; case "CANCELLED"->"cancelled"; case "WAITING_INPUT"->"action_required"; default->"running"; });
+            out.remove("userContinuation");
+            if(run.reason()!=null) out.put("recoveryReason",run.reason());
+            return out;
+        }).orElseGet(Map::of);
+    }
 
     public synchronized void save(String traceId, Map<String, Object> snapshot) {
         if (traceId == null || snapshot == null) {
@@ -61,6 +75,8 @@ public class AgentTaskRegistry {
     }
 
     public Map<String, Object> get(String traceId) {
+        Map<String,Object> durable=durableSnapshot(traceId);
+        if(!durable.isEmpty() || durableStore!=null && durableStore.known(traceId)) return durable;
         Map<String, Object> local = tasks.get(traceId);
         if (local != null) {
             return local;
@@ -98,6 +114,7 @@ public class AgentTaskRegistry {
         if (userId == null) {
             return List.of();
         }
+        if(durableStore!=null) return durableStore.listOwned(userId).stream().map(r->durableSnapshot(r.id())).toList();
         List<Map<String, Object>> persisted = listFromRedis(TASK_USER_ZSET_PREFIX + userId);
         if (!persisted.isEmpty()) {
             return persisted;

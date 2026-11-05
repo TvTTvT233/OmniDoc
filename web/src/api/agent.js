@@ -27,6 +27,7 @@ export const agentApi = {
 
     // 审批危险操作：确认继续
     confirmApproval: (data) => request.post('/ai/agent/approvals/confirm', data),
+    continueTask: (traceId, data) => request.post(`/ai/agent/tasks/${traceId}/continue`, data),
 
     // 审批危险操作：取消
     cancelApproval: (token) => request.post(`/ai/agent/approvals/${token}/cancel`),

@@ -47,6 +47,8 @@ OmniDoc 定位为：
 
 ## 当前阶段
 
+- **最新进展（2026-11-05）**：在统一协议 V1 上完成 Agent 恢复与副作用控制 V2 的本轮自动验收：JDBC 账本、租约领取、检查点恢复、审批参数绑定、未知写结果停止重放及前端确认保护。真实 HTTP、同包进程重启、隔离 MySQL 和浏览器取消流程通过，详见 `docs/task-runtime/RESULT-2026-11-02.md`。真实任务评测/费用预算、跨服务 exactly-once 和生产多节点验收仍不具备；旧 Redis 任务不自动迁移。保留本地候选，main 未更新、未推送。
+
 - **当前阶段（2026-11-01）**：在文档一致性和 Review M0 手工流程基线上，完成统一任务运行协议 V1，覆盖 Agent、Async AI 和 Review 的公共状态、步骤/调用、结果引用与 owner-only 查询，并接入前端。受影响回归、真实 HTTP、页面和重启后快照读取已验证，详见 `docs/task-runtime/RESULT-2026-11-01.md`；不代表已具备完整通用任务恢复、幂等副作用或真实模型评测。官方自动提取仍留待讨论。在 `integration/core-baseline` 保存本地检查点，Git `main` 尚未更新，未推送远端；机器验收不代替用户亲自操作确认。
 - **已验证范围**：基线与分段403修复见 `docs/baseline/RESULT-2026-10-15.md`、`RESULT-2026-10-17.md`。本轮回归、真实worker/HTTP/MySQL/Redis/基线VectorStore、五阶段Edge页面及26项故障矩阵见 `docs/consistency/RESULT-2026-10-26.md`；成功链仅Embedding/Chat采用明确标记的测试替身。原M07的187/187对应旧业务提交 `5cdcd0fcde90325d61aa0e0b3ee278a3944eb2af`，不冒称本轮再次运行。
 - **Review 已验证范围**：最终 Integrated 41/41、B Formal 454 项、真实手工 HTTP 与内部权限、隔离 MySQL、七阶段 Edge 页面及原件保持检查通过，外部模型全程禁用。总报告 `docs/review-m0/RESULT-2026-10-30.md` 更新至 10/31，保留 AUTO_VERIFIED/MANUAL_PENDING 和初始失败记录。

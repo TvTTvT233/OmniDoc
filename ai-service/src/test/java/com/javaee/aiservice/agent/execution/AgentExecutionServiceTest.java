@@ -54,8 +54,8 @@ class AgentExecutionServiceTest {
         AgentToolDefinition restoreTool = registry.get("file-restore");
 
         assertThat(deleteTool).isNotNull();
-        assertThat(deleteTool.isDestructive()).isFalse();
-        assertThat(deleteTool.getRiskLevel()).isEqualTo("low");
+        assertThat(deleteTool.isDestructive()).isTrue();
+        assertThat(deleteTool.getRiskLevel()).isEqualTo("high");
         assertThat(deleteTool.getParameterSchema().get("objectName").isRequired()).isFalse();
         assertThat(deleteTool.getParameterSchema().get("documentId").isRequired()).isFalse();
         assertThat(deleteTool.getParameterSchema()).doesNotContainKeys("requireConfirmation", "confirmationToken");
@@ -141,7 +141,7 @@ class AgentExecutionServiceTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void continueTraceResumesMissingParameterStepWithoutApprovalToken() {
+    void continueTraceWithDeleteTargetStillRequiresApproval() {
         AgentExecutionService service = new AgentExecutionService();
         AgentToolRegistry registry = new AgentToolRegistry();
         ChatService chatService = mock(ChatService.class);
@@ -173,6 +173,11 @@ class AgentExecutionServiceTest {
         ReflectionTestUtils.setField(service, "requestUserContext", requestUserContext);
         ReflectionTestUtils.setField(service, "taskRegistry", taskRegistry);
 
+        AgentApprovalService approvals=mock(AgentApprovalService.class);
+        when(approvals.verifyAndConsumeDetailed(any(),any(),any(),any())).thenReturn(AgentApprovalService.ApprovalResult.MISSING);
+        when(approvals.createChallenge(any(),any(),any())).thenReturn(new AgentApprovalService.ApprovalChallenge("approval",123L));
+        ReflectionTestUtils.setField(service,"agentApprovalService",approvals);
+
         AgentExecutionRequest request = new AgentExecutionRequest();
         request.setTask("删除文件");
         request.setContext(Map.of());
@@ -193,14 +198,13 @@ class AgentExecutionServiceTest {
 
         Map<String, Object> result = service.execute(resumed);
 
-        assertThat(result.get("status")).isEqualTo("success");
+        assertThat(result.get("status")).isEqualTo("action_required");
         assertThat(result).doesNotContainKey("pendingUserInput");
         List<AgentToolResult> toolResults = (List<AgentToolResult>) result.get("toolResults");
         assertThat(toolResults).extracting(AgentToolResult::getToolName).containsExactly("file-delete");
-        assertThat(toolResults).extracting(AgentToolResult::getStatus).containsExactly("success");
-        verify(fileDeleteService).deleteFile(
-                argThat(dto -> "a.txt".equals(dto.getObjectName()) && "omnidoc".equals(dto.getBucketName())),
-                eq("agent-approved:user-1"));
+        assertThat(toolResults).extracting(AgentToolResult::getStatus).containsExactly("action_required");
+        assertThat(result).containsKey("pendingApproval");
+        verify(fileDeleteService,never()).deleteFile(any(),any());
     }
 
     @Test
@@ -545,19 +549,16 @@ class AgentExecutionServiceTest {
         assertThat(approvalService.verifyAndConsumeDetailed("", "u", "file-delete", Map.of()))
                 .isEqualTo(AgentApprovalService.ApprovalResult.MISSING);
 
-        when(ops.get("agent:approval:t1")).thenReturn(null);
+        when(redisTemplate.execute(any(org.springframework.data.redis.core.script.RedisScript.class),any(List.class),any(Object.class)))
+                .thenReturn(0L,2L,1L);
         assertThat(approvalService.verifyAndConsumeDetailed("t1", "u", "file-delete", Map.of()))
                 .isEqualTo(AgentApprovalService.ApprovalResult.EXPIRED_OR_USED);
 
-        when(ops.get("agent:approval:t2")).thenReturn("not-the-fingerprint");
         assertThat(approvalService.verifyAndConsumeDetailed("t2", "u", "file-delete", Map.of("objectName", "a")))
                 .isEqualTo(AgentApprovalService.ApprovalResult.PARAMS_MISMATCH);
 
         AgentApprovalService.ApprovalChallenge challenge =
                 approvalService.createChallenge("u", "file-delete", Map.of("objectName", "a"));
-        when(ops.get("agent:approval:" + challenge.token()))
-                .thenReturn(extractFingerprint(approvalService, "u", "file-delete", Map.of("objectName", "a")));
-        when(redisTemplate.delete("agent:approval:" + challenge.token())).thenReturn(true);
         assertThat(approvalService.verifyAndConsumeDetailed(challenge.token(), "u", "file-delete", Map.of("objectName", "a")))
                 .isEqualTo(AgentApprovalService.ApprovalResult.OK);
     }
@@ -567,7 +568,7 @@ class AgentExecutionServiceTest {
     }
 
     @Test
-    void executeFileDeleteRunsDirectlyWhenObjectNameIsKnown() {
+    void executeFileDeleteNeedsServerApprovalEvenWhenObjectNameIsKnown() {
         AgentExecutionService service = new AgentExecutionService();
         AgentToolRegistry registry = new AgentToolRegistry();
         ChatService chatService = mock(ChatService.class);
@@ -605,15 +606,16 @@ class AgentExecutionServiceTest {
                 "bucketName", "omnidoc-real"));
         request.setReflectionEnabled(false);
 
+        AgentApprovalService approvals=mock(AgentApprovalService.class);
+        when(approvals.verifyAndConsumeDetailed(any(),any(),any(),any())).thenReturn(AgentApprovalService.ApprovalResult.MISSING);
+        when(approvals.createChallenge(any(),any(),any())).thenReturn(new AgentApprovalService.ApprovalChallenge("approval",123L));
+        ReflectionTestUtils.setField(service,"agentApprovalService",approvals);
+
         Map<String, Object> result = service.execute(request);
 
-        assertThat(result.get("status")).isEqualTo("success");
-        assertThat(result).doesNotContainKey("pendingApproval");
-        verify(fileDeleteService).deleteFile(
-                argThat(dto -> "79dd2c3f-demo.docx".equals(dto.getObjectName())
-                        && "omnidoc-real".equals(dto.getBucketName())
-                        && Boolean.FALSE.equals(dto.getRequireConfirmation())),
-                eq("agent-approved:user-1"));
+        assertThat(result.get("status")).isEqualTo("action_required");
+        assertThat(result).containsKey("pendingApproval");
+        verify(fileDeleteService,never()).deleteFile(any(),any());
     }
 
     @SuppressWarnings("unchecked")

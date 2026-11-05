@@ -123,6 +123,7 @@ public class AgentController {
     @PostMapping("/tasks/{traceId}/cancel")
     @Operation(summary = "取消Agent任务", description = "在主循环下一次迭代入口生效；终态任务不会被覆盖")
     public Result<Boolean> cancelTask(@PathVariable String traceId) {
+        if(agentExecutionService.recoveryEnabled()) return Result.success(agentExecutionService.cancelDurable(traceId));
         Map<String, Object> snapshot = agentTaskRegistry.get(traceId);
         if (snapshot != null && !snapshot.isEmpty()
                 && !requestUserContext.isAdmin()
@@ -138,6 +139,7 @@ public class AgentController {
     @DeleteMapping("/tasks/{traceId}")
     @Operation(summary = "删除Agent任务", description = "从注册表中彻底删除任务快照")
     public Result<Boolean> deleteTask(@PathVariable String traceId) {
+        if(agentExecutionService.recoveryEnabled()) return Result.success(agentExecutionService.deleteDurable(traceId));
         Map<String, Object> snapshot = agentTaskRegistry.get(traceId);
         if (snapshot != null && !snapshot.isEmpty()
                 && !requestUserContext.isAdmin()

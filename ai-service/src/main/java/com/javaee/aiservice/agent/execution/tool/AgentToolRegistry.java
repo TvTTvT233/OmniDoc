@@ -52,7 +52,7 @@ public class AgentToolRegistry {
                 Map.of("bucketName", "存储桶名称，可选",
                         "objectName", "对象名称，与documentId二选一",
                         "documentId", "前端业务文档ID，与objectName二选一"),
-                Set.of(), false, "file", false);
+                Set.of(), true, "file", false);
         register("file-restore", "从回收站恢复文件。",
                 Map.of("recycleId", "回收站记录ID", "bucketName", "存储桶名称，可选", "newObjectName", "新对象名称，可选"),
                 Set.of("recycleId"), true, "file", false);

@@ -57,6 +57,7 @@ import com.javaee.aiservice.service.MinIOService;
 import com.javaee.aiservice.service.RecycleBinService;
 import com.javaee.aiservice.skills.SkillExecutorService;
 import com.javaee.common.utils.UserBucketUtils;
+import com.javaee.aiservice.taskrun.recovery.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -175,6 +176,96 @@ public class AgentExecutionService {
 
     private record RunScope(String traceId, String executionId) {}
     private final ThreadLocal<RunScope> protocolScope = new ThreadLocal<>();
+    @Autowired(required = false)
+    private AgentRunStore durableStore;
+    private final ThreadLocal<AgentRecoveryScope> recoveryScope = new ThreadLocal<>();
+
+    public boolean recoveryEnabled() { return durableStore != null; }
+
+    public AgentRunStore.Run submitDurable(AgentExecutionRequest request, String asyncId) {
+        validateRequest(request);
+        String owner=requestUserContext.getRequiredUserId();
+        request.setUserId(owner);
+        if(isBlank(request.getClientRequestId())) request.setClientRequestId(UUID.randomUUID().toString());
+        Map<String,Object> payload=objectMapper.convertValue(request,new TypeReference<>(){});
+        // The assigned conversation lives in the run record; do not change the caller's idempotency payload.
+        var old=durableStore.findRequest(owner,request.getClientRequestId());
+        if(old.isPresent()) {
+            if((asyncId==null)!=(old.get().asyncJobId()==null))
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"CLIENT_REQUEST_CHANNEL_CONFLICT");
+            if(!RecoveryJson.digest(old.get().request()).equals(RecoveryJson.digest(payload)))
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"CLIENT_REQUEST_CONFLICT");
+            return old.get();
+        }
+        String conversation=ensureConversation(request.getConversationId(),owner);
+        return durableStore.submit(owner,conversation,request.getClientRequestId(),asyncId,payload);
+    }
+
+    /** Trusted worker entry. Owner is taken from the durable record, never a Rabbit payload. */
+    public Map<String,Object> executeDurable(String owner,String id) {
+        if(!requestUserContext.getRequiredUserId().equals(owner)) throw new SecurityException("Task owner mismatch");
+        AgentRunStore.Claim claim=durableStore.claim(owner,id,UUID.randomUUID().toString());
+        if(claim.lease()==null) return durableSnapshot(claim.run());
+        try(AgentRecoveryScope scope=new AgentRecoveryScope(durableStore,claim)) {
+            recoveryScope.set(scope);
+            AgentExecutionRequest request=objectMapper.convertValue(claim.run().request(),AgentExecutionRequest.class);
+            request.setConversationId(claim.run().conversationId());
+            request.setContinueTraceId(null);
+            if(scope.checkpoint.get("userContinuation") instanceof Map<?,?> input) {
+                AgentExecutionRequest supplement=objectMapper.convertValue(input,AgentExecutionRequest.class);
+                request.setClientRequestId(supplement.getClientRequestId());
+                request.setContext(supplement.getContext());
+                request.setTask(supplement.getTask());
+                request.setDryRun(false);
+            }
+            if(scope.checkpoint.containsKey("approvalClientRequestId")) request.setClientRequestId(String.valueOf(scope.checkpoint.get("approvalClientRequestId")));
+            Map<String,Object> result=execute(request,claim.run().asyncJobId(),null);
+            String raw=String.valueOf(result.get("status"));
+            String state=switch(raw) { case "success" -> "SUCCEEDED"; case "cancelled" -> "CANCELLED";
+                case "action_required","planned" -> "WAITING_INPUT"; default -> "FAILED"; };
+            String reason=null;
+            if("WAITING_INPUT".equals(state)) {
+                reason="planned".equals(raw)?"PLAN_CONFIRMATION":"USER_ACTION";
+                for(AgentToolResult r:convertToolResults(result.get("toolResults"))) {
+                    if(r.isRequiresAction() && r.getData().containsKey("recoveryReason")) reason=String.valueOf(r.getData().get("recoveryReason"));
+                }
+            }
+            durableStore.finish(claim.lease(),state,reason,result);
+            return result;
+        } finally { recoveryScope.remove(); }
+    }
+
+    public Map<String,Object> durableSnapshot(AgentRunStore.Run run) {
+        Map<String,Object> out=new LinkedHashMap<>(run.result().isEmpty()?run.checkpoint():run.result());
+        out.remove("userContinuation"); out.remove("request"); out.remove("finalAnswer");
+        out.put("traceId",run.id()); out.put("conversationId",run.conversationId()); out.put("userId",run.owner());
+        out.put("status",switch(run.status()) { case "SUCCEEDED"->"success"; case "FAILED"->"error";
+            case "WAITING_INPUT"->"action_required"; case "CANCELLED"->"cancelled"; default->"running"; });
+        if(run.reason()!=null) out.put("recoveryReason",run.reason());
+        return out;
+    }
+
+    public boolean cancelDurable(String traceId) { return durableStore.cancel(requestUserContext.getRequiredUserId(),traceId); }
+    public boolean deleteDurable(String traceId) { durableStore.deleteOwned(requestUserContext.getRequiredUserId(),traceId); return true; }
+
+    private void recoveryCheckpoint(String phase,String traceId,String conversationId,AgentExecutionRequest request,
+            List<AgentPlanStep> plan,List<AgentToolResult> results,List<AgentReflection> reflections,
+            List<Map<String,Object>> timeline,Map<String,Object> context,int iteration,int calls) {
+        AgentRecoveryScope scope=recoveryScope.get(); if(scope==null) return;
+        scope.assertLive();
+        Map<String,Object> cp=new LinkedHashMap<>();
+        cp.put("schemaVersion",1); cp.put("phase",phase); cp.put("traceId",traceId); cp.put("conversationId",conversationId);
+        cp.put("userId",request.getUserId()); cp.put("task",request.getTask()); cp.put("plan",plan); cp.put("toolResults",results);
+        cp.put("reflections",reflections); cp.put("timeline",timeline); cp.put("context",context);
+        cp.put("iterations",iteration); cp.put("toolCallCount",calls); cp.put("memoryClientRequestId",request.getClientRequestId());
+        if(request.getMemoryTurnContext()!=null) cp.put("currentUserSequence",request.getMemoryTurnContext().currentUserSequence());
+        if("FINALIZE".equals(phase) && "FINALIZE".equals(scope.checkpoint.get("phase")) && scope.checkpoint.containsKey("finalAnswer"))
+            cp.put("finalAnswer",scope.checkpoint.get("finalAnswer"));
+        // Keep an explicit user continuation across a crash; never turn a recovery into a new user message.
+        if(scope.checkpoint.containsKey("userContinuation")) cp.put("userContinuation",scope.checkpoint.get("userContinuation"));
+        if(scope.checkpoint.containsKey("approvalClientRequestId")) cp.put("approvalClientRequestId",scope.checkpoint.get("approvalClientRequestId"));
+        durableStore.checkpoint(scope.lease,cp); scope.checkpoint=cp;
+    }
 
     public Map<String, Object> execute(AgentExecutionRequest request) {
         return execute(request, null, null);
@@ -184,6 +275,17 @@ public class AgentExecutionService {
     public Map<String, Object> execute(AgentExecutionRequest request, String asyncJobId,
             java.util.function.Consumer<String> onTraceCreated) {
         validateRequest(request);
+
+        if(durableStore!=null && recoveryScope.get()==null) {
+            AgentRunStore.Run run;
+            if(!isBlank(request.getContinueTraceId())) {
+                if(isBlank(request.getClientRequestId())) request.setClientRequestId(UUID.randomUUID().toString());
+                run=durableStore.resume(requestUserContext.getRequiredUserId(),request.getContinueTraceId(),
+                        objectMapper.convertValue(request,new TypeReference<>(){}));
+            } else run=submitDurable(request,asyncJobId);
+            if(onTraceCreated!=null) onTraceCreated.accept(run.id());
+            return executeDurable(run.owner(),run.id());
+        }
 
         long startedAt = System.currentTimeMillis();
         String userId = requestUserContext.getRequiredUserId();
@@ -205,13 +307,14 @@ public class AgentExecutionService {
         boolean requiresAction;
         String stoppedReason;
 
-        if (continueTraceId != null && !continueTraceId.isBlank()) {
-            existingSnapshot = taskRegistry.get(continueTraceId);
+        AgentRecoveryScope recovering=recoveryScope.get();
+        if (recovering!=null && !recovering.checkpoint.isEmpty() || continueTraceId != null && !continueTraceId.isBlank()) {
+            existingSnapshot = recovering!=null ? recovering.checkpoint : taskRegistry.get(continueTraceId);
             if (existingSnapshot == null || existingSnapshot.isEmpty()) {
                 throw new IllegalArgumentException("续接任务不存在: " + continueTraceId);
             }
             assertSnapshotAndConversationOwner(existingSnapshot, userId, "无权续接该任务");
-            traceId = continueTraceId;
+            traceId = recovering!=null ? recovering.run.id() : continueTraceId;
             conversationId = asString(existingSnapshot.get("conversationId"));
             context = existingSnapshot.get("context") instanceof Map<?, ?> raw
                     ? new HashMap<>((Map<String, Object>) raw)
@@ -234,14 +337,16 @@ public class AgentExecutionService {
             }
             iterations = intValue(existingSnapshot.get("iterations"), 0);
             int pendingIteration = firstRunnableIteration(plan);
-            startIteration = pendingIteration > 0 ? pendingIteration : iterations + 1;
+            startIteration = recovering!=null ? Math.max(1,iterations) : pendingIteration > 0 ? pendingIteration : iterations + 1;
             toolCallCount = intValue(existingSnapshot.get("toolCallCount"), 0);
             requiresAction = false;
             stoppedReason = "continued";
 
-            Map<String, Object> userSupplement = mergeContext(conversationId, request.getContext());
-            userSupplement.put("userSupplement", request.getTask());
-            context.putAll(userSupplement);
+            if(recovering==null || recovering.checkpoint.containsKey("userContinuation")) {
+                Map<String, Object> userSupplement = mergeContext(conversationId, request.getContext());
+                userSupplement.put("userSupplement", request.getTask());
+                context.putAll(userSupplement);
+            }
             context.put("traceId", traceId);
             context.put("userId", userId);
             context.putIfAbsent("bucketName", UserBucketUtils.bucketNameForUser(userId));
@@ -251,7 +356,7 @@ public class AgentExecutionService {
             publishTaskEvent("task_continued", traceId, userId, "running", progressOf(toolCallCount, Math.max(1, intValue(request.getMaxToolCalls(), 8))),
                     "Agent 任务续接，用户补充: " + request.getTask(), Map.of("supplement", request.getTask()));
         } else {
-            traceId = UUID.randomUUID().toString();
+            traceId = recovering!=null ? recovering.run.id() : UUID.randomUUID().toString();
             conversationId = ensureConversation(request.getConversationId(), userId);
             context = mergeContext(conversationId, request.getContext());
             context.put("userId", userId);
@@ -285,8 +390,10 @@ public class AgentExecutionService {
         String memoryClientRequestId = isBlank(request.getClientRequestId())
                 ? UUID.randomUUID().toString()
                 : request.getClientRequestId();
-        String memoryTurnId = UUID.randomUUID().toString();
-        List<ConversationMessage> persistedUserMessages = conversationManager.appendMessagesForUser(
+        request.setClientRequestId(memoryClientRequestId);
+        String memoryTurnId = recovering==null ? UUID.randomUUID().toString()
+                : UUID.nameUUIDFromBytes((traceId+":"+memoryClientRequestId).getBytes(StandardCharsets.UTF_8)).toString();
+        List<ConversationMessage> persistedUserMessages = recovering!=null && recovering.checkpoint.containsKey("approvalClientRequestId") ? List.of() : conversationManager.appendMessagesForUser(
                 conversationId,
                 userId,
                 List.of(new MessageAppendCommand(
@@ -301,7 +408,7 @@ public class AgentExecutionService {
                         null,
                         Map.of("source", "agent"))));
         long currentUserSequence = persistedUserMessages == null || persistedUserMessages.isEmpty()
-                ? 0L
+                ? recovering!=null && recovering.checkpoint.get("currentUserSequence") instanceof Number seq ? seq.longValue():0L
                 : persistedUserMessages.get(0).sequence();
         request.setMemoryTurnContext(new MemoryTurnContext(
                 conversationId,
@@ -316,7 +423,8 @@ public class AgentExecutionService {
         int persistedMessageOrdinal = 1 + Math.max(0, toolCallCount) * 2;
         List<AgentPlanStep> reflectionPlan = List.of();
 
-        for (int iteration = startIteration; iteration <= maxIterations; iteration++) {
+        boolean finalizing=recovering!=null && "FINALIZE".equals(recovering.checkpoint.get("phase"));
+        for (int iteration = startIteration; !finalizing && iteration <= maxIterations; iteration++) {
             iterations = iteration;
             if (taskRegistry.isCancelled(traceId)) {
                 stoppedReason = "cancelled";
@@ -324,15 +432,18 @@ public class AgentExecutionService {
                 break;
             }
             List<AgentPlanStep> iterationPlan = runnablePlanForIteration(plan, iteration);
-            if (iterationPlan.isEmpty()) {
+            boolean existingIteration=false;
+            for(AgentPlanStep existing:plan) if(iterationOf(existing)==iteration) existingIteration=true;
+            if (iterationPlan.isEmpty() && !existingIteration) {
                 iterationPlan = buildIterationPlan(request, context, plan, toolResults, iteration, reflectionPlan);
                 iterationPlan = registerIterationPlan(plan, iterationPlan, iteration);
                 reflectionPlan = List.of();
             }
-            if (iterationPlan.isEmpty()) {
+            if (iterationPlan.isEmpty() && !existingIteration) {
                 stoppedReason = "no_plan";
                 break;
             }
+            recoveryCheckpoint("TOOLS",traceId,conversationId,request,plan,toolResults,reflections,timeline,context,iteration,toolCallCount);
 
             for (AgentPlanStep step : iterationPlan) {
                 if (AgentStepStatus.isTerminal(step.getStatus())) {
@@ -374,7 +485,7 @@ public class AgentExecutionService {
                 }
 
                 String signature = step.getToolName() + ":" + safeJson(step.getParams());
-                if (executedSignatures.contains(signature) && !"direct-answer".equals(step.getToolName())) {
+                if (recovering==null && executedSignatures.contains(signature) && !"direct-answer".equals(step.getToolName())) {
                     step.setStatus(AgentStepStatus.SKIPPED.value());
                     step.setObservation("跳过重复工具调用");
                     timeline.add(timelineEvent(iteration, step, null));
@@ -407,6 +518,7 @@ public class AgentExecutionService {
                 toolCallCount++;
                 mergeToolResultIntoContext(context, result, step);
                 internalService.logAudit(step.getToolName(), step.getParams(), objectMapper.convertValue(result, new TypeReference<>() {}));
+                recoveryCheckpoint(result.isRequiresAction()?"WAITING":"TOOLS",traceId,conversationId,request,plan,toolResults,reflections,timeline,context,iteration,toolCallCount);
 
                 if ("error".equals(result.getStatus()) || result.isRequiresAction()) {
                     requiresAction = result.isRequiresAction();
@@ -474,10 +586,13 @@ public class AgentExecutionService {
             }
         }
 
+        if(!requiresAction) recoveryCheckpoint("FINALIZE",traceId,conversationId,request,plan,toolResults,reflections,timeline,context,iterations,toolCallCount);
         var finalReferences = collectDocumentReferences(toolResults);
         boolean evidenceCurrent = currentGenerations == null || currentGenerations.validateReferences(finalReferences, userId,
                 valueOrDefault(request.getKnowledgeBaseId(), "default")).size() == finalReferences.size();
-        String finalAnswer = evidenceCurrent ? synthesizeAnswer(request, plan, toolResults, context, requiresAction)
+        String finalAnswer = recovering!=null && recovering.checkpoint.containsKey("finalAnswer")
+                ? String.valueOf(recovering.checkpoint.get("finalAnswer"))
+                : evidenceCurrent ? synthesizeAnswer(request, plan, toolResults, context, requiresAction)
                 : "文档已更新，当前回答依据已失效，请等待当前版本索引完成后重试。";
         if (!evidenceCurrent || currentGenerations != null && currentGenerations.validateReferences(finalReferences, userId,
                 valueOrDefault(request.getKnowledgeBaseId(), "default")).size() != finalReferences.size()) {
@@ -491,6 +606,10 @@ public class AgentExecutionService {
                 }
             }
             for (String key : List.of("retrieved", "sources", "results", "answer", "__stepResults__", "lastToolResults")) context.remove(key);
+        }
+        if(recovering!=null) {
+            recovering.checkpoint.put("finalAnswer",finalAnswer);
+            durableStore.checkpoint(recovering.lease,recovering.checkpoint);
         }
         conversationManager.appendMessagesForUser(
                 conversationId,
@@ -571,6 +690,17 @@ public class AgentExecutionService {
     public Map<String, Object> confirmApproval(AgentExecutionRequest request) {
         String userId = requestUserContext.getRequiredUserId();
         String token = approvalTokenFrom(request);
+        if(durableStore!=null) {
+            var pendingRun=durableStore.findApproval(userId,token).orElseThrow(()->new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,"APPROVAL_NOT_FOUND"));
+            for(AgentPlanStep step: pendingRun.checkpoint().get("plan") instanceof List<?> list ? list.stream().map(this::toPlanStep).toList():List.<AgentPlanStep>of()) {
+                for(String key:approvalContextOverrideKeys(step.getToolName())) {
+                    if(request.getContext().containsKey(key) && !Objects.equals(String.valueOf(request.getContext().get(key)),String.valueOf(step.getParams().get(key))))
+                        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"APPROVAL_PARAMS_CHANGED");
+                }
+            }
+            AgentRunStore.Run run=durableStore.decide(userId,token,true);
+            return executeDurable(userId,run.id());
+        }
         Map<String, Object> snapshot = taskRegistry.findByApprovalToken(token);
         if (snapshot.isEmpty()) {
             return Map.of("status", "not_found", "message", "未找到待确认任务或审批已失效");
@@ -609,6 +739,7 @@ public class AgentExecutionService {
 
     public boolean cancelApproval(String token, String userId) {
         String authenticatedUserId = requestUserContext.getRequiredUserId();
+        if(durableStore!=null) { durableStore.decide(authenticatedUserId,token,false); return true; }
         Map<String, Object> snapshot = taskRegistry.findByApprovalToken(token);
         if (snapshot.isEmpty()) {
             return false;
@@ -843,6 +974,10 @@ public class AgentExecutionService {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> retryStep(String traceId, String stepId, Map<String, Object> overrideParams) {
+        if(durableStore!=null) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "DURABLE_TASK_RETRY_REQUIRES_NEW_REQUEST");
+        }
         Map<String, Object> snapshot = taskRegistry.get(traceId);
         if (snapshot == null || snapshot.isEmpty()) {
             return Map.of("status", "not_found", "traceId", traceId);
@@ -1270,7 +1405,7 @@ public class AgentExecutionService {
                 %s
                 只能从工具列表中选择toolName；如不需要工具，使用direct-answer。
                 多步任务可以输出多个步骤，但不要超过5步；参数必须来自用户任务或上下文，不确定时先用direct-answer询问澄清。
-                对危险操作(file-restore,file-version-switch)必须等待用户确认；file-delete 在前端已确认且 documentId 或 objectName 明确时可执行永久删除，不进入回收站。不要规划文件上传，文件上传必须由用户通过页面或上传接口自行完成。
+                对危险操作(file-delete,file-restore,file-version-switch)必须等待服务端正式审批；前端确认标记不代替审批。不要规划文件上传，文件上传必须由用户通过页面或上传接口自行完成。
                 document-write 和 text-to-file 只返回前端写入补丁，不会保存MinIO；只有用户明确要求写入当前文档或上下文 frontendDocumentWrite=true 时才使用。
                 路由规则：最新、当前、近期、网页或明确联网问题优先使用category=mcp-search的工具；上传材料、知识库和已有文档问题优先使用rag-search或rag-answer；用户明确禁止联网时不得使用任何mcp.*工具。
 
@@ -1327,7 +1462,7 @@ public class AgentExecutionService {
     private AgentToolResult runStepWithRetry(AgentPlanStep step, AgentExecutionRequest request,
                                              Map<String, Object> context, int iteration,
                                              List<Map<String, Object>> timeline) {
-        int maxAttempts = Math.max(1, step.getMaxRetries() + 1);
+        int maxAttempts = ToolReplayPolicy.replaySafe(step.getToolName()) ? Math.max(1, Math.min(3,step.getMaxRetries() + 1)) : 1;
         AgentToolResult lastResult = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             step.setAttempts(attempt);
@@ -1905,8 +2040,34 @@ public class AgentExecutionService {
             if (!internalService.hasPermission(step.getToolName(), context)) {
                 return AgentToolResult.error(step.getToolName(), "没有执行此工具的权限或缺少服务端确认");
             }
-            return dispatchTool(step, request, context);
+            AgentRecoveryScope scope=recoveryScope.get();
+            if(scope==null) return withFrontendAction(dispatchTool(step, request, context),step,context,asString(context.get("traceId")));
+            scope.assertLive();
+            if(("document-read".equals(step.getToolName()) || "file-delete".equals(step.getToolName()) && !isBlank(asString(step.getParams().get("documentId"))))
+                    && !(org.springframework.web.context.request.RequestContextHolder.getRequestAttributes()
+                    instanceof org.springframework.web.context.request.ServletRequestAttributes)) {
+                return AgentToolResult.actionRequired(step.getToolName(),"此步骤需要当前登录授权，请在页面继续任务。",
+                        Map.of("recoveryReason","AUTHORIZATION_REQUIRED"));
+            }
+            boolean safe=ToolReplayPolicy.replaySafe(step.getToolName());
+            AgentRunStore.Operation op=durableStore.beginOperation(scope.lease,step.getId(),step.getToolName(),step.getParams(),safe);
+            if("REUSE".equals(op.decision())) return objectMapper.convertValue(op.result(),AgentToolResult.class);
+            if(!"EXECUTE".equals(op.decision())) return AgentToolResult.actionRequired(step.getToolName(),
+                    "操作结果尚未确定或已达到重试上限，请核对后再处理。",Map.of("recoveryReason",op.decision()));
+            AgentToolResult result;
+            try { result=dispatchTool(step,request,context); }
+            catch(Exception e) {
+                if(safe) throw e;
+                result=AgentToolResult.error(step.getToolName(),"远程写操作结果无法确定");
+            }
+            result=withFrontendAction(result,step,context,scope.run.id());
+            durableStore.completeOperation(scope.lease,step.getId(),objectMapper.convertValue(result,new TypeReference<>(){}),"success".equals(result.getStatus()),safe);
+            if(!safe && !"success".equals(result.getStatus())) return AgentToolResult.actionRequired(step.getToolName(),
+                    "写操作可能已执行，已停止自动重试，请核对目标。",Map.of("recoveryReason","OUTCOME_UNKNOWN"));
+            return result;
         } catch (MemoryContextException e) {
+            throw e;
+        } catch (org.springframework.web.server.ResponseStatusException | org.springframework.dao.DataAccessException e) {
             throw e;
         } catch (Exception e) {
             log.error("工具执行失败");
@@ -1936,6 +2097,16 @@ public class AgentExecutionService {
                     "MCP search gateway is unavailable: " + valueOrDefault(e.getMessage(), e.getClass().getSimpleName()));
         }
         return null;
+    }
+
+    private AgentToolResult withFrontendAction(AgentToolResult result,AgentPlanStep step,Map<String,Object> context,String traceId) {
+        if(Boolean.TRUE.equals(result.getData().get("requiresFrontendWrite"))) {
+            Map<String,Object> data=new LinkedHashMap<>(result.getData());
+            data.put("actionId",traceId+":"+step.getId());
+            data.put("expectedVersion",context.getOrDefault("documentVersion",""));
+            result.setData(data);
+        }
+        return result;
     }
 
     /**
@@ -2576,8 +2747,22 @@ public class AgentExecutionService {
         }
 
         String userId = String.valueOf(context.get("userId"));
+        step.setRequiresApproval(true);
+        step.setRiskLevel("high");
+        AgentRecoveryScope scope=recoveryScope.get();
+        if(scope!=null) {
+            if(durableStore.approved(scope.lease,step.getId(),step.getToolName(),step.getParams())) {
+                context.put("confirmedAction",true); step.getParams().put("requireConfirmation",false); return null;
+            }
+            AgentRunStore.Challenge challenge=durableStore.challenge(scope.lease,step.getId(),step.getToolName(),step.getParams());
+            return AgentToolResult.actionRequired(step.getToolName(),"危险操作需要确认当前目标和参数。",
+                    Map.of("agentApprovalToken",challenge.token(),"expiresAt",challenge.expiresAt(),"params",step.getParams(),
+                            "interactionType","approval","recoveryReason","APPROVAL_REQUIRED"));
+        }
         String token = asString(step.getParams().get("agentApprovalToken"));
-        Map<String, Object> paramsForApproval = approvalParams == null ? step.getParams() : approvalParams;
+        Map<String, Object> paramsForApproval = new LinkedHashMap<>(approvalParams == null ? step.getParams() : approvalParams);
+        paramsForApproval.put("_approvalRunId",context.getOrDefault("traceId",""));
+        paramsForApproval.put("_approvalStepId",valueOrDefault(step.getId(),""));
         AgentApprovalService.ApprovalResult result = agentApprovalService.verifyAndConsumeDetailed(token, userId, step.getToolName(), paramsForApproval);
         if (result == AgentApprovalService.ApprovalResult.OK) {
             context.put("confirmedAction", true);
@@ -2586,7 +2771,7 @@ public class AgentExecutionService {
         }
 
         AgentApprovalService.ApprovalChallenge challenge =
-                agentApprovalService.createChallenge(userId, step.getToolName(), step.getParams());
+                agentApprovalService.createChallenge(userId, step.getToolName(), paramsForApproval);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("agentApprovalToken", challenge.token());
         data.put("expiresAt", challenge.expiresAt());
@@ -2653,7 +2838,7 @@ public class AgentExecutionService {
             Object frontendWrite = last.getData().get("requiresFrontendWrite");
             if (Boolean.TRUE.equals(frontendWrite) || "true".equalsIgnoreCase(String.valueOf(frontendWrite))) {
                 String changeLog = firstNonBlank(asString(last.getData().get("changeLog")), "AI内容已写入当前页面文档");
-                return changeLog + "。内容已更新到当前前端文档，尚未保存到MinIO，请使用页面现有保存功能确认保存。";
+                return "已生成文档修改建议。请在编辑器确认应用，检查后再保存。";
             }
         }
 

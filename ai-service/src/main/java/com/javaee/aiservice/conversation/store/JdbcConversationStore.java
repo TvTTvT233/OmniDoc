@@ -48,6 +48,8 @@ public class JdbcConversationStore implements ConversationStore {
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.javaee.aiservice.taskrun.recovery.AgentRunStore agentRunStore;
 
     private final RowMapper<Conversation> conversationMapper = this::mapConversation;
     private final RowMapper<ConversationMessage> messageMapper = this::mapMessage;
@@ -260,6 +262,7 @@ public class JdbcConversationStore implements ConversationStore {
     public void deleteOwned(String conversationId, String userId) {
         transactionTemplate.executeWithoutResult(status -> {
             requireOwned(conversationId, userId, true);
+            if(agentRunStore!=null) agentRunStore.tombstoneConversation(userId,conversationId);
             int deleted = jdbcTemplate.update(
                     "DELETE FROM ai_conversation WHERE conversation_id = ? AND user_id = ?",
                     conversationId,

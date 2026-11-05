@@ -44,9 +44,13 @@ public class AsyncAIJobListener {
 
     @Autowired
     private AgentExecutionService agentExecutionService;
+    @Autowired(required=false)
+    private com.javaee.aiservice.taskrun.recovery.AgentRecoveryWorker recoveryWorker;
 
     @RabbitListener(queues = AiRabbitMQConfig.AI_MODEL_REQUEST_QUEUE)
     public void handleModelJob(AsyncAIJobMessage message) {
+        if(recoveryWorker!=null && recoveryWorker.handleAsync(message.getJobId())) return;
+        if(recoveryWorker!=null && "agent".equals(message.getType())) return; // legacy Agent messages must not bypass the ledger
         log.info("收到异步AI任务: jobId={}, type={}, model={}",
                 message.getJobId(), message.getType(), message.getModel());
 

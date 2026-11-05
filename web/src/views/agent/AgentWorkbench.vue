@@ -34,7 +34,7 @@
                   <div v-for="tool in toolsList" :key="tool.name" class="tool-item">
                     <div class="tool-head">
                       <span class="tool-name">{{ tool.name }}</span>
-                      <el-tag size="small" :type="tool.riskLevel === 'HIGH' ? 'danger' : 'success'">
+                      <el-tag size="small" :type="tool.riskLevel?.toLowerCase() === 'high' ? 'danger' : 'success'">
                         {{ tool.riskLevel || 'LOW' }}
                       </el-tag>
                     </div>
@@ -76,6 +76,8 @@
               </div>
 
               <TaskRunPanel :run-id="activeRunId" :refresh-key="executionResult?.status" />
+              <el-button v-if="executionResult?.status === 'action_required' && executionResult?.recoveryReason !== 'OUTCOME_UNKNOWN'"
+                  :loading="executing" @click="handleResume">继续任务 / 重新获取确认</el-button>
               <!-- 执行结果用 el-scrollbar -->
               <div class="result-viewer" v-if="executionResult">
                 <h4>执行结果 / Timeline</h4>
@@ -185,6 +187,20 @@ const executeAgent = async () => {
 }
 
 // 3. 审批通过
+const handleResume = async () => {
+  if (!executionResult.value?.traceId) return
+  executing.value = true
+  try {
+    const res = await agentApi.continueTask(executionResult.value.traceId, {
+      task: '继续当前任务', clientRequestId: crypto.randomUUID(), context: {},
+    })
+    executionResult.value = res.data
+    approvalToken.value = res.data?.pendingApproval?.agentApprovalToken || ''
+    showOutcome(res.data?.status)
+  } catch {
+    ElMessage.error('暂时无法继续，请刷新任务状态后核对。')
+  } finally { executing.value = false }
+}
 const handleConfirmApproval = async () => {
   if (!approvalToken.value) return ElMessage.warning('请输入审批 Token')
   executing.value = true
@@ -214,6 +230,10 @@ const handleCancelApproval = async () => {
   if (!approvalToken.value) return
   try {
     await agentApi.cancelApproval(approvalToken.value)
+    if (executionResult.value?.traceId) {
+      const updated = await agentApi.getTaskHistory(executionResult.value.traceId)
+      executionResult.value = updated.data
+    }
     ElMessage.success('已丢弃该审批')
     approvalToken.value = ''
     fetchOverview()

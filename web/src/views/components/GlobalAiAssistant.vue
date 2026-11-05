@@ -358,6 +358,20 @@ const cancelApproval = async (approval) => {
 }
 
 const handleApproval = async (approval, agentResult) => {
+  if (agentResult.recoveryReason === 'OUTCOME_UNKNOWN') {
+    ElMessage.warning('写操作结果待核对，已停止重复执行。请到 Agent 工作台查看。')
+    return
+  }
+  if (!approval.agentApprovalToken) {
+    try {
+      const resumed = await agentApi.continueTask(agentResult.traceId, {
+        task: agentResult.task || '继续当前任务', clientRequestId: crypto.randomUUID(), context: {},
+      })
+      agentResult = resumed.data
+      approval = agentResult.pendingApproval
+      if (!approval?.agentApprovalToken) throw new Error('暂时无法获取确认，请到 Agent 工作台核对任务。')
+    } catch (error) { ElMessage.error(error.message); return }
+  }
   const toolName = approval.toolName
   const params = approval.params || {}
   try {
@@ -386,7 +400,7 @@ const handleApproval = async (approval, agentResult) => {
     }
 
     await ElMessageBox.confirm(
-      `即将执行操作：${toolName}\n\n确认继续吗？`,
+      `即将执行操作：${toolName}\n目标：${params.objectName || params.documentId || params.recycleId || ''}\n\n确认继续吗？`,
       '操作确认',
       { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' },
     )
@@ -407,7 +421,7 @@ const executeApproval = async (approval, agentResult, extraParams = {}) => {
       task: agentResult.task,
       conversationId: currentConvId.value,
       model: currentModel.value,
-      agentApprovalToken: approval.agentApprovalToken,
+      approvalToken: approval.agentApprovalToken,
       ragEnabled: true,
       dryRun: false,
       maxIterations: 3,
@@ -416,10 +430,7 @@ const executeApproval = async (approval, agentResult, extraParams = {}) => {
       autoReplan: true,
       returnIntermediateSteps: true,
       context: {
-        ...agentResult.context,
         agentApprovalToken: approval.agentApprovalToken,
-        documentId: extraParams.documentId,
-        bucketName: 'omnidoc',
         ...extraParams,
       },
     })

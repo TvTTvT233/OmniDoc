@@ -9,9 +9,30 @@ import static com.javaee.aiservice.taskrun.TaskRunMetadata.*;
 @Component
 public class AgentTaskRunAdapter {
     private final AgentTaskRegistry registry;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.javaee.aiservice.taskrun.recovery.AgentRunStore durableStore;
     public AgentTaskRunAdapter(AgentTaskRegistry registry) { this.registry = registry; }
 
     public Optional<TaskRunView> findOwned(String userId, String traceId) {
+        if(durableStore!=null) {
+            var durable=durableStore.findOwned(userId,traceId);
+            if(durable.isPresent()) {
+                var run=durable.get();
+                List<TaskRunView.Step> steps=new ArrayList<>();
+                Object plan=run.checkpoint().get("plan");
+                if(plan instanceof List<?> list) for(Object rawStep:list) {
+                    Map<String,Object> step=map(rawStep);
+                    steps.add(new TaskRunView.Step(text(step.get("id")),"TOOL",status(text(step.get("status"))),text(step.get("status")),integer(step.get("attempts")),null,null));
+                }
+                return Optional.of(new TaskRunView(1,"agent:"+traceId,"AGENT",traceId,"AGENT",run.status(),run.status(),
+                        text(run.result().get("status")),run.reason(),"CANCELLED".equals(run.status()),run.attempt(),null,run.createdAt(),null,
+                        Set.of("SUCCEEDED","FAILED").contains(run.status())?run.updatedAt():null,Instant.now(),
+                        run.asyncJobId()==null?List.of():List.of(new TaskRunView.Link("TRIGGERED_BY","async:"+run.asyncJobId())),steps,List.of(),
+                        run.result().isEmpty()?null:new TaskRunView.Result("AGENT_TRACE",traceId,text(run.result().get("status")),null),List.of(),
+                        new TaskRunView.Capabilities("JDBC","CHECKPOINT_SUMMARY",true,List.of("UNCERTAIN_WRITES_REQUIRE_RECONCILIATION","NO_CROSS_SERVICE_EXACTLY_ONCE","SINGLE_STEP_RETRY_REQUIRES_NEW_REQUEST"))));
+            }
+            if(durableStore.known(traceId)) return Optional.empty();
+        }
         Map<String, Object> snapshot = registry.getForProtocol(traceId);
         if (userId == null || !userId.equals(snapshot.get("userId"))) return Optional.empty();
         Map<String, Object> meta = map(snapshot.get(KEY));

@@ -9,6 +9,10 @@
       <p v-if="run.businessStatus === 'M0_NOT_READY'">审查结论：本轮仍有待处理事项</p>
       <p v-if="run.result?.freshness === 'OUTDATED'">此结果已过期，请重新审查。</p>
       <p v-if="run.waitingReason === 'PLAN_CONFIRMATION'">计划已生成，尚未执行。</p>
+      <p v-if="run.waitingReason === 'OUTCOME_UNKNOWN'" role="alert">写操作可能已经执行，已停止自动重试。请先核对目标文件，不要重复提交同一写操作。</p>
+      <p v-if="run.waitingReason === 'AUTHORIZATION_REQUIRED'">此步骤需要当前登录授权，请在页面继续任务。</p>
+      <p v-if="run.waitingReason === 'RECOVERY_LIMIT' || run.waitingReason === 'RETRY_LIMIT'">已达到恢复或重试上限，请检查失败原因。</p>
+      <p v-if="run.waitingReason === 'APPROVAL_REQUIRED'">等待确认操作目标；若原确认已失效，请续接任务重新获取确认。</p>
       <details><summary>查看运行记录</summary>
         <p>运行标识：{{ run.runId }}</p>
         <p v-if="run.result">结果引用：{{ run.result.resourceId }}</p>

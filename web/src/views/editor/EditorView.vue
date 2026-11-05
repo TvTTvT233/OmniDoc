@@ -676,6 +676,7 @@ const handleSend = async () => {
     scrollToBottom()
 
     const contextText = document.querySelector('.paper')?.innerText || ''
+    const originalContent = document.querySelector('.paper')?.innerHTML || ''
     const res = await agentApi.executeTask({
       task: submission.content,
       model: currentModel.value,
@@ -683,6 +684,7 @@ const handleSend = async () => {
       clientRequestId: submission.clientRequestId,
       context: {
         documentId: shouldSendCurrentDocumentId ? docId : undefined,
+        documentVersion: savedVersion.value,
         frontendDocumentWrite: frontendWriteIntent,
         frontendDeleteConfirmed: frontendDeleteIntent,
         documentContent: contextText.substring(0, 3000),
@@ -692,9 +694,20 @@ const handleSend = async () => {
       }
     })
 
-    const agentResult = res.data
+    let agentResult = res.data
+    if (agentResult?.pendingApproval) {
+      const { completeAgentApproval } = await import('../../api/agentApproval')
+      agentResult = await completeAgentApproval(agentResult, { api: agentApi, ask: async approval => {
+        try {
+          await ElMessageBox.confirm(`操作：${approval.toolName}\n目标：${approval.params?.objectName || approval.params?.documentId || approval.params?.recycleId || ''}\n确认执行此操作吗？`, '确认操作目标', {
+            confirmButtonText: '确认执行', cancelButtonText: '取消', type: 'warning',
+          })
+          return true
+        } catch { return false }
+      } })
+    }
 
-    const writeResult = applyFrontendWriteFromToolResults(agentResult.toolResults)
+    const writeResult = await applyFrontendWriteFromToolResults(agentResult.toolResults, originalContent)
     const fileResult = parseToolResults(agentResult.toolResults)
     latestActionResult.value = writeResult || fileResult
     pendingPreview.value = null
@@ -766,7 +779,8 @@ const inferFrontendWriteMode = (message, selection = '') => {
   return 'append'
 }
 
-const applyFrontendWriteFromToolResults = (toolResults) => {
+const appliedFrontendActions = new Set()
+const applyFrontendWriteFromToolResults = async (toolResults, originalContent) => {
   if (!toolResults || !Array.isArray(toolResults) || isChatMode.value) return null
 
   const target = toolResults.find(tr => {
@@ -776,8 +790,23 @@ const applyFrontendWriteFromToolResults = (toolResults) => {
   if (!target) return null
 
   const data = target.data || {}
+  const { checkFrontendAction } = await import('../../api/frontendAction')
+  const validate = () => checkFrontendAction(data, {
+    documentId: docId, version: savedVersion.value, content: document.querySelector('.paper')?.innerHTML || '',
+    originalContent, appliedIds: appliedFrontendActions,
+  })
+  let blocked = validate()
+  if (blocked) { ElMessage.warning(blocked); return null }
+  try {
+    await ElMessageBox.confirm(`将生成内容以“${data.writeMode || 'append'}”方式应用到当前文档？应用后仍需保存。`, '确认应用文档修改', {
+      confirmButtonText: '应用修改', cancelButtonText: '保留原文', type: 'warning',
+    })
+  } catch { return null }
+  blocked = validate()
+  if (blocked) { ElMessage.warning(blocked); return null }
   const applied = applyFrontendDocumentWrite(data)
   if (!applied) return null
+  appliedFrontendActions.add(data.actionId)
 
   return {
     type: 'document-write',

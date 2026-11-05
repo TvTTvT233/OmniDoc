@@ -28,12 +28,27 @@ public class AsyncAIJobService {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+    @Autowired(required=false)
+    private com.javaee.aiservice.taskrun.recovery.AgentRunStore durableStore;
+    @Autowired
+    private com.javaee.aiservice.agent.execution.AgentExecutionService agentExecutionService;
 
     @Value("${ai.async.job-expiry-hours:24}")
     private long jobExpiryHours;
 
     public AsyncAIJobVO submit(String type, Object payload, String model, String userId) {
         String jobId = UUID.randomUUID().toString();
+        if(durableStore!=null && "agent".equals(type)) {
+            var request=objectMapper.convertValue(payload,com.javaee.aiservice.agent.execution.model.AgentExecutionRequest.class);
+            request.setUserId(userId);
+            if(model!=null && !model.isBlank()) request.setModel(model);
+            var run=agentExecutionService.submitDurable(request,jobId);
+            AsyncAIJobMessage wake=new AsyncAIJobMessage(); wake.setJobId(run.asyncJobId()); wake.setType("agent");
+            // The database is the queue. Rabbit is a latency optimization, never the payload authority.
+            try { rabbitTemplate.convertAndSend(AiRabbitMQConfig.AI_EXCHANGE,AiRabbitMQConfig.AI_MODEL_REQUEST_ROUTING_KEY,wake); }
+            catch(org.springframework.amqp.AmqpException unavailable) { /* poller will claim the committed run */ }
+            return durableJob(run);
+        }
         long now = System.currentTimeMillis();
 
         AsyncAIJobVO job = new AsyncAIJobVO();
@@ -117,11 +132,23 @@ public class AsyncAIJobService {
     }
 
     private AsyncAIJobVO load(String jobId) {
+        if(durableStore!=null) {
+            var run=durableStore.findAsync(jobId);
+            if(run.isPresent()) return durableJob(run.get());
+        }
         Object value = redisTemplate.opsForValue().get(JOB_PREFIX + jobId);
         if (value instanceof AsyncAIJobVO job) {
             return job;
         }
         return objectMapper.convertValue(value, AsyncAIJobVO.class);
+    }
+
+    private AsyncAIJobVO durableJob(com.javaee.aiservice.taskrun.recovery.AgentRunStore.Run run) {
+        AsyncAIJobVO job=new AsyncAIJobVO(); job.setJobId(run.asyncJobId()); job.setType("agent");
+        job.setUserId(run.owner()); job.setTraceId(run.id());
+        job.setStatus(switch(run.status()) { case "QUEUED" -> "queued"; case "RUNNING" -> "running"; default -> "success"; });
+        var result=agentExecutionService.durableSnapshot(run);result.put("runtimePersistence","JDBC");job.setResult(result);
+        return job;
     }
 
     private void save(AsyncAIJobVO job) {
