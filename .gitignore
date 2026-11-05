@@ -3,6 +3,14 @@ target/
 *.log
 *.log.*
 .env
+.env.*
+!.env.example
+*.private.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
 .local/
 .maven-cache/
 .pnpm-store/
