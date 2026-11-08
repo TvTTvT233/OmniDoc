@@ -1,0 +1,226 @@
+{
+  "suiteId": "agent",
+  "version": "1",
+  "cases": [
+    {
+      "id": "AGT-001",
+      "title": "重复提交文本统计",
+      "task": "相同会话和请求标识再次提交文本统计",
+      "initialState": "合成文本 test；同一请求键；文本统计服务为测试替身",
+      "expectedOutcome": "两次返回同一任务；工具只调用一次且不重复追加消息",
+      "forbiddenBehaviors": [
+        "重复工具调用或重复会话消息"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "duplicateSubmissionReusesResultAndDoesNotAppendMessages"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-002",
+      "title": "工具完成后中断恢复",
+      "task": "工具结果保存后检查点前中断，再恢复统计任务",
+      "initialState": "审计调用注入中断；租约过期；保留 H2 账本",
+      "expectedOutcome": "复用已保存结果；工具总调用一次；消息标识稳定",
+      "forbiddenBehaviors": [
+        "已完成工具再次调用"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "crashAfterToolResultBeforeCheckpointReusesResultAndStableMessageKeys"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-003",
+      "title": "写结果未知停止重放",
+      "task": "审批后删除调用响应丢失，换执行实例恢复",
+      "initialState": "合成对象 synthetic.txt；删除替身抛中断；租约过期",
+      "expectedOutcome": "恢复结果为 OUTCOME_UNKNOWN；重复确认不产生第二次删除调用",
+      "forbiddenBehaviors": [
+        "未知写结果自动重放"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "writeResponseLostAcrossRestartStopsWithoutSecondDispatch"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-004",
+      "title": "审批跨实例与重复确认",
+      "task": "提交删除任务，在新服务实例确认，再重复确认",
+      "initialState": "H2 持久账本；合成对象；删除服务为测试替身",
+      "expectedOutcome": "确认后成功；重复确认总计仅一次删除调用",
+      "forbiddenBehaviors": [
+        "重复确认导致重复删除"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "approvalSurvivesNewServiceAndRepeatedConfirmDoesNotDeleteTwice"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-005",
+      "title": "审批目标变更拒绝",
+      "task": "取得删除确认后修改目标 bucket 再确认",
+      "initialState": "原审批绑定合成对象与 bucket；确认改成其他 bucket",
+      "expectedOutcome": "返回 APPROVAL_PARAMS_CHANGED；删除调用次数为零",
+      "forbiddenBehaviors": [
+        "用旧审批授权新目标"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "changedApprovalTargetIsRejectedWithoutDispatch"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-006",
+      "title": "最终回复阶段恢复",
+      "task": "工具完成后助手消息写入前中断，恢复任务",
+      "initialState": "助手追加注入中断；租约过期；同一 H2 任务",
+      "expectedOutcome": "任务成功；统计工具总调用一次",
+      "forbiddenBehaviors": [
+        "最终回复恢复重新执行工具"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "crashDuringFinalAnswerDoesNotPlanOrExecuteToolsAgain"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-007",
+      "title": "第二步中断保留第一步",
+      "task": "运行两步统计计划，第二步中断后继续",
+      "initialState": "计划使用固定模型输出替身；第二步首次调用中断",
+      "expectedOutcome": "第一步仅调用一次；第二步调用两次；最终成功",
+      "forbiddenBehaviors": [
+        "恢复时重复第一步"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "completedFirstStepIsNotRepeatedWhenSecondStepCrashes"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-008",
+      "title": "写成功但判据失败不重试",
+      "task": "删除工具成功而业务判据不满足，再重复确认",
+      "initialState": "固定计划要求不存在的数据字段；计划建议多次重试",
+      "expectedOutcome": "结果为 error；实际删除替身总调用一次",
+      "forbiddenBehaviors": [
+        "按判据失败自动重试已成功写操作"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "successfulWriteWithUnmetBusinessCriteriaIsNeverAutomaticallyRetried"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-009",
+      "title": "队列通知丢失后补偿",
+      "task": "异步提交文本统计，消息通知失败后由轮询执行",
+      "initialState": "Rabbit 替身抛发送异常；H2 保存任务；重复唤醒",
+      "expectedOutcome": "重复提交复用job；轮询完成；重复通知不重复工具调用",
+      "forbiddenBehaviors": [
+        "通知失败丢任务或重复通知重复执行"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "lostRabbitWakeupIsRecoveredByPollerAndDuplicateNotificationDoesNotExecuteTwice"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    },
+    {
+      "id": "AGT-010",
+      "title": "请求冲突与跨用户隔离",
+      "task": "同键重提交、修改任务载荷并以其他用户读取",
+      "initialState": "H2 操作账本；用户 u 与 other；相同请求键",
+      "expectedOutcome": "同载荷复用任务；异载荷冲突；其他用户不可读",
+      "forbiddenBehaviors": [
+        "请求键覆盖原任务或跨用户读取"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentRunRecoveryTest",
+        "method": "sameSubmissionReturnsSameRunAndDifferentPayloadConflicts"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ]
+    }
+  ]
+}

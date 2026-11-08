@@ -12,6 +12,8 @@ target/
 *.pfx
 *.jks
 .local/
+__pycache__/
+*.pyc
 .maven-cache/
 .pnpm-store/
 node_modules/

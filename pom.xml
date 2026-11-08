@@ -164,6 +164,27 @@
         </plugins>
     </build>
 
+    <!-- Opt-in evaluation profile: each run gets isolated evidence, ordinary tests are unchanged. -->
+    <profiles>
+        <profile>
+            <id>task-evaluation</id>
+            <properties>
+                <omnidoc.eval.reportsDirectory>${project.build.directory}/eval-reports</omnidoc.eval.reportsDirectory>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <reportsDirectory>${omnidoc.eval.reportsDirectory}/${project.artifactId}</reportsDirectory>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <!-- 子模块声明（后续创建的微服务都要在这里声明） -->
     <modules>
         <module>common</module>

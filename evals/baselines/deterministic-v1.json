@@ -1,0 +1,1088 @@
+{
+  "schemaVersion": 1,
+  "runId": "20261108T061308Z-423ad45b",
+  "mode": "deterministic-components",
+  "createdAtUtc": "2026-11-08T06:13:08.713440+00:00",
+  "code": {
+    "commit": "ea4c0ad4f9d44aa5731814d3cfe0e3ea85657eb2",
+    "dirty": true,
+    "treeDigest": "413f958fd9c28a1593fcf3d6a802158b78b3a6dfca0609264ec9820dd6804ef1"
+  },
+  "dataset": {
+    "versions": {
+      "agent": "1",
+      "document": "1",
+      "review": "1"
+    },
+    "digest": "ee255052dcb9983cf2106db70b6b833e24d116585cf04db6878d7608fd990263",
+    "fixtureDigest": "db74463ab2aa63ea645776191d0b1e22e649924e47d4f69894f451b6814432c9"
+  },
+  "grader": {
+    "version": "deterministic-junit-v1",
+    "digest": "70667ad0d027a1a23f94dfc6d20c42ba2a82d24ff55410609b23605f7d7648cc"
+  },
+  "executionConfig": {
+    "models": "DISABLED_TEST_DOUBLES",
+    "promptVersion": null,
+    "retrievalConfig": "CASE_FIXTURES",
+    "runnerOs": "Windows"
+  },
+  "repeats": 1,
+  "infrastructureFailures": [],
+  "usage": {
+    "inputTokens": null,
+    "outputTokens": null,
+    "cost": null,
+    "reason": "NOT_MEASURED_NO_REAL_MODEL"
+  },
+  "cases": [
+    {
+      "id": "AGT-001",
+      "title": "重复提交文本统计",
+      "task": "相同会话和请求标识再次提交文本统计",
+      "initialState": "合成文本 test；同一请求键；文本统计服务为测试替身",
+      "expectedOutcome": "两次返回同一任务；工具只调用一次且不重复追加消息",
+      "forbiddenBehaviors": [
+        "重复工具调用或重复会话消息"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "duplicateSubmissionReusesResultAndDoesNotAppendMessages"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 94.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-002",
+      "title": "工具完成后中断恢复",
+      "task": "工具结果保存后检查点前中断，再恢复统计任务",
+      "initialState": "审计调用注入中断；租约过期；保留 H2 账本",
+      "expectedOutcome": "复用已保存结果；工具总调用一次；消息标识稳定",
+      "forbiddenBehaviors": [
+        "已完成工具再次调用"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "crashAfterToolResultBeforeCheckpointReusesResultAndStableMessageKeys"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 139.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-003",
+      "title": "写结果未知停止重放",
+      "task": "审批后删除调用响应丢失，换执行实例恢复",
+      "initialState": "合成对象 synthetic.txt；删除替身抛中断；租约过期",
+      "expectedOutcome": "恢复结果为 OUTCOME_UNKNOWN；重复确认不产生第二次删除调用",
+      "forbiddenBehaviors": [
+        "未知写结果自动重放"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "writeResponseLostAcrossRestartStopsWithoutSecondDispatch"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 171.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-004",
+      "title": "审批跨实例与重复确认",
+      "task": "提交删除任务，在新服务实例确认，再重复确认",
+      "initialState": "H2 持久账本；合成对象；删除服务为测试替身",
+      "expectedOutcome": "确认后成功；重复确认总计仅一次删除调用",
+      "forbiddenBehaviors": [
+        "重复确认导致重复删除"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "approvalSurvivesNewServiceAndRepeatedConfirmDoesNotDeleteTwice"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 142.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-005",
+      "title": "审批目标变更拒绝",
+      "task": "取得删除确认后修改目标 bucket 再确认",
+      "initialState": "原审批绑定合成对象与 bucket；确认改成其他 bucket",
+      "expectedOutcome": "返回 APPROVAL_PARAMS_CHANGED；删除调用次数为零",
+      "forbiddenBehaviors": [
+        "用旧审批授权新目标"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "changedApprovalTargetIsRejectedWithoutDispatch"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 97.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-006",
+      "title": "最终回复阶段恢复",
+      "task": "工具完成后助手消息写入前中断，恢复任务",
+      "initialState": "助手追加注入中断；租约过期；同一 H2 任务",
+      "expectedOutcome": "任务成功；统计工具总调用一次",
+      "forbiddenBehaviors": [
+        "最终回复恢复重新执行工具"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "crashDuringFinalAnswerDoesNotPlanOrExecuteToolsAgain"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 154.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-007",
+      "title": "第二步中断保留第一步",
+      "task": "运行两步统计计划，第二步中断后继续",
+      "initialState": "计划使用固定模型输出替身；第二步首次调用中断",
+      "expectedOutcome": "第一步仅调用一次；第二步调用两次；最终成功",
+      "forbiddenBehaviors": [
+        "恢复时重复第一步"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "completedFirstStepIsNotRepeatedWhenSecondStepCrashes"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 94.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-008",
+      "title": "写成功但判据失败不重试",
+      "task": "删除工具成功而业务判据不满足，再重复确认",
+      "initialState": "固定计划要求不存在的数据字段；计划建议多次重试",
+      "expectedOutcome": "结果为 error；实际删除替身总调用一次",
+      "forbiddenBehaviors": [
+        "按判据失败自动重试已成功写操作"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "successfulWriteWithUnmetBusinessCriteriaIsNeverAutomaticallyRetried"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 1009.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-009",
+      "title": "队列通知丢失后补偿",
+      "task": "异步提交文本统计，消息通知失败后由轮询执行",
+      "initialState": "Rabbit 替身抛发送异常；H2 保存任务；重复唤醒",
+      "expectedOutcome": "重复提交复用job；轮询完成；重复通知不重复工具调用",
+      "forbiddenBehaviors": [
+        "通知失败丢任务或重复通知重复执行"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentDurableExecutionTest",
+        "method": "lostRabbitWakeupIsRecoveredByPollerAndDuplicateNotificationDoesNotExecuteTwice"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 864.0,
+          "evidenceSha256": "27811a7b5ecbf7f9c1ca3c05db8808a4314ceaa2b291a48b0f91eeaafbe91658",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "AGT-010",
+      "title": "请求冲突与跨用户隔离",
+      "task": "同键重提交、修改任务载荷并以其他用户读取",
+      "initialState": "H2 操作账本；用户 u 与 other；相同请求键",
+      "expectedOutcome": "同载荷复用任务；异载荷冲突；其他用户不可读",
+      "forbiddenBehaviors": [
+        "请求键覆盖原任务或跨用户读取"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 AgentExecutionService / AgentRunStore 与 H2；模型、文件服务、会话依赖使用测试替身；异常模拟中断而非杀进程",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.taskrun.AgentRunRecoveryTest",
+        "method": "sameSubmissionReturnsSameRunAndDifferentPayloadConflicts"
+      },
+      "tags": [
+        "agent",
+        "reliability"
+      ],
+      "suiteId": "agent",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 16.0,
+          "evidenceSha256": "95851a4e2e64ba2afe80499274681f3c18995d35694e684931766d655762fb6f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-001",
+      "title": "保存正文形成不可变版本和唯一索引任务",
+      "task": "创建空文档后保存 first\n第二段😀，再读取当前正文和两个版本快照。",
+      "initialState": "每例清空专用 H2 文档表；合成用户 7 创建版本 1 的空文档。",
+      "expectedOutcome": "版本记录为 2 条，索引任务为 1 条；版本 1 仍为空，版本 2 和当前正文等于保存文本，解析器标识为 explicit-content-v1。",
+      "forbiddenBehaviors": [
+        "覆盖旧版本正文",
+        "从外部正文存储回读替代可信快照"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、Spring 事务、MyBatis mapper 和生产 DocumentServiceImpl/DocumentIndexService；DocumentContentService 与 FileServiceClient 为 Mockito 替身；无网络、模型、Redis 或 MinIO。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "createSaveStoresOneImmutableRevisionAndTaskPerVersion"
+      },
+      "tags": [
+        "snapshot",
+        "version",
+        "outbox"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 73.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-002",
+      "title": "保存事务失败不能留下半份版本或索引任务",
+      "task": "在显式事务中保存 not committed，随后抛出异常回滚并检查数据库。",
+      "initialState": "每例清空专用 H2 文档表；合成用户 7 已有版本 1 的空文档。",
+      "expectedOutcome": "事务抛出异常后文档仍为版本 1，仅有原始 1 条版本记录，索引任务数量为 0。",
+      "forbiddenBehaviors": [
+        "保存回滚后残留新版本",
+        "保存回滚后残留可执行索引任务"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、Spring 事务、MyBatis mapper 和生产文档服务；正文/文件服务为 Mockito 替身；异常为确定性注入，不是进程崩溃实测。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "transactionRollbackLeavesNoRevisionOrOutboxHalfWrite"
+      },
+      "tags": [
+        "transaction",
+        "atomicity",
+        "outbox"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 1138.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-003",
+      "title": "两次并发保存同一版本只有一方成功",
+      "task": "两个线程携带 expectedVersion=1 同时保存不同合成正文。",
+      "initialState": "每例清空专用 H2 文档表；文档为版本 1，通过同一个起跑锁释放两个保存请求。",
+      "expectedOutcome": "两次调用恰好一次成功和一次版本冲突 409；最终版本记录总数为 2。",
+      "forbiddenBehaviors": [
+        "两个旧版本写入同时成功",
+        "静默覆盖另一方提交"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、Spring 事务和 MyBatis mapper，两个本进程线程；文件/正文服务为 Mockito 替身；合成正文使用随机 UUID，其内容不影响评分。不是多节点 MySQL 验收。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "concurrentExpectedVersionHasOneCommitAndOneConflict"
+      },
+      "tags": [
+        "concurrency",
+        "version-conflict"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 63.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-004",
+      "title": "新版保存立即停用旧索引，历史引用仍定位原文",
+      "task": "发布正文 中文😀 evidence 的索引，再保存 new text，检查当前可检索状态与旧引用。",
+      "initialState": "每例清空专用 H2 文档表；创建并保存版本 2，构造有效片段偏移和摘要后通过生产发布接口登记引用。",
+      "expectedOutcome": "发布后 queryable=true；保存版本 3 后 queryable=false，旧 generation 不可见；旧引用解析为 HISTORICAL，正文仍为 中文😀 evidence。",
+      "forbiddenBehaviors": [
+        "新版本未索引时继续提供旧索引",
+        "历史引用被新正文替换"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、Spring 事务和生产 DocumentIndexService；索引完成请求由夹具构造，正文/文件服务 mock；没有真实 Embedding、向量库或模型答案。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "publishThenSaveImmediatelyHidesOldGenerationButHistoricalReferenceSurvives"
+      },
+      "tags": [
+        "stale-index",
+        "historical-citation",
+        "version"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 86.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-005",
+      "title": "租约过期后旧执行者不能发布索引",
+      "task": "领取索引任务后将租约置为过期，再领取并分别尝试旧、新租约发布。",
+      "initialState": "每例清空专用 H2 文档表；合成正文 lease 已保存，第一执行者已取得任务；用夹具直接调整数据库租约时间。",
+      "expectedOutcome": "重新领取得到不同 generation；旧租约完成请求 published=false，新租约完成请求 published=true。",
+      "forbiddenBehaviors": [
+        "过期执行者发布覆盖当前索引",
+        "新旧领取共用 generation"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式和生产任务领取/发布逻辑；时间过期由 SQL 夹具设置，文件/正文服务 mock；不代表实际停机或跨节点恢复验证。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "expiredLeaseReclaimsDifferentGenerationAndRejectsOldToken"
+      },
+      "tags": [
+        "lease",
+        "stale-worker",
+        "index-publication"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 119.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-006",
+      "title": "文档删除立即阻断读取、引用和迟到发布",
+      "task": "发布 kept snapshot 的索引后逻辑删除文档，再尝试正文读取、旧引用解析和迟到完成。",
+      "initialState": "每例清空专用 H2 文档表；合成用户 7 的版本 2 已登记可用引用。",
+      "expectedOutcome": "正文读取返回 404，引用解析拒绝，迟到完成 published=false；原版本快照仍保留且未调用正文存储删除。",
+      "forbiddenBehaviors": [
+        "删除后仍能通过旧引用读正文",
+        "迟到索引重新发布已删除文档",
+        "删除本例时自动硬删原始正文存储"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、Spring 事务和生产文档/索引服务；文件/正文服务 mock；不操作实际用户文件，不证明 MinIO 实物删除行为。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "deletingImmediatelyBlocksReadsReferencesAndLateCompletionWithoutDeletingSource"
+      },
+      "tags": [
+        "delete",
+        "citation-access",
+        "source-preservation"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 80.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-007",
+      "title": "其他用户不能读取版本列表或排队索引",
+      "task": "用户 8 尝试对用户 7 的合成私有文档读取版本列表和请求建立索引。",
+      "initialState": "每例清空专用 H2 文档表；文档正文为 private，归属用户 7，没有授予用户 8 权限。",
+      "expectedOutcome": "用户 8 的索引请求和版本列表读取均抛出 DocumentStateException。",
+      "forbiddenBehaviors": [
+        "跨用户成功读取版本列表",
+        "跨用户成功请求建立索引"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、MyBatis 权限查询及生产服务；文件/正文服务 mock；直接调用服务层，不代表 HTTP/JWT 安全链验证。",
+      "critical": true,
+      "adapter": {
+        "module": "document-service",
+        "className": "com.javaee.documentservice.consistency.DocumentConsistencyTransactionTest",
+        "method": "anotherUserCannotReadSnapshotReferenceOrQueueBuild"
+      },
+      "tags": [
+        "authorization",
+        "tenant-isolation"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 70.0,
+          "evidenceSha256": "252ae252a36bcf49d594df7dc8dd2bae4d45d795c25861edfc107fc44877157f",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-008",
+      "title": "检索引用的版本和偏移不能由调用者伪造",
+      "task": "对真实登记版本 2 的合成引用提交版本 999 和伪造偏移，调用生产引用校验。",
+      "initialState": "夹具登记文档 doc、generation、版本 2 和完整文本偏移；其他引用标识保持一致。",
+      "expectedOutcome": "validateReferences 返回空列表，不接受伪造版本或偏移的引用。",
+      "forbiddenBehaviors": [
+        "仅凭 referenceId 相同就信任错误版本或位置"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "调用真实 CurrentGenerationRetrieval；GenerationStore、IndexAuthorityClient、DocumentVectorizer、VectorStore、Reranker 全部为 Mockito 替身。无真实模型、数据库或网络。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.consistency.CurrentGenerationRetrievalTest",
+        "method": "fabricatedCitationFieldsAreNotTrusted"
+      },
+      "tags": [
+        "citation-integrity",
+        "version",
+        "offset"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 98.0,
+          "evidenceSha256": "c44224dbf101213e5f171355612e56da16ec33c40c8cfbd2aed9dc0a99f9adcf",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-009",
+      "title": "持久化引用跨服务实例保留，重复追加不得篡改引用",
+      "task": "保存带引用的助手消息，新建服务实例重复追加同一请求，再以相同请求标识替换引用。",
+      "initialState": "每例创建独立随机命名 H2 会话数据库，合成 owner 会话无消息；引用指向合成文档 doc 的版本 2、正文 text。",
+      "expectedOutcome": "新服务实例读取到唯一一条消息，公开引用与原引用一致；相同幂等键改成另一引用时抛出 ConversationMemoryException。",
+      "forbiddenBehaviors": [
+        "服务实例切换导致引用丢失",
+        "重放生成重复消息",
+        "相同幂等键静默替换引用"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 H2/MySQL 模式、JDBC 会话存储与生产公开消息映射；RuntimeStateCleanup 为 no-op，旧会话导入返回空。只是新 Java 服务实例，不是操作系统进程重启。无外部模型。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.consistency.PublicDocumentReferencesTest",
+        "method": "jdbcRoundTripAndIdempotentReplayPreserveReferencesAcrossServiceRestart"
+      },
+      "tags": [
+        "citation-persistence",
+        "idempotency",
+        "instance-recovery"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 2166.0,
+          "evidenceSha256": "2cb739f0db9a64fa2e35a8823c0bd99612d944f88dd5e3dfed7f463cdaf9a2e5",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "DOC-010",
+      "title": "文档保存或删除导致索引不可见时停止检索链路",
+      "task": "对已有候选向量但权威可见列表为空的文档发起带重排的知识查询。",
+      "initialState": "夹具提供合成当前索引候选；IndexAuthorityClient 的 visibility 返回空列表以表示保存或删除后的不可检索状态。",
+      "expectedOutcome": "search 抛出 INDEX_NOT_READY；Embedding、向量检索和重排组件均未被调用。",
+      "forbiddenBehaviors": [
+        "权威索引不可见时调用旧向量检索",
+        "把尚未就绪伪装成成功回答或成功空结果"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "调用真实 CurrentGenerationRetrieval；所有存储、权威接口、Embedding、VectorStore 和 Reranker 为 Mockito 替身。仅验证状态门控，不评分模型回答质量。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.consistency.CurrentGenerationRetrievalTest",
+        "method": "savedOrDeletedDocumentNeverReachesEmbeddingOrReranker"
+      },
+      "tags": [
+        "stale-index",
+        "fail-closed",
+        "no-model"
+      ],
+      "suiteId": "document",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 361.0,
+          "evidenceSha256": "c44224dbf101213e5f171355612e56da16ec33c40c8cfbd2aed9dc0a99f9adcf",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-001",
+      "title": "手工规则发布保留最新版本和停用条目",
+      "task": "确认最新手工清单，读取已发布规则，再尝试发布旧草稿并重新启用停用条目。",
+      "initialState": "LOCAL_ONLY 合成案例；先创建一个启用规则，再创建一个停用规则，产生两版草稿。",
+      "expectedOutcome": "最新版本发布为 CONFIRMED，读取仍返回两个原条目；旧草稿发布被 CHECKLIST_NOT_CONFIRMED 拒绝；启用停用条目生成新的 CANDIDATE_DRAFT。",
+      "forbiddenBehaviors": [
+        "读取旧草稿冒充最新清单",
+        "发布旧版本覆盖正式规则",
+        "修改正式快照代替生成新草稿"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2 数据库与生产 JDBC/ChecklistLifecycle 服务；合成规则；无模型、无外部文件服务。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.checklist.OfficialBasisChecklistLifecycleTest",
+        "method": "publishedLatestRevisionRemainsReadableWithDisabledItemsAndOldDraftCannotRepublish"
+      },
+      "tags": [
+        "manual-checklist",
+        "immutable-snapshot",
+        "publication"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 629.0,
+          "evidenceSha256": "ab6ca20baa958e0b3b484b1d39c5476b4bfabf2a7d3dc291de3d025817d159bc",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-002",
+      "title": "未确认条件与不安全规则阻止发布",
+      "task": "依次尝试发布未确认的候选规则、适用性尚未决定的规则和不安全的正则规则。",
+      "initialState": "LOCAL_ONLY 合成案例及就绪依据；候选规则由测试夹具直接提供，不经过自动文件提取。",
+      "expectedOutcome": "三次发布分别返回 CHECKLIST_ACK_MISMATCH、CONDITIONAL_UNRESOLVED、REQUEST_INVALID；不得形成可用于正式审查的成功发布。",
+      "forbiddenBehaviors": [
+        "跳过用户确认",
+        "将待决定条件当作适用",
+        "发布不安全正则表达式"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2 与生产规则生命周期服务；依据和候选为合成夹具，官方自动提取未执行，无模型调用。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.checklist.OfficialBasisChecklistLifecycleTest",
+        "method": "unacknowledgedConditionalAndUnsafeRegexRulesCannotPublish"
+      },
+      "tags": [
+        "confirmation",
+        "conditional-rule",
+        "publication"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 831.0,
+          "evidenceSha256": "ab6ca20baa958e0b3b484b1d39c5476b4bfabf2a7d3dc291de3d025817d159bc",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-003",
+      "title": "材料不足产生一个带双侧证据的缺失问题",
+      "task": "对要求至少两份材料、已确认分配不足的输入执行齐全性审查。",
+      "initialState": "合成正式清单 minimumCount=2，命名规则 NONE，材料清单和已确认分配为空。",
+      "expectedOutcome": "恰好一个 MISSING 发现；证据集合同时包含 RULE 和 MATERIAL 两侧。",
+      "forbiddenBehaviors": [
+        "缺材料时返回无问题",
+        "同一要求产生重复缺失发现",
+        "确定性发现缺少任一侧证据"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "实际 DeterministicReviewEngine、BoundedRegexMatcher 和 ReviewEvidenceFactory；输入由 M005Fixtures 合成，无数据库/网络/模型。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.review.DeterministicReviewEngineTest",
+        "method": "insufficientConfirmedAssignmentsProduceExactlyOneEvidenceCompleteMissing"
+      },
+      "tags": [
+        "completeness",
+        "dual-evidence"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 13.0,
+          "evidenceSha256": "eccc3020e95f9e785ee7a3a17b2a13dd58f30e0f06361c544375e4d7d22164e3",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-004",
+      "title": "文件命名按整串匹配和显式大小写规则判断",
+      "task": "用两种正则规则检查同一个合成文件名 form-12.pdf。",
+      "initialState": "已确认一份可用材料；第一规则 FORM-[0-9]+\\.PDF 且不区分大小写；第二规则仅 [0-9]+。",
+      "expectedOutcome": "第一规则不产生问题；第二规则产生恰好一个 FILE_NAME_NONCOMPLIANT，不能因子串包含数字而通过。",
+      "forbiddenBehaviors": [
+        "用子串命中替代全文匹配",
+        "忽略规则声明的大小写行为"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "实际确定性审查引擎和正则匹配器；内存合成材料描述，未读取真实文件，无模型。",
+      "critical": false,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.review.DeterministicReviewEngineTest",
+        "method": "regexRulesUseFullMatchAndExplicitCaseSensitivity"
+      },
+      "tags": [
+        "naming",
+        "regex"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 158.0,
+          "evidenceSha256": "eccc3020e95f9e785ee7a3a17b2a13dd58f30e0f06361c544375e4d7d22164e3",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-005",
+      "title": "实际文件类型与扩展名不符时转人工确认",
+      "task": "审查实际形式类型为 PDF、提交名为 input.docx 的材料。",
+      "initialState": "合成 AVAILABLE 材料已分配到正式规则，命名规则 NONE；夹具形式类型 PDF 与名称扩展名不一致。",
+      "expectedOutcome": "恰好一个 CANNOT_CONFIRM，原因 TYPE_MISMATCH。",
+      "forbiddenBehaviors": [
+        "将内容类型不明包装成确定性命名违规",
+        "将类型不符材料判为完全合格"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "实际确定性审查引擎；文件形式类型由合成夹具提供，不代表本例执行了文件魔数识别、OCR 或模型分析。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.review.DeterministicReviewEngineTest",
+        "method": "actualTypeMismatchIsCannotConfirmAndNeverAFileNameFinding"
+      },
+      "tags": [
+        "cannot-confirm",
+        "type-mismatch"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 3.0,
+          "evidenceSha256": "eccc3020e95f9e785ee7a3a17b2a13dd58f30e0f06361c544375e4d7d22164e3",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-006",
+      "title": "忽略问题不删除证据也不变成可提交",
+      "task": "发布一个人工确认问题后，重复执行忽略并读取有效报告。",
+      "initialState": "独立合成案例与已领取正式审查 job，报告包含一个 CANNOT_CONFIRM 及两条证据。",
+      "expectedOutcome": "重复忽略复用第一次决定，ignoredCount=1；报告仍为 M0_NOT_READY，保留一个发现和两条证据，数据库相应记录数量不变。",
+      "forbiddenBehaviors": [
+        "IGNORE 使未解决问题变为 Ready",
+        "删除原始发现或证据",
+        "重复忽略新增冲突决定"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2、生产报告组装/发布/读取及 FindingDecisionService；合成发现，不调用模型或文件服务。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.report.ReviewReportAndDecisionTest",
+        "method": "immutableReportEvidenceAndIgnoreEventRemainReadableAndNeverBecomeReady"
+      },
+      "tags": [
+        "ignore",
+        "dual-evidence",
+        "readiness"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 323.0,
+          "evidenceSha256": "cc973e93f292a86af09224190ad14471ea33c555d96cb12618288163b637bca5",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-007",
+      "title": "其他用户不能读取报告或修改问题决定",
+      "task": "使用 different-owner 读取已发布报告并尝试忽略其中的问题。",
+      "initialState": "报告及一个发现属于合成原 owner；两条证据已持久化，没有任何忽略决定。",
+      "expectedOutcome": "跨 owner 查询为空；忽略请求返回 RESOURCE_NOT_FOUND；finding_decision 表仍为零条。",
+      "forbiddenBehaviors": [
+        "跨用户返回报告",
+        "跨用户创建决定或泄露资源存在状态"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2、实际 JDBC owner 限定查询与决定服务；用户 ID 为直接服务调用参数，本例不验证真实 JWT/网关。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.report.ReviewReportAndDecisionTest",
+        "method": "reportFindingEvidenceAndIgnoreAreHiddenFromAnotherOwner"
+      },
+      "tags": [
+        "owner-isolation",
+        "no-side-effects"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 337.0,
+          "evidenceSha256": "cc973e93f292a86af09224190ad14471ea33c555d96cb12618288163b637bca5",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-008",
+      "title": "逻辑改名后增量复审与完整复审一致",
+      "task": "将加密材料的逻辑名 before.pdf 改成 after.pdf，执行增量复审并与完整复审比较。",
+      "initialState": "规则要求 required.pdf；一份加密材料待人工确认，一份未改动可用材料存在命名问题；只有逻辑名称版本递增。",
+      "expectedOutcome": "增量与完整结果相等，汇总均为零缺失、一命名问题、一人工确认且 NOT_READY；加密材料证据更新为 after.pdf，不含 before.pdf；未变材料发现复用原对象及 normalizedKey。",
+      "forbiddenBehaviors": [
+        "改名后仍展示旧名称证据",
+        "不相关发现被错误改写",
+        "增量结果与完整复审不一致"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "真实 IncrementalReviewValidator 和 DeterministicReviewEngine；内存输入快照与发现，无文件覆盖、无数据库/网络/模型。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.review.IncrementalReviewRenameRegressionTest",
+        "method": "sameExtensionRenameRefreshesCannotConfirmEvidenceAndReusesUnaffectedFinding"
+      },
+      "tags": [
+        "recheck",
+        "incremental-equivalence",
+        "evidence-freshness"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 63.0,
+          "evidenceSha256": "dbea918b8695cec7fc3dd5a8c6e16cdc7f8d1738cc6a89522356450c05a315ba",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-009",
+      "title": "确认上传的合格材料经实际调度形成 Ready 报告",
+      "task": "关联合成 PDF、确认规则分配和上传，提交正式审查并领取执行。",
+      "initialState": "LOCAL_ONLY 合成案例已有正式清单；内存文件源提供 ready.pdf，材料尚需完成关联、用户分配和上传确认。",
+      "expectedOutcome": "dispatcher 完成的 jobId 与提交相同且 SUCCEEDED；持久化报告 CURRENT、M0_READY；缺失/命名/人工确认计数均零、发现为空；remote_call 和 remote_consent 均零条。",
+      "forbiddenBehaviors": [
+        "未完成生产任务却宣称 Ready",
+        "有阻断问题仍 Ready",
+        "确定性手工流程产生远程调用记录"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2、实际材料/正式提交/dispatcher/handler/报告服务；InMemoryOwnedFileByteSource 与 SyntheticFileFixtures 提供文件，非真实 MinIO/HTTP/OCR/模型部署。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.integration.wave3.Wave3FormalReviewIntegrationGateTest",
+        "method": "readyReportRequiresEveryBlockerToBeZeroAndUsesNoRemoteOrAgentPath"
+      },
+      "tags": [
+        "formal-review",
+        "job-execution",
+        "readiness",
+        "local-only"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 629.0,
+          "evidenceSha256": "122a860a2ac0fe518de93b54e68ea44ffb07fde3f232f06f97240f387696ba55",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    },
+    {
+      "id": "REV-010",
+      "title": "材料规则或依据变化使旧报告过期",
+      "task": "分别新增材料、发布修改后的规则、重分类官方依据，检查各自版本与旧报告状态。",
+      "initialState": "三个相互独立的合成案例均已有正式清单和已发布报告。",
+      "expectedOutcome": "每种变更只推进对应版本并使旧报告 OUTDATED；新规则替代旧清单时旧快照 SUPERSEDED；依据重分类时旧清单 STALE_BASIS。",
+      "forbiddenBehaviors": [
+        "输入变化后旧报告仍可作为当前结论",
+        "推进无关版本",
+        "复用已失效正式清单"
+      ],
+      "evidenceLevel": "deterministic-production-component",
+      "externalDependencies": "独立 H2、实际规则/依据/材料生命周期与 JDBC 存储；合成规则来源与内存文件源，未执行官方自动提取或远程模型。",
+      "critical": true,
+      "adapter": {
+        "module": "ai-service",
+        "className": "com.javaee.aiservice.review.m0.integration.wave2.Wave2CrossModuleIntegrationTest",
+        "method": "basisChecklistAndMaterialChangesAdvanceOnlyTheirRevisionAndOutdateThePriorReport"
+      },
+      "tags": [
+        "report-freshness",
+        "revision-isolation",
+        "immutable-snapshot"
+      ],
+      "suiteId": "review",
+      "trials": [
+        {
+          "status": "PASSED",
+          "reason": null,
+          "durationMs": 1179.0,
+          "evidenceSha256": "0748538954021dce6e491aeb7d2dec755a685401c7f0917086ca04f4096f3ffe",
+          "trial": 1
+        }
+      ],
+      "productionRunId": null
+    }
+  ],
+  "caseSetDigest": "95c7b7afacbc3e70ecd6acc9e39abf84c87c06335f5d106223d7016ee47376e8",
+  "elapsedSeconds": 72.531,
+  "summary": {
+    "total": 30,
+    "passed": 30,
+    "passRate": 1.0,
+    "criticalFailures": [],
+    "gate": "PASS"
+  },
+  "acceptance": {
+    "reviewedBy": "codex-root",
+    "reason": "已审阅30项生产组件断言、测试替身边界、独立XML证据及评分器审查修复；这是自动验收基线，不代表用户人工业务验收",
+    "acceptedAtUtc": "2026-11-08T06:15:08.477672+00:00",
+    "reportDigest": "1bab309356cb2d42968f524b8641d016ff067a379f709efb85a4ee3cbc9db434"
+  }
+}
