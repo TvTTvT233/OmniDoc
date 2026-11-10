@@ -10,6 +10,7 @@
             <span class="brand-text">OmniDoc 妙搭</span></div>
           <div class="nav-menu">
             <div class="nav-item active"><el-icon><Monitor /></el-icon> 我的工作台</div>
+            <router-link class="nav-item" to="/evaluations">评测中心</router-link>
             <router-link class="nav-item" to="/review-m0"><el-icon><FolderOpened /></el-icon> 材料预审</router-link>
             <div class="nav-item"><el-icon><FolderOpened /></el-icon> 云端文档库</div>
             <div class="nav-item"><el-icon><MagicStick /></el-icon> AI 技能发现</div>

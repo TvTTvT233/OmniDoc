@@ -17,7 +17,7 @@ const showAiAssistant = computed(() => {
   if (!route.path) return false
 
   // 定义不需要显示 AI 的黑名单路径
-  const hiddenPaths = ['/login', '/register', '/auth', '/editor']
+  const hiddenPaths = ['/login', '/register', '/auth', '/editor', '/evaluations']
 
   // 如果当前路径包含在黑名单里，就不显示
   const isHidden = hiddenPaths.some(path => route.path.startsWith(path))

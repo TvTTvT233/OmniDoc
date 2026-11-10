@@ -13,6 +13,7 @@ target/
 *.jks
 .local/
 __pycache__/
+/web/public/evals/catalog.json
 *.pyc
 .maven-cache/
 .pnpm-store/

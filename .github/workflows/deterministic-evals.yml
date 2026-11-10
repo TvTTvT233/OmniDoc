@@ -1,0 +1,145 @@
+name: Deterministic evaluations
+
+on:
+  push:
+    branches: [main, integration/core-baseline]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deterministic-evals-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  evaluations:
+    name: No-key component evaluations
+    # The reviewed baseline records runnerOs=Windows. Other OSes are incomparable.
+    runs-on: windows-2022
+    timeout-minutes: 40
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      EVAL_BASELINE: evals/baselines/deterministic-v1-normalized.json
+    steps:
+      - name: Check out candidate
+        id: checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java 17
+        id: java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          overwrite-settings: false
+
+      - name: Set up Python 3.12
+        id: python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Check evaluation runner and catalog
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
+        run: |
+          python -m unittest discover -s scripts/evals -p 'test_*.py' -v
+          exit $LASTEXITCODE
+
+      - name: Scan for credential literals
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: ./scripts/mcp-search/assert-no-secret-leaks.ps1 -RepositoryRoot $env:GITHUB_WORKSPACE
+
+      - name: Scan for sensitive data
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: ./scripts/review-m0/assert-no-sensitive-data.ps1 -RepositoryRoot $env:GITHUB_WORKSPACE
+
+      - name: Run all 30 component tasks once
+        id: evaluation
+        if: ${{ !cancelled() && steps.python.outcome == 'success' && steps.java.outcome == 'success' }}
+        run: |
+          $runRoot = Join-Path $env:GITHUB_WORKSPACE '.local/evals'
+          $before = @(Get-ChildItem -LiteralPath $runRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
+          # evaluate.py uses the checked-in .mvn/settings-local.xml, removes model
+          # credentials from child environments, and keeps XML/logs under .local.
+          python scripts/evals/evaluate.py run --repeats 1 --timeout 900
+          $evaluationExit = $LASTEXITCODE
+          $created = @(Get-ChildItem -LiteralPath $runRoot -Directory | Where-Object {
+            $_.Name -match '^\d{8}T\d{6}Z-[a-f0-9]{8}$' -and
+            $_.Name -notin $before -and
+            (Test-Path -LiteralPath (Join-Path $_.FullName 'report.json') -PathType Leaf)
+          })
+          if ($created.Count -ne 1) { throw 'Expected exactly one new evaluation report.' }
+          "run_id=$($created[0].Name)" >> $env:GITHUB_OUTPUT
+          exit $evaluationExit
+
+      - name: Compare with reviewed baseline
+        if: ${{ !cancelled() && steps.evaluation.outputs.run_id != '' }}
+        env:
+          EVAL_RUN_ID: ${{ steps.evaluation.outputs.run_id }}
+        run: |
+          python scripts/evals/evaluate.py compare --baseline $env:EVAL_BASELINE --candidate ".local/evals/$env:EVAL_RUN_ID/report.json" --output ".local/evals/$env:EVAL_RUN_ID/comparison.json"
+          exit $LASTEXITCODE
+
+      - name: Export safe evaluation catalog
+        id: catalog
+        # Continue diagnostics after a failed gate, without continue-on-error.
+        if: ${{ !cancelled() && steps.evaluation.outputs.run_id != '' }}
+        env:
+          EVAL_RUN_ID: ${{ steps.evaluation.outputs.run_id }}
+        run: |
+          python scripts/evals/catalog.py export --run-id $env:EVAL_RUN_ID --output .local/evaluation-center/catalog.json
+          exit $LASTEXITCODE
+
+      - name: Upload only the safe catalog
+        if: ${{ !cancelled() && steps.catalog.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: evaluation-catalog-${{ github.run_id }}-${{ github.run_attempt }}
+          # An exact file, never the raw evaluation directory or a wildcard.
+          path: .local/evaluation-center/catalog.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  web:
+    name: Evaluation center UI checks
+    # A separate checkout prevents npm/build output affecting evaluation tree hashes.
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: Install locked frontend dependencies
+        working-directory: web
+        run: |
+          npm ci
+          exit $LASTEXITCODE
+
+      - name: Check frontend behavior
+        working-directory: web
+        run: |
+          npm run test:baseline-state
+          exit $LASTEXITCODE
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm run build
+          exit $LASTEXITCODE

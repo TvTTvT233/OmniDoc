@@ -60,3 +60,24 @@ python scripts/evals/evaluate.py compare --baseline evals/baselines/deterministi
 - 基线文件只有合成场景说明与经过白名单提取的结果，不保存原始请求、令牌或异常内容。发布前仍运行仓库敏感信息检查。
 - XML 已隔离，但 Maven 仍使用模块共享编译产物；工具内有单实例锁，不能阻止外部直接启动 Maven，仍禁止并发构建。异常退出遗留锁时先确认没有评测/Maven 进程，再人工处理 `.local/evals/runner.lock`。`--timeout` 默认900秒，是每模块每次试验的进程超时，不是总运行费用预算。
 - 后续可增加真实服务适配器和业务 runId 关联，再接真实模型、人工复核集、自动触发及成本预算；不要将本版通过率标为真实 Agent 或 RAG 效果准确率。
+# 无密钥自动检查与评测中心
+
+新增 `.github/workflows/deterministic-evals.yml`：PR、main/集成分支 push 和手动触发确定性评测，不设置定时任务，不调用外部模型。失败、缺项、跳过、不可比或敏感扫描失败都会使检查失败；只有公开白名单 `catalog.json` 可上传，原始日志/XML留在运行器本地。远端执行结果须以实际 Actions 记录为准。
+
+本地查看已有结果：
+
+```powershell
+python scripts/evals/catalog.py export --output web/public/evals/catalog.json
+```
+
+启动现有 Web 后进入 `/evaluations`，或从工作台入口进入。页面提供运行列表、逐项试验、已接收基线与候选对比，也支持导入 CI 下载的 `catalog.json`。导入仅在浏览器内存中处理，不上传，不调用业务 API。该只读页面公开可访问；导出文件被 Git 忽略，默认不随仓库发布。若主动将它放入 Web 发布目录，须将其视为公开内容。
+
+只导出某次运行（CI 使用该模式，防止混入历史报告）：
+
+```powershell
+python scripts/evals/catalog.py export --run-id <运行编号> --output .local/evaluation-center/catalog.json
+```
+
+导出器校验定义、元数据、测试 XML 摘要与结果，只投影固定字段，不复制异常文本、请求材料、路径、环境变量或基线审阅文字。默认最多读取最近50个运行目录；无效/不支持的历史报告显示排除数量。指定运行无效则命令失败；失败但证据一致的运行仍展示为 FAIL。已有已接收基线保持不变，不自动更新基线。
+
+评测中心是本地/CI报告查看器，尚无服务端历史库、跨团队同步、定时评测或模型裁判。导入数据不是数字签名证据；请使用可信 CI 产物。耗时为组件测试参考，token/费用未测，不能推断真实模型质量。

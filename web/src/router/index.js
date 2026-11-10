@@ -10,6 +10,7 @@ const routes = [
     { path: '/index.html', redirect: '/login' },
     { path: '/login', component: () => import('../views/auth/LoginView.vue') },
     { path: '/register', component: () => import('../views/auth/RegisterView.vue') },
+    { path: '/evaluations', component: () => import('../views/evals/EvaluationCenter.vue') },
     { path: '/dashboard', component: () => import('../views/dashboard/IndexView.vue') },
     { path: '/ppt-runtime', name: 'pptRuntime', component: () => import('../views/dashboard/PptRuntime.vue')},
     { path: '/aiops', component: () => import('../views/aiops/AIOpsView.vue') },
@@ -26,7 +27,7 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
-    const isPublicRoute = to.path === '/login' || to.path === '/register'
+    const isPublicRoute = to.path === '/login' || to.path === '/register' || to.path === '/evaluations'
     const authenticatedUserId = getAuthenticatedUserId()
     if (!isPublicRoute && !authenticatedUserId) {
         localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN)
