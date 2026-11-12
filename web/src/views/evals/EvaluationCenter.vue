@@ -17,11 +17,13 @@
         <template v-if="comparison"><p><span class="badge" :class="comparison.gate">{{ comparison.gate }}</span> {{ comparison.gate === 'BLOCKED' ? '版本或环境不兼容，不能比较。' : comparison.gate === 'FAIL' ? '候选未通过，请查看失败与退化项。' : '当前固定场景未发现退化。' }}</p><p v-if="comparison.reason">{{ comparison.reason }}</p><div v-else class="table-scroll"><table><thead><tr><th>场景</th><th>基线 → 候选通过率</th><th>退化</th><th>平均耗时变化（参考）</th></tr></thead><tbody><tr v-for="c in comparison.changes" :key="c.id"><td>{{ definition(c.id).title }}</td><td>{{ percent(c.baselinePassRate) }} → {{ percent(c.candidatePassRate) }}</td><td>{{ c.regressed ? '是' : '否' }}</td><td>{{ c.meanDurationDeltaMs === null ? '未测量' : c.meanDurationDeltaMs.toFixed(2) + ' ms' }}</td></tr></tbody></table></div></template><p v-else class="muted">选择一个已接收基线和候选运行。不同评分器、数据集或操作系统不会给出可比结论。</p>
       </section>
     </template>
+    <ServiceFlowResults />
   </main>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import ServiceFlowResults from './ServiceFlowResults.vue'
 import { MAX_CATALOG_BYTES, parseCatalog } from '../../utils/evaluationCatalog.js'
 const catalog = ref(null), error = ref(''), busy = ref(false), source = ref(''), selectedKey = ref(''), filter = ref('ALL'), baselineKey = ref(''), candidateKey = ref('')
 let request = 0
