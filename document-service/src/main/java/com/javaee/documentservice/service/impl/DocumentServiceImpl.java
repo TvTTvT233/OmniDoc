@@ -97,6 +97,7 @@ public class DocumentServiceImpl implements DocumentService {
         // 通过fileId从file-service获取文件内容并解析
         String content = "";
         String fileName = "";
+        com.javaee.documentservice.consistency.StructuredDocument structure = null;
         if (dto.getFileId() != null && !dto.getFileId().isEmpty()) {
             try {
                 // 获取文件名
@@ -107,7 +108,8 @@ public class DocumentServiceImpl implements DocumentService {
                 ResponseEntity<byte[]> fileResponse = fileServiceClient.downloadFile(dto.getFileId());
                 byte[] fileContent = fileResponse.getBody();
                 
-                content = DocumentParserUtil.parseDocumentStrict(fileContent, fileName);
+                structure = com.javaee.documentservice.consistency.StructuredDocument.parse(fileContent, fileName);
+                content = structure.text();
                 log.info("文档解析成功: fileId={}, contentLength={}",dto.getFileId(),content.length());
             } catch (Exception e) {
                 // The original uploaded object remains available for an authenticated parse retry.
@@ -119,7 +121,8 @@ public class DocumentServiceImpl implements DocumentService {
         document.setSummary(DocumentParserUtil.getSummary(content, 200));
         if ("READY".equals(document.getParseState())) {
             indexService.snapshotAndSchedule(document,"PLAIN_TEXT",content,"初始版本",userId,
-                    dto.getFileId()!=null&&!dto.getFileId().isEmpty()?DocumentParserUtil.STRICT_PARSER_VERSION:DocumentParserUtil.EXPLICIT_CONTENT_VERSION);
+                    structure!=null&&!structure.blocks().isEmpty()?com.javaee.documentservice.consistency.StructuredDocument.VERSION:(dto.getFileId()!=null&&!dto.getFileId().isEmpty()?DocumentParserUtil.STRICT_PARSER_VERSION:DocumentParserUtil.EXPLICIT_CONTENT_VERSION));
+            if(structure!=null) indexService.attachStructure(document,structure);
             mirrorAfterCommit(document,content);
         } else {
             document.setContent("");document.setSnapshotState("PARSE_FAILED");
@@ -283,6 +286,7 @@ public class DocumentServiceImpl implements DocumentService {
         document.setUpdateTime(LocalDateTime.now());
 
         indexService.snapshotAndSchedule(document,version.getContentFormat(),version.getContent(),"恢复到版本"+versionNumber,userId,version.getParserVersion());
+        indexService.copyStructure(document,versionNumber);
         documentMapper.updateById(document);
         mirrorAfterCommit(document,version.getContent());
 
@@ -310,13 +314,16 @@ public class DocumentServiceImpl implements DocumentService {
         DocumentIndexService.expected(d,expectedVersion);
         if(!"FAILED".equals(d.getParseState())||d.getFileId()==null) throw new DocumentStateException(409,"PARSE_RETRY_NOT_AVAILABLE","文档不需要重新解析");
         final String content;
+        final com.javaee.documentservice.consistency.StructuredDocument structure;
         try {
             String name=fileServiceClient.getFileName(d.getFileId()).getBody();
             byte[] bytes=fileServiceClient.downloadFile(d.getFileId()).getBody();
-            content=DocumentParserUtil.parseDocumentStrict(bytes,name);
+            structure=com.javaee.documentservice.consistency.StructuredDocument.parse(bytes,name);
+            content=structure.text();
         } catch(Exception e) { throw new DocumentStateException(422,"PARSE_FAILED","解析失败，原始文件仍保留"); }
         d.setVersion(indexService.nextVersion(d));d.setUpdateTime(LocalDateTime.now());d.setSummary(DocumentParserUtil.getSummary(content,200));
-        indexService.snapshotAndSchedule(d,"PLAIN_TEXT",content,"重新解析原始文件",userId,DocumentParserUtil.STRICT_PARSER_VERSION);
+        indexService.snapshotAndSchedule(d,"PLAIN_TEXT",content,"重新解析原始文件",userId,structure.blocks().isEmpty()?DocumentParserUtil.STRICT_PARSER_VERSION:com.javaee.documentservice.consistency.StructuredDocument.VERSION);
+        indexService.attachStructure(d,structure);
         documentMapper.updateById(d);mirrorAfterCommit(d,content);
         DocumentVO vo=convertToVO(d);vo.setContent(content);return vo;
     }

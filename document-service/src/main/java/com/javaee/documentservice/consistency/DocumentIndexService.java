@@ -300,8 +300,61 @@ public class DocumentIndexService {
         if(!CanonicalDocumentText.boundary(v.getCanonicalText(),start)||!CanonicalDocumentText.boundary(v.getCanonicalText(),end)||start>=end) throw problem(409,"REFERENCE_INTEGRITY_ERROR","引用校验失败");
         String excerpt=v.getCanonicalText().substring(start,end);
         if(!CanonicalDocumentText.hash(excerpt).equals(str(row,"segment_hash")) || !v.getContentHash().equals(str(row,"content_hash"))) throw problem(409,"REFERENCE_INTEGRITY_ERROR","引用校验失败");
-        Map<String,Object> out=referenceMap(row,v.getTitle());out.put("content",excerpt);out.put("currentVersion",d.getVersion());out.put("status",Objects.equals(d.getVersion(),v.getVersionNumber())?"CURRENT":"HISTORICAL");out.put("offsetUnit","UTF16");return out;
+        Map<String,Object> out=referenceMap(row,v.getTitle());out.put("content",excerpt);out.put("currentVersion",d.getVersion());out.put("status",Objects.equals(d.getVersion(),v.getVersionNumber())?"CURRENT":"HISTORICAL");out.put("offsetUnit","UTF16");
+        out.put("sourceLocations",structureBlocks(id,v.getVersionNumber()).stream().filter(b->b.startOffset()<end && b.endOffset()>start).toList());return out;
     }
+    @Transactional
+    public void attachStructure(Document d,StructuredDocument parsed) {
+        DocumentVersion v=snapshot(d.getId(),d.getVersion());
+        if(!v.getCanonicalText().equals(text.normalize(parsed.text(),"PLAIN_TEXT"))) throw problem(409,"STRUCTURE_CONTENT_MISMATCH","结构与版本不一致");
+        if(parsed.sourceHash()==null || !parsed.sourceHash().matches("[a-f0-9]{64}")) throw problem(409,"STRUCTURE_INTEGRITY_ERROR","原件摘要无效");
+        validateBlocks(v,parsed.blocks());
+        String encoded=encode(parsed.blocks());
+        jdbc.update("INSERT INTO document_structure(document_id,document_version,content_hash,source_hash,blocks_json,structure_hash) VALUES(?,?,?,?,?,?)",d.getId(),d.getVersion(),v.getContentHash(),parsed.sourceHash(),encoded,CanonicalDocumentText.hash(v.getContentHash()+"\n"+parsed.sourceHash()+"\n"+encoded));
+    }
+    @Transactional
+    public void copyStructure(Document d,int oldVersion) {
+        List<StructuredDocument.Block> blocks=structureBlocks(d.getId(),oldVersion);
+        if(blocks.isEmpty())return;
+        DocumentVersion old=snapshot(d.getId(),oldVersion),current=snapshot(d.getId(),d.getVersion());
+        if(!old.getContentHash().equals(current.getContentHash())) throw problem(409,"STRUCTURE_CONTENT_MISMATCH","结构与版本不一致");
+        String source=jdbc.queryForObject("SELECT source_hash FROM document_structure WHERE document_id=? AND document_version=?",String.class,d.getId(),oldVersion);
+        attachStructure(d,new StructuredDocument(old.getCanonicalText(),source,blocks));
+    }
+    public Map<String,Object> structure(String id,int version,Long user) {
+        Document d=requireDocument(id,user,false,false);
+        DocumentVersion v=snapshot(id,version);
+        List<StructuredDocument.Block> blocks=structureBlocks(id,version);
+        Map<String,Object> result=new LinkedHashMap<>();result.put("documentId",id);result.put("documentVersion",version);
+        result.put("contentHash",v.getContentHash());result.put("currentVersion",d.getVersion());result.put("offsetUnit","UTF16");
+        result.put("status",blocks.isEmpty()?"UNAVAILABLE":"AVAILABLE");result.put("blocks",blocks);result.put("content",v.getCanonicalText());return result;
+    }
+    private List<StructuredDocument.Block> structureBlocks(String id,int version) {
+        DocumentVersion v=snapshot(id,version);
+        List<Map<String,Object>> rows=jdbc.queryForList("SELECT * FROM document_structure WHERE document_id=? AND document_version=?",id,version);
+        if(rows.isEmpty())return List.of();
+        Map<String,Object> row=rows.get(0);String encoded=str(row,"blocks_json");
+        if(!v.getContentHash().equals(str(row,"content_hash")) || !CanonicalDocumentText.hash(v.getContentHash()+"\n"+str(row,"source_hash")+"\n"+encoded).equals(str(row,"structure_hash"))) throw problem(409,"STRUCTURE_INTEGRITY_ERROR","结构证据校验失败");
+        try {
+            List<StructuredDocument.Block> blocks=json.readValue(encoded,new TypeReference<List<StructuredDocument.Block>>(){});
+            validateBlocks(v,blocks);return blocks;
+        }catch(Exception e){throw problem(409,"STRUCTURE_INTEGRITY_ERROR","结构证据校验失败");}
+    }
+    private void validateBlocks(DocumentVersion v,List<StructuredDocument.Block> blocks) {
+        if(blocks==null || blocks.size()>20000) throw problem(409,"STRUCTURE_INTEGRITY_ERROR","结构证据校验失败");
+        int previous=0;
+        for(var b:blocks) {
+            boolean location=switch(b.kind()) {
+                case "PDF_PAGE" -> positive(b.page()) && b.paragraph()==null && b.table()==null && b.row()==null && b.column()==null;
+                case "DOCX_PARAGRAPH" -> b.page()==null && positive(b.paragraph()) && b.table()==null && b.row()==null && b.column()==null;
+                case "DOCX_CELL" -> b.page()==null && b.paragraph()==null && positive(b.table()) && positive(b.row()) && positive(b.column());
+                default -> false;
+            };
+            if(!location || b.startOffset()<previous || b.endOffset()<=b.startOffset() || !CanonicalDocumentText.boundary(v.getCanonicalText(),b.startOffset()) || !CanonicalDocumentText.boundary(v.getCanonicalText(),b.endOffset()) || !CanonicalDocumentText.hash(v.getCanonicalText().substring(b.startOffset(),b.endOffset())).equals(b.textHash())) throw problem(409,"STRUCTURE_INTEGRITY_ERROR","结构证据校验失败");
+            previous=b.endOffset();
+        }
+    }
+    private static boolean positive(Integer value){return value!=null && value>0;}
     private Map<String,Object> referenceMap(Map<String,Object> row,String title) {
         Map<String,Object> out=new LinkedHashMap<>();out.put("referenceId",str(row,"reference_id"));out.put("documentId",str(row,"document_id"));out.put("documentVersion",integer(row,"document_version"));out.put("generationId",str(row,"generation_id"));out.put("segmentId",str(row,"segment_id"));out.put("startOffset",integer(row,"start_offset"));out.put("endOffset",integer(row,"end_offset"));out.put("segmentHash",str(row,"segment_hash"));out.put("contentHash",str(row,"content_hash"));out.put("documentTitle",title);return out;
     }

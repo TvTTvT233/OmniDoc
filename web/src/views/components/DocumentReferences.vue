@@ -12,6 +12,15 @@
         <strong>{{ snapshot.documentTitle || '文档' }} · V{{ snapshot.documentVersion }}</strong>
         <p data-testid="reference-version-status">{{ snapshot.status === 'CURRENT' ? '当前版本引用' : `历史版本引用（当前文档为 V${snapshot.currentVersion}）` }}</p>
         <p>以下为回答引用的原版本片段，仅供阅读。</p>
+        <ul v-if="snapshot.sourceLocations?.length" data-testid="source-locations">
+          <li v-for="(location,i) in snapshot.sourceLocations" :key="i">
+            <span v-if="location.kind === 'PDF_PAGE'">PDF 第 {{ location.page }} 页</span>
+            <span v-else-if="location.kind === 'DOCX_PARAGRAPH'">Word 第 {{ location.paragraph }} 个正文段落</span>
+            <span v-else-if="location.kind === 'DOCX_CELL'">Word 表 {{ location.table }} · 第 {{ location.row }} 行 · 第 {{ location.column }} 列</span>
+            <span>（原版本文字 {{ location.startOffset }}–{{ location.endOffset }}）</span>
+          </li>
+        </ul>
+        <p v-else>该版本没有可验证的页码或表格定位；以下文字偏移仍对应原版本。</p>
         <pre data-testid="reference-content">{{ snapshot.content }}</pre>
       </template>
     </section>

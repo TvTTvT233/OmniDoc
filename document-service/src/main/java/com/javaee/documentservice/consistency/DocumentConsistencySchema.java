@@ -7,6 +7,7 @@ public final class DocumentConsistencySchema {
     private DocumentConsistencySchema() {}
     public static void migrate(Connection c) throws SQLException {
         try (Statement s = c.createStatement()) {
+            s.execute("CREATE TABLE IF NOT EXISTS document_structure (document_id VARCHAR(64) NOT NULL,document_version INT NOT NULL,content_hash VARCHAR(64) NOT NULL,source_hash VARCHAR(64) NOT NULL,blocks_json LONGTEXT NOT NULL,structure_hash VARCHAR(64) NOT NULL,PRIMARY KEY(document_id,document_version))");
             column(c,s,"document","content_format","VARCHAR(24) NULL");
             column(c,s,"document","content_hash","VARCHAR(64) NULL");
             column(c,s,"document","snapshot_state","VARCHAR(32) NULL");

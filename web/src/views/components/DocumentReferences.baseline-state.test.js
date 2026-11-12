@@ -58,3 +58,22 @@ describe('structured document references (mocked HTTP, actual reference componen
     expect(normalizeConversationMessage({ ...message, references: [{ referenceId: 'model-invented' }] }).references).toEqual([])
   })
 })
+
+
+describe('source layout evidence', () => {
+  it('renders verified page and table positions with the historical text', async () => {
+    mocks.read.mockResolvedValue({ data: { ...snapshot, sourceLocations: [
+      {kind:'PDF_PAGE',page:2,startOffset:0,endOffset:12},
+      {kind:'DOCX_CELL',table:1,row:2,column:3,startOffset:0,endOffset:12}
+    ] } })
+    render(); await wrapper.find('.reference-link').trigger('click'); await flushPromises()
+    expect(wrapper.get('[data-testid="source-locations"]').text()).toContain('PDF 第 2 页')
+    expect(wrapper.get('[data-testid="source-locations"]').text()).toContain('Word 表 1 · 第 2 行 · 第 3 列')
+    expect(wrapper.get('[data-testid="reference-content"]').text()).toBe(snapshot.content)
+  })
+  it('does not invent location for legacy or edited snapshots', async () => {
+    render(); await wrapper.find('.reference-link').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-testid="source-locations"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('没有可验证的页码或表格定位')
+  })
+})
