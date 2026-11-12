@@ -81,6 +81,14 @@ jobs:
           "run_id=$($created[0].Name)" >> $env:GITHUB_OUTPUT
           exit $evaluationExit
 
+      - name: Locate failing test assertions without raw logs
+        if: ${{ !cancelled() && steps.evaluation.outputs.run_id != '' }}
+        env:
+          EVAL_RUN_ID: ${{ steps.evaluation.outputs.run_id }}
+        run: |
+          python scripts/evals/diagnose.py --run-id $env:EVAL_RUN_ID
+          exit $LASTEXITCODE
+
       - name: Compare with reviewed baseline
         if: ${{ !cancelled() && steps.evaluation.outputs.run_id != '' }}
         env:
