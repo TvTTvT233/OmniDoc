@@ -12,7 +12,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /** Owns the durable outbox, leases and the only authoritative publication pointer. */
@@ -35,6 +37,7 @@ public class DocumentIndexService {
     private final String embeddingModel;
     private final int embeddingDimension;
     private final int leaseSeconds;
+    private Clock clock=Clock.systemUTC();
     public DocumentIndexService(DocumentMapper documents,DocumentVersionMapper versions,DocumentAccessService access,
                                 JdbcTemplate jdbc,ObjectMapper json,CanonicalDocumentText text,
                                 @Value("${omnidoc.index.embedding-model:text-embedding-v4}") String model,
@@ -373,6 +376,8 @@ public class DocumentIndexService {
     private static String str(Map<String,Object> row,String key) {Object value=row.get(key);return value==null?null:value.toString();}
     private static int integer(Map<String,Object> row,String key) {return ((Number)row.get(key)).intValue();}
     private static LocalDateTime time(Map<String,Object> row,String key) {Object v=row.get(key);return v instanceof java.sql.Timestamp ts?ts.toLocalDateTime():(LocalDateTime)v;}
-    private static LocalDateTime now() {return LocalDateTime.now(ZoneOffset.UTC);}
+    // DATETIME(6) stores microseconds. Truncate before both writes and comparisons
+    // so database rounding cannot make a newly enqueued task appear to be in the future.
+    private LocalDateTime now() {return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);}
     private static String uuid() {return UUID.randomUUID().toString();}
 }
