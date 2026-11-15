@@ -29,7 +29,7 @@ public class AgentTaskRunAdapter {
                         Set.of("SUCCEEDED","FAILED").contains(run.status())?run.updatedAt():null,Instant.now(),
                         run.asyncJobId()==null?List.of():List.of(new TaskRunView.Link("TRIGGERED_BY","async:"+run.asyncJobId())),steps,List.of(),
                         run.result().isEmpty()?null:new TaskRunView.Result("AGENT_TRACE",traceId,text(run.result().get("status")),null),List.of(),
-                        new TaskRunView.Capabilities("JDBC","CHECKPOINT_SUMMARY",true,List.of("UNCERTAIN_WRITES_REQUIRE_RECONCILIATION","NO_CROSS_SERVICE_EXACTLY_ONCE","SINGLE_STEP_RETRY_REQUIRES_NEW_REQUEST"))));
+                        new TaskRunView.Capabilities("JDBC","CHECKPOINT_SUMMARY",true,List.of("UNCERTAIN_WRITES_REQUIRE_RECONCILIATION","NO_CROSS_SERVICE_EXACTLY_ONCE","SINGLE_STEP_RETRY_REQUIRES_NEW_REQUEST"))).withBudget(durableStore.budget(userId,traceId)));
             }
             if(durableStore.known(traceId)) return Optional.empty();
         }

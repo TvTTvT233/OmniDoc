@@ -18,6 +18,14 @@ public class AgentExecutionRequest {
     private Boolean dryRun = false;
     private Integer maxIterations = 3;
     private Integer maxToolCalls = 8;
+    private Integer maxRetries;
+    private Integer maxDurationSeconds;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public Integer getMaxRetries() { return maxRetries; }
+    public void setMaxRetries(Integer value) { maxRetries=value; }
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public Integer getMaxDurationSeconds() { return maxDurationSeconds; }
+    public void setMaxDurationSeconds(Integer value) { maxDurationSeconds=value; }
     private String knowledgeBaseId = "default";
     private Boolean autoReplan = true;
     private Boolean reflectionEnabled;

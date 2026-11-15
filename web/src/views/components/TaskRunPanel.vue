@@ -13,6 +13,12 @@
       <p v-if="run.waitingReason === 'AUTHORIZATION_REQUIRED'">此步骤需要当前登录授权，请在页面继续任务。</p>
       <p v-if="run.waitingReason === 'RECOVERY_LIMIT' || run.waitingReason === 'RETRY_LIMIT'">已达到恢复或重试上限，请检查失败原因。</p>
       <p v-if="run.waitingReason === 'APPROVAL_REQUIRED'">等待确认操作目标；若原确认已失效，请续接任务重新获取确认。</p>
+      <p v-if="run.waitingReason?.startsWith('BUDGET_')" role="alert">任务预算已耗尽，已停止发起新调用。{{ run.waitingReason }}</p>
+      <div v-if="run.budget?.applicability === 'SUPPORTED'">
+        <p>工具调用：{{ run.budget.toolCallsUsed }} / {{ run.budget.maxToolCalls }}；累计重试：{{ run.budget.retriesUsed }} / {{ run.budget.maxRetries }}</p>
+        <p>截止时间：{{ run.budget.deadline }}（包含排队和审批等待）</p>
+        <p>Token 与费用：未测量</p>
+      </div>
       <details><summary>查看运行记录</summary>
         <p>运行标识：{{ run.runId }}</p>
         <p v-if="run.result">结果引用：{{ run.result.resourceId }}</p>

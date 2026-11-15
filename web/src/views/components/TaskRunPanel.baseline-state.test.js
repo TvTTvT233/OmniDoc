@@ -50,3 +50,10 @@ it('polls active runs and stops after completion', async () => {
 it.each(['error', 'failed', 'action_required', 'planned', 'cancelled', undefined])('does not toast success for %s', status => {
   expect(agentOutcome(status).type).not.toBe('success')
 })
+
+it('shows durable limits and deadline policy without invented billing', async () => {
+  mocks.get.mockResolvedValue({data:view('agent:b','FAILED',{waitingReason:'BUDGET_RETRIES_EXCEEDED',budget:{applicability:'SUPPORTED',toolCallsUsed:3,maxToolCalls:8,retriesUsed:2,maxRetries:2,deadline:'2030-01-01T00:00:00Z'}})})
+  wrapper=mount(TaskRunPanel,{props:{runId:'agent:b'}}); await flushPromises()
+  expect(wrapper.text()).toContain('任务预算已耗尽'); expect(wrapper.text()).toContain('3 / 8')
+  expect(wrapper.text()).toContain('包含排队和审批等待'); expect(wrapper.text()).toContain('未测量')
+})

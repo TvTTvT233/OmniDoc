@@ -220,6 +220,7 @@ public class AgentExecutionService {
             }
             if(scope.checkpoint.containsKey("approvalClientRequestId")) request.setClientRequestId(String.valueOf(scope.checkpoint.get("approvalClientRequestId")));
             Map<String,Object> result=execute(request,claim.run().asyncJobId(),null);
+            durableStore.checkDeadline(claim.lease());
             String raw=String.valueOf(result.get("status"));
             String state=switch(raw) { case "success" -> "SUCCEEDED"; case "cancelled" -> "CANCELLED";
                 case "action_required","planned" -> "WAITING_INPUT"; default -> "FAILED"; };
@@ -232,6 +233,9 @@ public class AgentExecutionService {
             }
             durableStore.finish(claim.lease(),state,reason,result);
             return result;
+        } catch(AgentRunStore.BudgetExceeded exhausted) {
+            durableStore.finishBudget(claim.lease(),exhausted.getMessage());
+            return durableSnapshot(durableStore.findOwned(owner,id).orElseThrow());
         } finally { recoveryScope.remove(); }
     }
 
@@ -241,6 +245,7 @@ public class AgentExecutionService {
         out.put("traceId",run.id()); out.put("conversationId",run.conversationId()); out.put("userId",run.owner());
         out.put("status",switch(run.status()) { case "SUCCEEDED"->"success"; case "FAILED"->"error";
             case "WAITING_INPUT"->"action_required"; case "CANCELLED"->"cancelled"; default->"running"; });
+        out.put("budget",durableStore.budget(run.owner(),run.id()));
         if(run.reason()!=null) out.put("recoveryReason",run.reason());
         return out;
     }
@@ -463,6 +468,7 @@ public class AgentExecutionService {
                 }
 
                 if (toolCallCount >= maxToolCalls) {
+                    if(recoveryScope.get()!=null) throw new AgentRunStore.BudgetExceeded("BUDGET_TOOL_CALLS_EXCEEDED");
                     AgentToolResult result = AgentToolResult.error(step.getToolName(), "已达到工具调用上限: " + maxToolCalls);
                     decorateResult(result, step, System.currentTimeMillis());
                     step.setStatus(result.getStatus());
@@ -1131,13 +1137,15 @@ public class AgentExecutionService {
             return buildPlan(request, context);
         }
         try {
-            String raw = chatService.callChatApiWithModelCode(
+            String raw = budgetedChat(
                     buildFollowUpPlannerPrompt(request, context, previousPlan, previousResults, iteration),
                     request.getModel());
             List<AgentPlanStep> plan = parsePlan(raw);
             if (!plan.isEmpty()) {
                 return normalizePlan(plan, request, context);
             }
+        } catch (AgentRunStore.BudgetExceeded e) {
+            throw e;
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
@@ -1248,9 +1256,11 @@ public class AgentExecutionService {
                     "currentPlan=" + safeJson(plan),
                     plan,
                     results);
-            String raw = chatService.callChatApiWithModelCode(prompt, request.getModel());
+            String raw = budgetedChat(prompt, request.getModel());
             Map<String, Object> decision = objectMapper.readValue(stripObjectJson(raw), new TypeReference<>() {});
             return booleanValue(decision.get("continue"), false);
+        } catch (AgentRunStore.BudgetExceeded e) {
+            throw e;
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
@@ -1371,11 +1381,13 @@ public class AgentExecutionService {
         }
         try {
             String prompt = buildPlannerPrompt(request, context);
-            String raw = chatService.callChatApiWithModelCode(prompt, request.getModel());
+            String raw = budgetedChat(prompt, request.getModel());
             List<AgentPlanStep> plan = parsePlan(raw);
             if (!plan.isEmpty()) {
                 return normalizePlan(plan, request, context);
             }
+        } catch (AgentRunStore.BudgetExceeded e) {
+            throw e;
         } catch (MemoryContextException e) {
             throw e;
         } catch (Exception e) {
@@ -2065,6 +2077,8 @@ public class AgentExecutionService {
             if(!safe && !"success".equals(result.getStatus())) return AgentToolResult.actionRequired(step.getToolName(),
                     "写操作可能已执行，已停止自动重试，请核对目标。",Map.of("recoveryReason","OUTCOME_UNKNOWN"));
             return result;
+        } catch (AgentRunStore.BudgetExceeded e) {
+            throw e;
         } catch (MemoryContextException e) {
             throw e;
         } catch (org.springframework.web.server.ResponseStatusException | org.springframework.dao.DataAccessException e) {
@@ -2368,7 +2382,7 @@ public class AgentExecutionService {
                 override,
                 List.of(),
                 List.of());
-        String answer = chatService.callChatApiWithModelCode(prompt, request.getModel());
+        String answer = budgetedChat(prompt, request.getModel());
         return AgentToolResult.success("direct-answer", "直接回答完成", Map.of("answer", answer));
     }
 
@@ -2416,7 +2430,7 @@ public class AgentExecutionService {
                         "knowledge-base retrieval",
                         retrievedContext,
                         true)));
-        String answer = chatService.callChatApiWithModelCode(prompt, request.getModel());
+        String answer = budgetedChat(prompt, request.getModel());
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("question", question);
         data.put("answer", answer);
@@ -2471,7 +2485,7 @@ public class AgentExecutionService {
                 
                 请返回修改后的文本、问题说明和修改建议。
                 """.formatted(instruction, content);
-        String result = chatService.callChatApiWithModelCode(prompt, asString(params.get("model")));
+        String result = budgetedChat(prompt, asString(params.get("model")));
         return AgentToolResult.success("text-correct", "文本处理完成", Map.of("result", result));
     }
 
@@ -2859,8 +2873,10 @@ public class AgentExecutionService {
                 plan,
                 results);
         try {
-            String answer = chatService.callChatApiWithModelCode(prompt, request.getModel());
+            String answer = budgetedChat(prompt, request.getModel());
             return lastMcpResult == null ? answer : enforceAllowedMcpSources(answer, mcpSources);
+        } catch (AgentRunStore.BudgetExceeded e) {
+            throw e;
         } catch (Exception e) {
             log.warn("最终回答生成失败，使用规则总结");
             String answer = fallbackSummary(results, requiresAction);
@@ -3061,6 +3077,14 @@ public class AgentExecutionService {
                         Map.of("source", "agent"))));
     }
 
+    private String budgetedChat(String prompt,String model) {
+        AgentRecoveryScope scope=recoveryScope.get();
+        if(scope!=null) durableStore.checkDeadline(scope.lease);
+        String answer=chatService.callChatApiWithModelCode(prompt,model);
+        if(scope!=null) durableStore.checkDeadline(scope.lease);
+        return answer;
+    }
+
     private String memoryPromptWithTools(
             AgentExecutionRequest request,
             Map<String, Object> runtimeContext,
@@ -3069,6 +3093,8 @@ public class AgentExecutionService {
             String callPayload,
             List<MemoryToolExchange> tools
     ) {
+        AgentRecoveryScope activeBudget=recoveryScope.get();
+        if(activeBudget!=null) durableStore.checkDeadline(activeBudget.lease);
         MemoryTurnContext turn = request.getMemoryTurnContext();
         if (memoryContextBuilder == null || turn == null) {
             // Directly constructed unit-test services do not have Spring injection. Production

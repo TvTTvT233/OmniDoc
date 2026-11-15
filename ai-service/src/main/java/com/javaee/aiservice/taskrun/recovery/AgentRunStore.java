@@ -57,6 +57,10 @@ public class AgentRunStore {
     }
     public Run submit(String owner, String conversation, String key, String asyncId, Map<String,Object> request) {
         if (key == null || key.isBlank() || key.length() > 128) throw conflict("INVALID_CLIENT_REQUEST_ID");
+        for(String keyName:List.of("maxRetries","maxDurationSeconds")) {
+            Object value=request.get(keyName); int min="maxRetries".equals(keyName)?0:1, max="maxRetries".equals(keyName)?40:604800;
+            if(value!=null && (!(value instanceof Number n) || n.doubleValue()!=n.longValue() || n.longValue()<min || n.longValue()>max)) throw conflict("INVALID_RUN_BUDGET");
+        }
         String digest = RecoveryJson.digest(request);
         try { return tx.execute(s -> {
             lockConversation(owner, conversation);
@@ -95,6 +99,7 @@ public class AgentRunStore {
                 jdbc.update("UPDATE ai_agent_run SET status='WAITING_INPUT',waiting_reason='OUTCOME_UNKNOWN',epoch=epoch+1,worker_id=NULL,lease_until=NULL WHERE run_id=?", id);
                 return new Claim(find(id).orElseThrow(),null);
             }
+            if(expireBudget(run)) return new Claim(find(id).orElseThrow(),null);
             long epoch = run.epoch()+1;
             jdbc.update("UPDATE ai_agent_run SET status='RUNNING',waiting_reason=NULL,epoch=?,worker_id=?,lease_until=TIMESTAMPADD(SECOND,?,CURRENT_TIMESTAMP(3)),attempt=attempt+1,updated_at=CURRENT_TIMESTAMP(3) WHERE run_id=?",
                     epoch,worker,Math.max(1,leaseMillis/1000),id);
@@ -102,6 +107,14 @@ public class AgentRunStore {
         });
     }
     public List<Run> recoverable(int limit) {
+        // Include waiting runs in deadline expiry, without granting them a new execution lease.
+        String cursor="";
+        while(true) {
+            List<Run> waiting=jdbc.query("SELECT "+columns("")+" FROM ai_agent_run WHERE deleted=FALSE AND status IN ('QUEUED','WAITING_INPUT') AND run_id>? ORDER BY run_id LIMIT 200",(r,n)->read(r),cursor);
+            if(waiting.isEmpty()) break;
+            for(Run run:waiting) locked(run.owner(),run.id(),row -> expireBudget(find(run.id()).orElseThrow()));
+            cursor=waiting.get(waiting.size()-1).id();
+        }
         return jdbc.query("SELECT "+columns("")+" FROM ai_agent_run WHERE deleted=FALSE AND (status='QUEUED' OR (status='RUNNING' AND lease_until<CURRENT_TIMESTAMP(3))) ORDER BY created_at LIMIT ?",
                 (r,n)->read(r), Math.max(1,Math.min(limit,20)));
     }
@@ -124,10 +137,13 @@ public class AgentRunStore {
                 String state=String.valueOf(op.get("status"));
                 if ("SUCCEEDED".equals(state)) return new Operation("REUSE",RecoveryJson.map(String.valueOf(op.get("result_json"))));
                 if ("OUTCOME_UNKNOWN".equals(state) || "SEND_INTENT".equals(state) && !replaySafe) return new Operation("OUTCOME_UNKNOWN",Map.of());
+                if ("SEND_INTENT".equals(state) && ((Number)op.get("epoch")).longValue()==lease.epoch()) return new Operation("IN_FLIGHT",Map.of());
                 if (Set.of("WAIT_APPROVAL","REJECTED").contains(state)) return new Operation("WAIT_APPROVAL",Map.of());
                 if (((Number)op.get("attempt")).intValue() >= 3) return new Operation("RETRY_LIMIT",Map.of());
+                checkDispatchBudget(lease,((Number)op.get("attempt")).intValue()>0);
                 jdbc.update("UPDATE ai_agent_operation SET status='SEND_INTENT',epoch=?,attempt=attempt+1 WHERE run_id=? AND operation_id=?",lease.epoch(),lease.id(),opId);
             } else {
+                checkDispatchBudget(lease,false);
                 jdbc.update("INSERT INTO ai_agent_operation(run_id,operation_id,tool_name,params_digest,replay_safe,status,epoch,attempt,result_json) VALUES(?,?,?,?,?,'SEND_INTENT',?,1,'{}')",
                         lease.id(),opId,tool,digest,replaySafe,lease.epoch());
             }
@@ -167,6 +183,9 @@ public class AgentRunStore {
         List<String> ids=jdbc.query("SELECT run_id FROM ai_agent_operation WHERE approval_hash=?",(r,n)->r.getString(1),RecoveryJson.hash(token));
         if(ids.size()!=1) throw conflict("APPROVAL_NOT_FOUND");
         return locked(owner,ids.get(0), row -> {
+            Run current=find(ids.get(0)).orElseThrow();
+            if(Set.of("SUCCEEDED","FAILED","CANCELLED").contains(current.status())) return current;
+            if(expireBudget(current)) return find(ids.get(0)).orElseThrow();
             List<Map<String,Object>> ops=jdbc.queryForList("SELECT * FROM ai_agent_operation WHERE run_id=? AND approval_hash=? FOR UPDATE",ids.get(0),RecoveryJson.hash(token));
             if(ops.size()!=1) throw conflict("APPROVAL_NOT_FOUND");
             Map<String,Object> op=ops.get(0); String state=String.valueOf(op.get("status"));
@@ -188,6 +207,7 @@ public class AgentRunStore {
     }
     public Run resume(String owner,String id,Map<String,Object> input) {
         return locked(owner,id,row -> {
+            if(expireBudget(find(id).orElseThrow())) return find(id).orElseThrow();
             if(countUnknown(id)>0 || "OUTCOME_UNKNOWN".equals(row.get("waiting_reason"))) throw conflict("OUTCOME_UNKNOWN_REQUIRES_RECONCILIATION");
             Run run=find(id).orElseThrow();
             if(run.checkpoint().get("userContinuation") instanceof Map<?,?> prior && Objects.equals(prior.get("clientRequestId"),input.get("clientRequestId"))) {
@@ -216,6 +236,56 @@ public class AgentRunStore {
             jdbc.update("DELETE FROM ai_agent_operation WHERE run_id IN (SELECT run_id FROM ai_agent_run WHERE user_id=? AND conversation_id=?)",owner,conversation);
             jdbc.update("UPDATE ai_agent_run SET deleted=TRUE,status='CANCELLED',epoch=epoch+1,request_json='{}',checkpoint_json='{}',result_json='{}',worker_id=NULL,lease_until=NULL WHERE user_id=? AND conversation_id=?",owner,conversation);
         });
+    }
+    public static final class BudgetExceeded extends RuntimeException {
+        public BudgetExceeded(String reason) { super(reason); }
+    }
+    private static int limit(Map<String,Object> request,String key,int fallback,int minimum,int maximum) {
+        Object value=request.get(key);
+        return value instanceof Number n ? Math.max(minimum,Math.min(maximum,n.intValue())) : fallback;
+    }
+    public Map<String,Object> budget(String owner,String id) {
+        Run run=findOwned(owner,id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"TASK_NOT_FOUND"));
+        Map<String,Object> out=new LinkedHashMap<>();
+        out.put("applicability","SUPPORTED"); out.put("timePolicy","ABSOLUTE_INCLUDES_QUEUE_AND_APPROVAL");
+        out.put("maxToolCalls",limit(run.request(),"maxToolCalls",8,1,20));
+        out.put("maxRetries",limit(run.request(),"maxRetries",8,0,40));
+        out.put("deadline",deadline(run).toString());
+        out.put("toolCallsUsed",jdbc.queryForObject("SELECT COALESCE(SUM(attempt),0) FROM ai_agent_operation WHERE run_id=?",Integer.class,id));
+        out.put("retriesUsed",jdbc.queryForObject("SELECT COALESCE(SUM(CASE WHEN attempt>1 THEN attempt-1 ELSE 0 END),0) FROM ai_agent_operation WHERE run_id=?",Integer.class,id));
+        out.put("inputTokens",null); out.put("outputTokens",null); out.put("cost",null);
+        out.put("usageStatus","NOT_MEASURED"); return out;
+    }
+    private Instant deadline(Run run) { return run.createdAt().plusSeconds(limit(run.request(),"maxDurationSeconds",86400,1,604800)); }
+    private boolean expireBudget(Run run) {
+        if(Set.of("SUCCEEDED","FAILED","CANCELLED").contains(run.status()) || countUnknown(run.id())>0) return false;
+        if(now().isBefore(deadline(run))) return false;
+        // Never discard uncertain writes, including an outstanding send intent after a crash.
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM ai_agent_operation WHERE run_id=? AND replay_safe=FALSE AND status='SEND_INTENT'",Integer.class,run.id())>0) return false;
+        jdbc.update("UPDATE ai_agent_run SET status='FAILED',waiting_reason='BUDGET_DEADLINE_EXCEEDED',epoch=epoch+1,worker_id=NULL,lease_until=NULL WHERE run_id=?",run.id());
+        return true;
+    }
+    public void finishBudget(Lease lease,String reason) {
+        mutate(lease,row -> {
+            boolean unknown=countUnknown(lease.id())>0 || jdbc.queryForObject("SELECT COUNT(*) FROM ai_agent_operation WHERE run_id=? AND replay_safe=FALSE AND status='SEND_INTENT'",Integer.class,lease.id())>0;
+            String actualReason=unknown?"OUTCOME_UNKNOWN":reason;
+            jdbc.update("UPDATE ai_agent_run SET status=?,waiting_reason=?,result_json=?,worker_id=NULL,lease_until=NULL WHERE run_id=?",
+                unknown?"WAITING_INPUT":"FAILED",actualReason,RecoveryJson.json(Map.of("status",unknown?"action_required":"error","recoveryReason",actualReason)),lease.id());
+            return null;
+        });
+    }
+    public void checkDeadline(Lease lease) {
+        mutate(lease,row -> {
+            if(!now().isBefore(deadline(find(lease.id()).orElseThrow()))) throw new BudgetExceeded("BUDGET_DEADLINE_EXCEEDED");
+            return null;
+        });
+    }
+    private void checkDispatchBudget(Lease lease, boolean retry) {
+        Run run=find(lease.id()).orElseThrow();
+        if(!now().isBefore(deadline(run))) throw new BudgetExceeded("BUDGET_DEADLINE_EXCEEDED");
+        Map<String,Object> b=budget(lease.owner(),lease.id());
+        if(((Number)b.get("toolCallsUsed")).intValue() >= ((Number)b.get("maxToolCalls")).intValue()) throw new BudgetExceeded("BUDGET_TOOL_CALLS_EXCEEDED");
+        if(retry && ((Number)b.get("retriesUsed")).intValue() >= ((Number)b.get("maxRetries")).intValue()) throw new BudgetExceeded("BUDGET_RETRIES_EXCEEDED");
     }
     private int countUnknown(String id) { return jdbc.queryForObject("SELECT COUNT(*) FROM ai_agent_operation WHERE run_id=? AND status='OUTCOME_UNKNOWN'",Integer.class,id); }
     private <T> T mutate(Lease lease,Function<Map<String,Object>,T> operation) {

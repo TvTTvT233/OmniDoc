@@ -9,7 +9,16 @@ public record TaskRunView(int protocolVersion, String runId, String source, Stri
         String waitingReason, boolean cancellationRequested, Integer attempt,
         Long revision, Instant createdAt, Instant startedAt, Instant finishedAt,
         Instant observedAt, List<Link> links, List<Step> steps,
+        List<ToolCall> toolCalls, Result result, List<Event> events, Capabilities capabilities, java.util.Map<String,Object> budget) {
+    public TaskRunView(int protocolVersion, String runId, String source, String sourceId,
+        String kind, String status, String sourceStatus, String businessStatus,
+        String waitingReason, boolean cancellationRequested, Integer attempt,
+        Long revision, Instant createdAt, Instant startedAt, Instant finishedAt,
+        Instant observedAt, List<Link> links, List<Step> steps,
         List<ToolCall> toolCalls, Result result, List<Event> events, Capabilities capabilities) {
+        this(protocolVersion, runId, source, sourceId, kind, status, sourceStatus, businessStatus, waitingReason, cancellationRequested, attempt, revision, createdAt, startedAt, finishedAt, observedAt, links, steps, toolCalls, result, events, capabilities, java.util.Map.of("applicability", "AGENT".equals(source)?"NOT_SUPPORTED":"NOT_APPLICABLE"));
+    }
+    public TaskRunView withBudget(java.util.Map<String,Object> value) { return new TaskRunView(protocolVersion, runId, source, sourceId, kind, status, sourceStatus, businessStatus, waitingReason, cancellationRequested, attempt, revision, createdAt, startedAt, finishedAt, observedAt, links, steps, toolCalls, result, events, capabilities, value); }
     public TaskRunView {
         links = links == null ? List.of() : List.copyOf(links);
         steps = steps == null ? List.of() : List.copyOf(steps);
