@@ -26,7 +26,7 @@ jobs:
     env:
       PYTHONUTF8: '1'
       PYTHONDONTWRITEBYTECODE: '1'
-      EVAL_BASELINE: evals/baselines/deterministic-v1-normalized.json
+      EVAL_BASELINE: evals/baselines/deterministic-v1-harness-20261116.json
     steps:
       - name: Check out candidate
         id: checkout

@@ -1,0 +1,178 @@
+{
+  "report": {
+    "schemaVersion": 1,
+    "mode": "service-flows-v1",
+    "runId": "20261116T063325Z-876088d4",
+    "createdAtUtc": "2026-11-16T06:33:25.135296+00:00",
+    "commit": "9c0cc19ea6ac7330b3dc8cb89cd0207343777a01",
+    "dirty": true,
+    "contract": {
+      "runnerOs": "Windows",
+      "digest": "7a15c8e97e459c7c785eca5d4d0119f58686732f7a44cb8be772f40ea22e4c07"
+    },
+    "modelBoundary": "DISABLED_WITH_SYNTHETIC_EMBEDDING",
+    "usage": null,
+    "cases": [
+      {
+        "id": "document",
+        "title": "文档更新、索引与历史引用",
+        "status": "PASS",
+        "reason": null,
+        "durationMs": 4172.0,
+        "checks": [
+          {
+            "name": "parse-exact-text",
+            "passed": true
+          },
+          {
+            "name": "initial-index-ready",
+            "passed": true
+          },
+          {
+            "name": "old-generation-never-queryable-after-save",
+            "passed": true
+          },
+          {
+            "name": "historical-reference-exact",
+            "passed": true
+          },
+          {
+            "name": "new-version-published",
+            "passed": true
+          },
+          {
+            "name": "new-segments-version",
+            "passed": true
+          },
+          {
+            "name": "reference-owner-isolated",
+            "passed": true
+          }
+        ],
+        "productionRunIds": [],
+        "runIdPolicy": "NOT_APPLICABLE"
+      },
+      {
+        "id": "review",
+        "title": "材料缺件、整改与复审",
+        "status": "PASS",
+        "reason": null,
+        "durationMs": 4968.0,
+        "checks": [
+          {
+            "name": "review-worker-success",
+            "passed": true
+          },
+          {
+            "name": "missing-material-detected",
+            "passed": true
+          },
+          {
+            "name": "dual-evidence-present",
+            "passed": true
+          },
+          {
+            "name": "old-report-outdated",
+            "passed": true
+          },
+          {
+            "name": "review-worker-success",
+            "passed": true
+          },
+          {
+            "name": "supplement-clears-findings",
+            "passed": true
+          },
+          {
+            "name": "report-owner-isolated",
+            "passed": true
+          }
+        ],
+        "productionRunIds": [
+          "review:job-b250e59b-4a8b-4afe-8d59-8d417e5f0975",
+          "review:job-a093a7de-1a59-49b5-b84d-4faddd37810d"
+        ],
+        "runIdPolicy": "REQUIRED"
+      },
+      {
+        "id": "isolation",
+        "title": "重复请求与用户隔离",
+        "status": "PASS",
+        "reason": null,
+        "durationMs": 641.0,
+        "checks": [
+          {
+            "name": "deterministic-agent-completed",
+            "passed": true
+          },
+          {
+            "name": "duplicate-same-run",
+            "passed": true
+          },
+          {
+            "name": "payload-conflict",
+            "passed": true
+          },
+          {
+            "name": "task-owner-isolated",
+            "passed": true
+          },
+          {
+            "name": "durable-jdbc-result",
+            "passed": true
+          }
+        ],
+        "productionRunIds": [
+          "agent:fb06ed97-bf29-4c1d-ba2c-ab1e52f9c9d8"
+        ],
+        "runIdPolicy": "REQUIRED"
+      },
+      {
+        "id": "restart",
+        "title": "审批等待跨进程重启",
+        "status": "PASS",
+        "reason": null,
+        "durationMs": 24141.0,
+        "checks": [
+          {
+            "name": "approval-required",
+            "passed": true
+          },
+          {
+            "name": "approval-persisted-before-restart",
+            "passed": true
+          },
+          {
+            "name": "different-process-same-artifact",
+            "passed": true
+          },
+          {
+            "name": "same-approval-restored",
+            "passed": true
+          },
+          {
+            "name": "approval-cancelled",
+            "passed": true
+          },
+          {
+            "name": "cancelled-state-persisted",
+            "passed": true
+          },
+          {
+            "name": "late-confirm-no-write",
+            "passed": true
+          }
+        ],
+        "productionRunIds": [
+          "agent:ebb3d2e6-3be1-4adb-8115-3c4ca2597a63"
+        ],
+        "runIdPolicy": "REQUIRED"
+      }
+    ],
+    "gate": "PASS"
+  },
+  "acceptance": {
+    "reportDigest": "a6c7acf057e0cea17af875b0720e7fabfac900cc9d543f015b93218ba4faf1e4",
+    "acceptedAtUtc": "2026-11-16T06:37:58.365819+00:00"
+  }
+}
