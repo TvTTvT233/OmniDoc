@@ -1,0 +1,72 @@
+name: Service flow evaluations
+on:
+  push:
+    branches: [main, integration/core-baseline]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: service-flows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  service-flows:
+    name: No-key HTTP service journeys
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+          overwrite-settings: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Validate Linux runtime helpers
+        run: python -m unittest discover -s scripts/service-evals-runtime -p 'test_linux_runtime.py'
+      - name: Build all services and explicit test launcher
+        run: |
+          mkdir -p .local/service-runtime-linux
+          bash ./mvnw -s .mvn/settings-local.xml -DskipTests package > .local/service-runtime-linux/build.private.log 2>&1
+      - name: Initialize isolated dependencies
+        run: python scripts/service-evals-runtime/linux_runtime.py initialize
+      - name: Start services and wait for readiness
+        run: python scripts/service-evals-runtime/linux_runtime.py start
+      - name: Run four real HTTP journeys
+        id: journeys
+        run: |
+          python scripts/evals/service_flows.py --base-url http://127.0.0.1:18080 --isolated-runtime --restart-script scripts/service-evals-runtime/Restart-Ai-Linux.ps1 --artifact-sha256 "$(sha256sum ai-service/target/ai-service-1.0.0.jar | cut -d ' ' -f 1)" --timeout 240
+      - name: Validate exact safe report
+        id: report
+        if: ${{ !cancelled() && steps.journeys.outcome != 'skipped' }}
+        run: |
+          python - <<'PY'
+          import pathlib, subprocess, sys
+          reports = list(pathlib.Path('.local/service-evals').glob('*/report.json'))
+          if len(reports) != 1: raise SystemExit('Expected exactly one report')
+          sys.path.insert(0, 'scripts/evals')
+          import json, service_report
+          service_report.validate(json.loads(reports[0].read_text()))
+          pathlib.Path('.local/service-runtime-linux/report.json').write_bytes(reports[0].read_bytes())
+          PY
+      # No fabricated/automatically accepted Linux baseline. Add comparison only
+      # after the first actual Linux run is reviewed and explicitly accepted.
+      - name: Upload only validated safe report
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: service-flows-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .local/service-runtime-linux/report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Stop owned processes and isolated dependencies
+        if: always()
+        run: python scripts/service-evals-runtime/linux_runtime.py stop
