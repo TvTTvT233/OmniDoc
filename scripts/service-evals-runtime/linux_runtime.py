@@ -80,11 +80,16 @@ def initialize():
                    REDIS_PORT='26379', RABBITMQ_HOST='127.0.0.1', RABBITMQ_USERNAME='evaluator',
                    RABBITMQ_PASSWORD=mq, MINIO_LOCAL_ENDPOINT='http://127.0.0.1:29000',
                    MINIO_ACCESS_KEY='evaluator', MINIO_SECRET_KEY=minio,
-                   AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED='true')
+                   AI_MEMORY_SCHEMA_AUTO_MIGRATION_ENABLED='true',
+                   SERVICE_EVAL_MINIO_IMAGE='omnidoc-eval-minio:16f8cf1c52f0')
         for key in ('OMNIDOC_JWT_SECRET', 'OMNIDOC_INDEX_INTERNAL_TOKEN', 'OMNIDOC_REVIEW_INTERNAL_TOKEN'):
             env[key] = secrets.token_hex(32)
         path.write_text(''.join(f'{k}={v}\n' for k, v in env.items()))
         os.chmod(path, 0o600)
+    with (STATE / 'minio-build.private.log').open('wb') as log:
+        subprocess.run(['docker', 'build', '-f', str(ROOT / 'scripts/service-evals-runtime/Dockerfile.minio-ci'),
+                        '-t', 'omnidoc-eval-minio:16f8cf1c52f0', str(ROOT / 'scripts/service-evals-runtime')],
+                       check=True, stdout=log, stderr=log, timeout=900)
     compose('up', '-d', '--wait', '--wait-timeout', '180', 'mysql', 'redis', 'rabbitmq', 'minio')
     wait_http('http://127.0.0.1:29000/minio/health/ready', 90)
 

@@ -41,7 +41,7 @@ services:
       timeout: 5s
       retries: 20
   minio:
-    image: minio/minio@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3
+    image: ${SERVICE_EVAL_MINIO_IMAGE:-minio/minio@sha256:1dce27c494a16bae114774f1cec295493f3613142713130c2d22dd5696be6ad3}
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?Run Initialize-Runtime.ps1 first}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?Run Initialize-Runtime.ps1 first}

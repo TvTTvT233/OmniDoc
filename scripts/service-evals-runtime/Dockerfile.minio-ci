@@ -1,0 +1,14 @@
+# Rebuild the same release used by the local baseline from official pinned source.
+# CI-only image; do not use this historical test dependency as a production recommendation.
+FROM golang:1.23.4@sha256:9820aca42262f58451f006de3213055974b36f24b31508c1baa73c967fcecb99 AS build
+WORKDIR /src
+RUN git init . && git remote add origin https://github.com/minio/minio.git \
+    && git fetch --depth 1 origin 16f8cf1c52f0a77eeb8f7565aaf7f7df12454583 \
+    && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "16f8cf1c52f0a77eeb8f7565aaf7f7df12454583"
+RUN CGO_ENABLED=0 go build -trimpath -tags netgo -o /minio .
+FROM scratch
+COPY --from=build /minio /minio
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+EXPOSE 9000 9001
+ENTRYPOINT ["/minio"]
