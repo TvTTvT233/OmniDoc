@@ -48,6 +48,26 @@ def compose(*args):
                        cwd=ROOT, check=True, stdout=log, stderr=log, timeout=300)
 
 
+def safe_failure_reason():
+    """Classify private diagnostics; never return log text or exception values."""
+    path = STATE / 'compose.private.log'
+    value = path.read_text(errors='replace').lower()[-100000:] if path.exists() else ''
+    for marker, code in [('toomanyrequests', 'REGISTRY_RATE_LIMIT'),
+                         ('too many requests', 'REGISTRY_RATE_LIMIT'),
+                         ('manifest unknown', 'IMAGE_MANIFEST_UNAVAILABLE'),
+                         ('no matching manifest', 'IMAGE_PLATFORM_UNAVAILABLE'),
+                         ('pull access denied', 'IMAGE_ACCESS_DENIED'),
+                         ('unauthorized', 'REGISTRY_UNAUTHORIZED'),
+                         ('connection refused', 'DEPENDENCY_CONNECTION_REFUSED'),
+                         ('port is already allocated', 'DEPENDENCY_PORT_OCCUPIED'),
+                         ('unhealthy', 'DEPENDENCY_UNHEALTHY'),
+                         ('timeout', 'DEPENDENCY_TIMEOUT'),
+                         ('context deadline exceeded', 'DEPENDENCY_TIMEOUT'),
+                         ('not found', 'DEPENDENCY_NOT_FOUND')]:
+        if marker in value: return code
+    return 'RUNTIME_FAILED_UNCLASSIFIED'
+
+
 def initialize():
     STATE.mkdir(parents=True, exist_ok=True)
     os.chmod(STATE, 0o700)
@@ -203,7 +223,7 @@ def main():
         print(json.dumps({'runtime': args.action, 'status': 'PASS'})); return 0
     except Exception:
         # Exception messages may contain credentials or connection strings.
-        print(json.dumps({'runtime': args.action, 'status': 'FAIL'})); return 1
+        print(json.dumps({'runtime': args.action, 'status': 'FAIL', 'reason': safe_failure_reason()})); return 1
 
 
 if __name__ == '__main__': raise SystemExit(main())

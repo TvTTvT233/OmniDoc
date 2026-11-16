@@ -9,6 +9,16 @@ import linux_runtime as rt
 
 
 class RuntimeTest(unittest.TestCase):
+    def test_diagnostics_return_only_fixed_codes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            with patch.object(rt, 'STATE', state):
+                self.assertEqual(rt.safe_failure_reason(), 'RUNTIME_FAILED_UNCLASSIFIED')
+                (state / 'compose.private.log').write_text('private-sentinel toomanyrequests credential=value')
+                self.assertEqual(rt.safe_failure_reason(), 'REGISTRY_RATE_LIMIT')
+                (state / 'compose.private.log').write_text('private-sentinel unknown reason')
+                self.assertEqual(rt.safe_failure_reason(), 'RUNTIME_FAILED_UNCLASSIFIED')
+
     def test_child_environment_does_not_inherit_provider_or_java_injection(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory); (state / 'runtime.env').write_text('MYSQL_DATABASE=omnidoc\n')
