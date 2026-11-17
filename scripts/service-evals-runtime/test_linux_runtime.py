@@ -1,14 +1,54 @@
 """Pure helper safety tests; these do not claim a Linux service run."""
 import json
+import io
 import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import linux_runtime as rt
 
 
 class RuntimeTest(unittest.TestCase):
+    def test_tools_probe_requires_nonempty_typed_tool_catalog(self):
+        valid={'code':200,'message':'ok','timestamp':123,'data':[{'name':'tool','readOnly':True,'destructive':False}]}
+        self.assertTrue(rt.tools_ready(valid))
+        for invalid in [dict(valid,code=500),dict(valid,data=[]),dict(valid,data=[{}]),dict(valid,data=[{'name':'tool','readOnly':'true','destructive':False}])]:
+            self.assertFalse(rt.tools_ready(invalid))
+
+    def test_gateway_schema_rejects_generic_200_error_and_user_data(self):
+        valid = {'code':606,'message':'missing','data':None,'timestamp':123}
+        self.assertTrue(rt.gateway_response_ready(valid))
+        for invalid in [dict(valid, code=500), dict(valid, code=200, data={'id':1}),
+                        dict(valid, extra='private'), {}, [], dict(valid, code='606')]:
+            self.assertFalse(rt.gateway_response_ready(invalid))
+
+    def test_gateway_probe_accepts_verified_missing_user(self):
+        response = io.BytesIO(json.dumps({'code':606,'message':'missing','data':None,'timestamp':123}).encode())
+        response.status = 200
+        opener = Mock(); opener.open.return_value = response
+        with patch.object(rt.urllib.request,'build_opener',return_value=opener):
+            rt.wait_http('http://127.0.0.1/probe',1,validator=rt.gateway_response_ready)
+
+    def test_generic_200_fails_and_emits_safe_last_status(self):
+        response = io.BytesIO(b'{"code":500,"private":"secret-sentinel"}'); response.status = 200
+        opener = Mock(); opener.open.return_value = response
+        rt.phase('READINESS','gateway-service')
+        with patch.object(rt.urllib.request,'build_opener',return_value=opener), patch.object(rt.time,'monotonic',side_effect=[0,0,2]), patch.object(rt.time,'sleep'):
+            with self.assertRaises(rt.RuntimeFailure) as error:
+                rt.wait_http('http://127.0.0.1/probe',1,validator=rt.gateway_response_ready)
+        payload = rt.failure_payload('start',error.exception)
+        self.assertEqual(payload, {'runtime':'start','status':'FAIL','reason':'READINESS_TIMEOUT',
+                                 'stage':'READINESS','service':'gateway-service','lastHttpStatus':200})
+        self.assertNotIn('secret-sentinel',json.dumps(payload))
+
+    def test_openapi_schema_and_failure_context_are_whitelisted(self):
+        self.assertTrue(rt.openapi_ready({'openapi':'3.0.1','info':{},'paths':{}}))
+        self.assertFalse(rt.openapi_ready({'code':200}))
+        with patch.dict(rt.CONTEXT, {'stage':'private-stage','service':'private-service','lastHttpStatus':'private-value'}), patch.object(rt,'safe_failure_reason',return_value='RUNTIME_FAILED_UNCLASSIFIED'):
+            payload=rt.failure_payload('start',RuntimeError('private-error'))
+        self.assertNotIn('private',json.dumps(payload))
+
     def test_diagnostics_return_only_fixed_codes(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

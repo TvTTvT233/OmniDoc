@@ -19,6 +19,25 @@ STATE = ROOT / '.local/service-runtime-linux'
 MANIFEST = STATE / 'processes.json'
 PORTS = {'user-service': 18081, 'file-service': 18082, 'document-service': 18084,
          'ai-service': 18083, 'gateway-service': 18080}
+CONTEXT = {'stage': 'PRECHECK', 'service': None, 'lastHttpStatus': None}
+
+
+class RuntimeFailure(RuntimeError):
+    def __init__(self, reason):
+        self.reason = reason
+
+
+def phase(stage, service=None):
+    CONTEXT.update(stage=stage, service=service, lastHttpStatus=None)
+
+
+def failure_payload(action, error):
+    allowed_reasons = {'READINESS_TIMEOUT', 'PROCESS_IDENTITY_LOST', 'OWNED_PROCESS_STOP_TIMEOUT'}
+    reason = error.reason if isinstance(error, RuntimeFailure) and error.reason in allowed_reasons else safe_failure_reason()
+    return {'runtime': action, 'status': 'FAIL', 'reason': reason,
+            'stage': CONTEXT['stage'] if CONTEXT['stage'] in {'PRECHECK', 'DEPENDENCIES', 'BUILD_IDENTITY', 'LAUNCH', 'READINESS', 'STOP'} else 'PRECHECK',
+            'service': CONTEXT['service'] if CONTEXT['service'] in PORTS else None,
+            'lastHttpStatus': CONTEXT['lastHttpStatus'] if type(CONTEXT['lastHttpStatus']) is int and 100 <= CONTEXT['lastHttpStatus'] <= 599 else None}
 
 
 def require(ok):
@@ -69,6 +88,7 @@ def safe_failure_reason():
 
 
 def initialize():
+    phase('DEPENDENCIES')
     STATE.mkdir(parents=True, exist_ok=True)
     os.chmod(STATE, 0o700)
     path = STATE / 'runtime.env'
@@ -112,22 +132,51 @@ def stop(entry):
         if identity(entry['pid']) is None: return
         time.sleep(.2)
     # Do not kill an unrelated/reused process, even if shutdown takes too long.
-    raise RuntimeError('OWNED_PROCESS_STOP_TIMEOUT')
+    raise RuntimeFailure('OWNED_PROCESS_STOP_TIMEOUT')
 
 
-def wait_http(url, timeout, entry=None, expected=200):
+def gateway_response_ready(value):
+    # A deliberately absent user is a read-only gateway -> service -> DB probe.
+    # Reject generic HTTP-200 errors, HTML, auth failures and successful user data.
+    return (isinstance(value, dict) and set(value) == {'code', 'message', 'data', 'timestamp'}
+            and type(value['code']) is int and value['code'] == 606 and value['data'] is None
+            and isinstance(value['message'], str) and isinstance(value['timestamp'], (str, int)))
+
+
+def openapi_ready(value):
+    return (isinstance(value, dict) and isinstance(value.get('openapi'), str)
+            and value['openapi'].startswith('3.') and isinstance(value.get('info'), dict)
+            and isinstance(value.get('paths'), dict))
+
+
+def tools_ready(value):
+    return (isinstance(value, dict) and set(value) == {'code', 'message', 'data', 'timestamp'}
+            and type(value['code']) is int and value['code'] == 200
+            and isinstance(value['data'], list) and bool(value['data'])
+            and all(isinstance(tool, dict) and isinstance(tool.get('name'), str) and bool(tool['name'])
+                    and type(tool.get('readOnly')) is bool and type(tool.get('destructive')) is bool
+                    for tool in value['data']))
+
+
+def wait_http(url, timeout, entry=None, expected=200, validator=None):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     until = time.monotonic() + timeout
     while time.monotonic() < until:
-        if entry: require(identity(entry['pid']) == entry['identity'])
+        if entry and identity(entry['pid']) != entry['identity']:
+            raise RuntimeFailure('PROCESS_IDENTITY_LOST')
         try:
             with opener.open(url, timeout=3) as response:
-                if response.status == expected: return
+                CONTEXT['lastHttpStatus'] = response.status
+                if response.status == expected:
+                    if validator is None: return
+                    data = response.read(4_000_001)
+                    if len(data) <= 4_000_000 and validator(json.loads(data)): return
         except urllib.error.HTTPError as error:
-            if error.code == expected: return
+            CONTEXT['lastHttpStatus'] = error.code
+            if error.code == expected and validator is None: return
         except (OSError, ValueError): pass
         time.sleep(.3)
-    raise RuntimeError('READINESS_TIMEOUT')
+    raise RuntimeFailure('READINESS_TIMEOUT')
 
 
 def artifacts():
@@ -180,6 +229,7 @@ def launch(service, env):
 
 
 def start():
+    phase('BUILD_IDENTITY')
     env = environment()
     require('17.' in subprocess.check_output([str(Path(env['JAVA_HOME']) / 'bin/java'), '-version'], stderr=subprocess.STDOUT).decode())
     # Save the build identity before launch; restart rejects every changed artifact.
@@ -189,25 +239,32 @@ def start():
         require(all(identity(e['pid']) is None for e in previous['processes'].values()))
     save(MANIFEST, manifest)
     for service in PORTS:
+        phase('LAUNCH', service)
         manifest['processes'][service] = launch(service, env); save(MANIFEST, manifest)
     for service, entry in manifest['processes'].items():
+        phase('READINESS', service)
         # OpenAPI is a real application endpoint; socket-open alone is not readiness.
         if service == 'gateway-service':
-            # Gateway has no OpenAPI endpoint. GET on the public POST-only login
-            # route verifies both gateway routing and user-service readiness.
-            wait_http('http://127.0.0.1:18080/api/users/login', 180, entry, expected=405)
+            probe_user = 'ci_readiness_' + secrets.token_hex(16)
+            wait_http('http://127.0.0.1:18080/api/users/lookup?username=' + probe_user,
+                      180, entry, validator=gateway_response_ready)
+        elif service == 'ai-service':
+            wait_http('http://127.0.0.1:18083/api/ai/agent/tools', 180, entry, validator=tools_ready)
         else:
-            wait_http(f'http://127.0.0.1:{PORTS[service]}/v3/api-docs', 180, entry)
+            wait_http(f'http://127.0.0.1:{PORTS[service]}/v3/api-docs', 180, entry, validator=openapi_ready)
 
 
 def restart(proof):
+    phase('BUILD_IDENTITY', 'ai-service')
     path = Path(proof).resolve(); require(path.is_relative_to(ROOT / '.local'))
     manifest = json.loads(MANIFEST.read_text())
     require(manifest['artifacts'] == {k: sha(v) for k, v in artifacts().items()})
-    old = manifest['processes']['ai-service']; stop(old)
+    old = manifest['processes']['ai-service']; phase('STOP', 'ai-service'); stop(old)
+    phase('LAUNCH', 'ai-service')
     new = launch('ai-service', environment())
     manifest['processes']['ai-service'] = new; save(MANIFEST, manifest)
-    wait_http('http://127.0.0.1:18083/v3/api-docs', 180, new)
+    phase('READINESS', 'ai-service')
+    wait_http('http://127.0.0.1:18083/api/ai/agent/tools', 180, new, validator=tools_ready)
     require(old['pid'] != new['pid'])
     save(path, {'beforePid': old['pid'], 'afterPid': new['pid'], 'artifactSha256': new['artifactSha256']})
 
@@ -222,13 +279,14 @@ def main():
         elif args.action == 'start': start()
         elif args.action == 'restart': restart(args.proof)
         else:
+            phase('STOP')
             if MANIFEST.exists():
                 for entry in json.loads(MANIFEST.read_text())['processes'].values(): stop(entry)
             if (STATE / 'runtime.env').exists(): compose('stop')
         print(json.dumps({'runtime': args.action, 'status': 'PASS'})); return 0
-    except Exception:
+    except Exception as error:
         # Exception messages may contain credentials or connection strings.
-        print(json.dumps({'runtime': args.action, 'status': 'FAIL', 'reason': safe_failure_reason()})); return 1
+        print(json.dumps(failure_payload(args.action, error))); return 1
 
 
 if __name__ == '__main__': raise SystemExit(main())
