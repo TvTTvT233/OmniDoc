@@ -57,8 +57,9 @@ jobs:
           service_report.validate(json.loads(reports[0].read_text()))
           pathlib.Path('.local/service-runtime-linux/report.json').write_bytes(reports[0].read_bytes())
           PY
-      # No fabricated/automatically accepted Linux baseline. Add comparison only
-      # after the first actual Linux run is reviewed and explicitly accepted.
+      - name: Compare with reviewed Linux baseline
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        run: python scripts/evals/service_report.py compare --report .local/service-runtime-linux/report.json --baseline evals/service-baselines/service-flows-linux-20261120.json
       - name: Upload only validated safe report
         if: ${{ !cancelled() && steps.report.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
